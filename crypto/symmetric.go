@@ -71,9 +71,17 @@ type PulseSymmetricEncryption struct {
 	purpose               PulseSymmetricPurpose // consent, revoke, update, for nonce generation
 	plaintext             []byte
 	ciphertext            []byte
-	contractAddressString string
+	contractAddressString *string
 	contractAddress       *[EthAddressLength]byte // For nonce generation
 	chainId               byte                    // For nonce generation
+}
+
+// NewPulseSymmetricEncryption creates a new PulseSymmetricEncryption object with no fields
+// set
+func NewPulseSymmetricEncryption() *PulseSymmetricEncryption {
+	return &PulseSymmetricEncryption{
+		purpose: PulseNoSymmetricPurpose,
+	}
 }
 
 // SetKey sets the key for the encryption process.
@@ -96,7 +104,7 @@ func (e *PulseSymmetricEncryption) SetChainId(chainId byte) *PulseSymmetricEncry
 
 // SetContractAddress sets the contract address for the encryption process.
 // The contract address should be a 40 character hex string.
-func (e *PulseSymmetricEncryption) SetContractAddress(contractAddress string) *PulseSymmetricEncryption {
+func (e *PulseSymmetricEncryption) SetContractAddress(contractAddress *string) *PulseSymmetricEncryption {
 	e.contractAddressString = contractAddress
 	return e
 }
@@ -164,6 +172,12 @@ func (e *PulseSymmetricEncryption) Ciphertext() []byte {
 	return e.ciphertext
 }
 
+// SetPurpose sets the purpose for the encryption process.
+func (e *PulseSymmetricEncryption) SetPurpose(purpose PulseSymmetricPurpose) *PulseSymmetricEncryption {
+	e.purpose = purpose
+	return e
+}
+
 // SealConsent encrypts a consent record
 //
 //	The following fields must be set:
@@ -179,7 +193,7 @@ func (e *PulseSymmetricEncryption) Ciphertext() []byte {
 // Encrypted data is returned in Ciphertext(). Key() will return the generated key.
 func (e *PulseSymmetricEncryption) SealConsent() error {
 	e.purpose = PulseSymmetricConsent
-	return e.sealPlaintext()
+	return e.SealPlaintext()
 }
 
 // SealRevoke encrypts a revoke record
@@ -197,7 +211,7 @@ func (e *PulseSymmetricEncryption) SealConsent() error {
 // Encrypted data is returned in Ciphertext(). Key() will return the generated key.
 func (e *PulseSymmetricEncryption) SealRevoke() error {
 	e.purpose = PulseSymmetricRevoke
-	return e.sealPlaintext()
+	return e.SealPlaintext()
 }
 
 // SealUpdate encrypts an update record
@@ -215,7 +229,7 @@ func (e *PulseSymmetricEncryption) SealRevoke() error {
 // Encrypted data is returned in Ciphertext(). Key() will return the generated key.
 func (e *PulseSymmetricEncryption) SealUpdate() error {
 	e.purpose = PulseSymmetricUpdate
-	return e.sealPlaintext()
+	return e.SealPlaintext()
 }
 
 // sealPlaintext encrypts the plaintext using AES-256-GCM
@@ -238,7 +252,7 @@ func (e *PulseSymmetricEncryption) SealUpdate() error {
 //   - associated data: nonce
 //
 // Encrypted data is returned in Ciphertext(). Key() will return the generated key.
-func (e *PulseSymmetricEncryption) sealPlaintext() error {
+func (e *PulseSymmetricEncryption) SealPlaintext() error {
 	if e.plaintext == nil || len(e.plaintext) == 0 {
 		return ErrNoPlaintext
 	}
@@ -283,7 +297,7 @@ func (e *PulseSymmetricEncryption) sealPlaintext() error {
 // Decrypted data is returned in Plaintext().
 func (e *PulseSymmetricEncryption) OpenConsent() error {
 	e.purpose = PulseSymmetricConsent
-	return e.openCiphertext()
+	return e.OpenCiphertext()
 }
 
 // OpenRevoke decrypts a revoke record
@@ -297,7 +311,7 @@ func (e *PulseSymmetricEncryption) OpenConsent() error {
 // Decrypted data is returned in Plaintext().
 func (e *PulseSymmetricEncryption) OpenRevoke() error {
 	e.purpose = PulseSymmetricRevoke
-	return e.openCiphertext()
+	return e.OpenCiphertext()
 }
 
 // OpenUpdate decrypts an update record
@@ -311,7 +325,7 @@ func (e *PulseSymmetricEncryption) OpenRevoke() error {
 // Decrypted data is returned in Plaintext().
 func (e *PulseSymmetricEncryption) OpenUpdate() error {
 	e.purpose = PulseSymmetricUpdate
-	return e.openCiphertext()
+	return e.OpenCiphertext()
 }
 
 // openCiphertext decrypts the ciphertext using AES-256-GCM
@@ -330,7 +344,7 @@ func (e *PulseSymmetricEncryption) OpenUpdate() error {
 //   - associated data: nonce
 //
 // Encrypted data is returned in Plaintext().
-func (e *PulseSymmetricEncryption) openCiphertext() error {
+func (e *PulseSymmetricEncryption) OpenCiphertext() error {
 	if e.ciphertext == nil || len(e.ciphertext) == 0 {
 		return ErrNoCiphertext
 	}
