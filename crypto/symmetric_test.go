@@ -70,7 +70,7 @@ func TestPulseSymmetric_Encrypt(t *testing.T) {
 	e.SetContractAddress(mustAddress(t))
 	e.SetPlaintext(pt)
 	if err := e.EncryptConsent(); err != nil {
-		t.Fatalf("encrypt failed: %v", err)
+		t.Fatalf("sealPlaintext failed: %v", err)
 	}
 
 	if hex.EncodeToString(e.Ciphertext()) != "a9f54755732d0d2bd12f2cd099744b485b7adc8fae7f78e5bb5c" {
@@ -87,7 +87,7 @@ func TestPulseSymmetric_Consent_RoundTrip(t *testing.T) {
 	e.SetContractAddress(mustAddress(t))
 	e.SetPlaintext(pt)
 	if err := e.EncryptConsent(); err != nil {
-		t.Fatalf("encrypt failed: %v", err)
+		t.Fatalf("sealPlaintext failed: %v", err)
 	}
 
 	// Decrypt using a fresh instance with the same parameters
@@ -96,8 +96,8 @@ func TestPulseSymmetric_Consent_RoundTrip(t *testing.T) {
 	d.SetChainId(1)
 	d.SetContractAddress(e.contractAddressString)
 	d.ciphertext = e.Ciphertext()
-	if err := d.DecryptConsent(); err != nil {
-		t.Fatalf("decrypt failed: %v", err)
+	if err := d.OpenConsent(); err != nil {
+		t.Fatalf("openCiphertext failed: %v", err)
 	}
 
 	if !bytes.Equal(pt, d.Plaintext()) {
@@ -118,8 +118,8 @@ func TestPulseSymmetric_EncryptErrors(t *testing.T) {
 	e1.SetKey(key)
 	e1.SetChainId(1)
 	e1.SetContractAddress(mustAddress(t))
-	if err := e1.EncryptConsent(); err == nil || err.Error() != "no plaintext to encrypt" {
-		t.Fatalf("expected 'no plaintext to encrypt', got %v", err)
+	if err := e1.EncryptConsent(); err == nil || err.Error() != "no plaintext to sealPlaintext" {
+		t.Fatalf("expected 'no plaintext to sealPlaintext', got %v", err)
 	}
 
 	// Missing contract address / chainId / purpose handled as 'no contract address' in current implementation
@@ -152,8 +152,8 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 	d1.SetKey(key)
 	d1.SetChainId(1)
 	d1.SetContractAddress(mustAddress(t))
-	if err := d1.DecryptConsent(); err == nil || err.Error() != "no ciphertext to encrypt" { // current message in decrypt()
-		t.Fatalf("expected 'no ciphertext to encrypt', got %v", err)
+	if err := d1.OpenConsent(); err == nil || err.Error() != "no ciphertext to sealPlaintext" { // current message in openCiphertext()
+		t.Fatalf("expected 'no ciphertext to sealPlaintext', got %v", err)
 	}
 
 	// Missing key
@@ -163,13 +163,13 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 	e.SetContractAddress(mustAddress(t))
 	e.SetPlaintext([]byte("hello"))
 	if err := e.EncryptConsent(); err != nil {
-		t.Fatalf("unexpected encrypt error: %v", err)
+		t.Fatalf("unexpected sealPlaintext error: %v", err)
 	}
 	d2 := &PulseSymmetricEncryption{}
 	d2.SetChainId(1)
 	d2.SetContractAddress(e.contractAddressString)
 	d2.ciphertext = e.Ciphertext()
-	if err := d2.DecryptConsent(); err == nil || err.Error() != "missing key for decryption" {
+	if err := d2.OpenConsent(); err == nil || err.Error() != "missing key for decryption" {
 		t.Fatalf("expected 'missing key for decryption', got %v", err)
 	}
 }

@@ -38,8 +38,8 @@ const (
 
 var (
 	ErrBadContractAddress = errors.New("contract address must be 40 hex characters")
-	ErrNoPlaintext        = errors.New("no plaintext to encrypt")
-	ErrNoCiphertext       = errors.New("no ciphertext to encrypt")
+	ErrNoPlaintext        = errors.New("no plaintext to sealPlaintext")
+	ErrNoCiphertext       = errors.New("no ciphertext to sealPlaintext")
 	ErrNoKey              = errors.New("missing key for decryption")
 	ErrNoContractAddress  = errors.New("no contract address, chainId or purpose")
 )
@@ -109,7 +109,7 @@ func (e *PulseSymmetricEncryption) decodeContractAddress() error {
 	dstContractAddress := make([]byte, EthAddressLength)
 	decode, err := hex.Decode(dstContractAddress, []byte(e.contractAddressString))
 	if err != nil || decode != EthAddressLength {
-		return errors.New("failed to decode contract address: " + err.Error())
+		return errors.New("failed to decode contract address ")
 	}
 	e.contractAddress = (*[EthAddressLength]byte)(dstContractAddress)
 	return nil
@@ -164,7 +164,7 @@ func (e *PulseSymmetricEncryption) Ciphertext() []byte {
 	return e.ciphertext
 }
 
-// EncryptConsent encrypts a consent record
+// SealConsent encrypts a consent record
 //
 //	The following fields must be set:
 //	  - ContractAddress
@@ -177,12 +177,12 @@ func (e *PulseSymmetricEncryption) Ciphertext() []byte {
 // If key is not set, a random new key will be generated.
 //
 // Encrypted data is returned in Ciphertext(). Key() will return the generated key.
-func (e *PulseSymmetricEncryption) EncryptConsent() error {
+func (e *PulseSymmetricEncryption) SealConsent() error {
 	e.purpose = PulseSymmetricConsent
-	return e.encrypt()
+	return e.sealPlaintext()
 }
 
-// EncryptRevoke encrypts a revoke record
+// SealRevoke encrypts a revoke record
 //
 //	The following fields must be set:
 //	  - ContractAddress
@@ -195,12 +195,12 @@ func (e *PulseSymmetricEncryption) EncryptConsent() error {
 // If key is not set, a random new key will be generated.
 //
 // Encrypted data is returned in Ciphertext(). Key() will return the generated key.
-func (e *PulseSymmetricEncryption) EncryptRevoke() error {
+func (e *PulseSymmetricEncryption) SealRevoke() error {
 	e.purpose = PulseSymmetricRevoke
-	return e.encrypt()
+	return e.sealPlaintext()
 }
 
-// EncryptUpdate encrypts an update record
+// SealUpdate encrypts an update record
 //
 //	The following fields must be set:
 //	  - ContractAddress
@@ -213,12 +213,12 @@ func (e *PulseSymmetricEncryption) EncryptRevoke() error {
 // If key is not set, a random new key will be generated.
 //
 // Encrypted data is returned in Ciphertext(). Key() will return the generated key.
-func (e *PulseSymmetricEncryption) EncryptUpdate() error {
+func (e *PulseSymmetricEncryption) SealUpdate() error {
 	e.purpose = PulseSymmetricUpdate
-	return e.encrypt()
+	return e.sealPlaintext()
 }
 
-// encrypt encrypts the plaintext using AES-256-GCM
+// sealPlaintext encrypts the plaintext using AES-256-GCM
 //
 //		The following fields must be set:
 //		  - ContractAddress
@@ -238,7 +238,7 @@ func (e *PulseSymmetricEncryption) EncryptUpdate() error {
 //   - associated data: nonce
 //
 // Encrypted data is returned in Ciphertext(). Key() will return the generated key.
-func (e *PulseSymmetricEncryption) encrypt() error {
+func (e *PulseSymmetricEncryption) sealPlaintext() error {
 	if e.plaintext == nil || len(e.plaintext) == 0 {
 		return ErrNoPlaintext
 	}
@@ -272,7 +272,7 @@ func (e *PulseSymmetricEncryption) encrypt() error {
 	return nil
 }
 
-// DecryptConsent decrypts a consent record
+// OpenConsent decrypts a consent record
 //
 //	The following fields must be set:
 //	  - ContractAddress
@@ -281,12 +281,12 @@ func (e *PulseSymmetricEncryption) encrypt() error {
 //	  - Key
 //
 // Decrypted data is returned in Plaintext().
-func (e *PulseSymmetricEncryption) DecryptConsent() error {
+func (e *PulseSymmetricEncryption) OpenConsent() error {
 	e.purpose = PulseSymmetricConsent
-	return e.decrypt()
+	return e.openCiphertext()
 }
 
-// DecryptRevoke decrypts a revoke record
+// OpenRevoke decrypts a revoke record
 //
 //	The following fields must be set:
 //	  - ContractAddress
@@ -295,12 +295,12 @@ func (e *PulseSymmetricEncryption) DecryptConsent() error {
 //	  - Key
 //
 // Decrypted data is returned in Plaintext().
-func (e *PulseSymmetricEncryption) DecryptRevoke() error {
+func (e *PulseSymmetricEncryption) OpenRevoke() error {
 	e.purpose = PulseSymmetricRevoke
-	return e.decrypt()
+	return e.openCiphertext()
 }
 
-// DecryptUpdate decrypts an update record
+// OpenUpdate decrypts an update record
 //
 //	The following fields must be set:
 //	  - ContractAddress
@@ -309,12 +309,12 @@ func (e *PulseSymmetricEncryption) DecryptRevoke() error {
 //	  - Key
 //
 // Decrypted data is returned in Plaintext().
-func (e *PulseSymmetricEncryption) DecryptUpdate() error {
+func (e *PulseSymmetricEncryption) OpenUpdate() error {
 	e.purpose = PulseSymmetricUpdate
-	return e.decrypt()
+	return e.openCiphertext()
 }
 
-// decrypt decrypts the ciphertext using AES-256-GCM
+// openCiphertext decrypts the ciphertext using AES-256-GCM
 //
 //		The following fields must be set:
 //		  - ContractAddress
@@ -330,7 +330,7 @@ func (e *PulseSymmetricEncryption) DecryptUpdate() error {
 //   - associated data: nonce
 //
 // Encrypted data is returned in Plaintext().
-func (e *PulseSymmetricEncryption) decrypt() error {
+func (e *PulseSymmetricEncryption) openCiphertext() error {
 	if e.ciphertext == nil || len(e.ciphertext) == 0 {
 		return ErrNoCiphertext
 	}
