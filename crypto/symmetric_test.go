@@ -24,14 +24,15 @@ import (
  *    Ciphertext = 0xa9f54755732d0d2bd12f2cd099744b485b7adc8fae7f78e5bb5c
  */
 
-func mustAddress(t *testing.T) string {
+func mustAddress(t *testing.T) *string {
 	t.Helper()
 	// 20 bytes => 40 hex chars
 	addr := make([]byte, EthAddressLength)
 	for i := range addr {
 		addr[i] = byte(i + 1)
 	}
-	return "0x" + hex.EncodeToString(addr)
+	retVal := "0x" + hex.EncodeToString(addr)
+	return &retVal
 }
 
 func mustKey(t *testing.T) PulseSymmetricKey {
@@ -44,9 +45,9 @@ func mustKey(t *testing.T) PulseSymmetricKey {
 }
 
 func TestPulseSymmetric_Nonce(t *testing.T) {
-	e := &PulseSymmetricEncryption{}
-	e.SetChainId(1)
-	e.SetContractAddress(mustAddress(t))
+	e := NewPulseSymmetricEncryption().
+		SetChainId(1).
+		SetContractAddress(mustAddress(t))
 	if err := e.decodeContractAddress(); err != nil {
 		t.Fatalf("failed to decode contract address: %v", err)
 	}
@@ -64,12 +65,12 @@ func TestPulseSymmetric_Nonce(t *testing.T) {
 func TestPulseSymmetric_Encrypt(t *testing.T) {
 	pt := []byte("pulse test")
 
-	e := &PulseSymmetricEncryption{}
-	e.SetKey(mustKey(t))
-	e.SetChainId(1)
-	e.SetContractAddress(mustAddress(t))
-	e.SetPlaintext(pt)
-	if err := e.EncryptConsent(); err != nil {
+	e := NewPulseSymmetricEncryption().
+		SetKey(mustKey(t)).
+		SetChainId(1).
+		SetContractAddress(mustAddress(t)).
+		SetPlaintext(pt)
+	if err := e.SealConsent(); err != nil {
 		t.Fatalf("sealPlaintext failed: %v", err)
 	}
 
@@ -81,21 +82,21 @@ func TestPulseSymmetric_Encrypt(t *testing.T) {
 func TestPulseSymmetric_Consent_RoundTrip(t *testing.T) {
 	pt := []byte("pulse test")
 
-	e := &PulseSymmetricEncryption{}
-	e.SetKey(mustKey(t))
-	e.SetChainId(1)
-	e.SetContractAddress(mustAddress(t))
-	e.SetPlaintext(pt)
-	if err := e.EncryptConsent(); err != nil {
+	e := NewPulseSymmetricEncryption().
+		SetKey(mustKey(t)).
+		SetChainId(1).
+		SetContractAddress(mustAddress(t)).
+		SetPlaintext(pt)
+	if err := e.SealConsent(); err != nil {
 		t.Fatalf("sealPlaintext failed: %v", err)
 	}
 
 	// Decrypt using a fresh instance with the same parameters
-	d := &PulseSymmetricEncryption{}
-	d.SetKey(mustKey(t))
-	d.SetChainId(1)
-	d.SetContractAddress(e.contractAddressString)
-	d.ciphertext = e.Ciphertext()
+	d := NewPulseSymmetricEncryption().
+		SetKey(mustKey(t)).
+		SetChainId(1).
+		SetContractAddress(e.contractAddressString).
+		SetCiphertext(e.Ciphertext())
 	if err := d.OpenConsent(); err != nil {
 		t.Fatalf("openCiphertext failed: %v", err)
 	}
@@ -114,29 +115,30 @@ func TestPulseSymmetric_EncryptErrors(t *testing.T) {
 	}
 
 	// No plaintext provided
-	e1 := &PulseSymmetricEncryption{}
-	e1.SetKey(key)
-	e1.SetChainId(1)
-	e1.SetContractAddress(mustAddress(t))
-	if err := e1.EncryptConsent(); err == nil || err.Error() != "no plaintext to sealPlaintext" {
+	e1 := NewPulseSymmetricEncryption().
+		SetKey(key).
+		SetChainId(1).
+		SetContractAddress(mustAddress(t))
+	if err := e1.SealConsent(); err == nil || err.Error() != "no plaintext to sealPlaintext" {
 		t.Fatalf("expected 'no plaintext to sealPlaintext', got %v", err)
 	}
 
 	// Missing contract address / chainId / purpose handled as 'no contract address' in current implementation
-	e2 := &PulseSymmetricEncryption{}
-	e2.SetKey(key)
-	e2.SetPlaintext([]byte("data"))
-	if err := e2.EncryptConsent(); err == nil || err.Error() != "no contract address, chainId or purpose" {
+	e2 := NewPulseSymmetricEncryption().
+		SetKey(key).
+		SetPlaintext([]byte("data"))
+	if err := e2.SealConsent(); err == nil || err.Error() != "no contract address, chainId or purpose" {
 		t.Fatalf("expected 'no contract address', got %v", err)
 	}
 
 	// Bad contract address length
-	e3 := &PulseSymmetricEncryption{}
-	e3.SetKey(key)
-	e3.SetChainId(1)
-	e3.SetContractAddress("0x1234")
-	e3.SetPlaintext([]byte("data"))
-	if err := e3.EncryptConsent(); err == nil || err.Error() != "failed to decode contract address: contract address must be 40 hex characters" {
+	badAddress := "0x1234"
+	e3 := NewPulseSymmetricEncryption().
+		SetKey(key).
+		SetChainId(1).
+		SetContractAddress(&badAddress).
+		SetPlaintext([]byte("data"))
+	if err := e3.SealConsent(); err == nil || err.Error() != "failed to decode contract address: contract address must be 40 hex characters" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -148,27 +150,27 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 	}
 
 	// No ciphertext
-	d1 := &PulseSymmetricEncryption{}
-	d1.SetKey(key)
-	d1.SetChainId(1)
-	d1.SetContractAddress(mustAddress(t))
+	d1 := NewPulseSymmetricEncryption().
+		SetKey(key).
+		SetChainId(1).
+		SetContractAddress(mustAddress(t))
 	if err := d1.OpenConsent(); err == nil || err.Error() != "no ciphertext to sealPlaintext" { // current message in openCiphertext()
 		t.Fatalf("expected 'no ciphertext to sealPlaintext', got %v", err)
 	}
 
 	// Missing key
-	e := &PulseSymmetricEncryption{}
-	e.SetKey(key)
-	e.SetChainId(1)
-	e.SetContractAddress(mustAddress(t))
-	e.SetPlaintext([]byte("hello"))
-	if err := e.EncryptConsent(); err != nil {
+	e := NewPulseSymmetricEncryption().
+		SetKey(key).
+		SetChainId(1).
+		SetContractAddress(mustAddress(t)).
+		SetPlaintext([]byte("hello"))
+	if err := e.SealConsent(); err != nil {
 		t.Fatalf("unexpected sealPlaintext error: %v", err)
 	}
-	d2 := &PulseSymmetricEncryption{}
-	d2.SetChainId(1)
-	d2.SetContractAddress(e.contractAddressString)
-	d2.ciphertext = e.Ciphertext()
+	d2 := NewPulseSymmetricEncryption().
+		SetChainId(1).
+		SetContractAddress(e.contractAddressString).
+		SetCiphertext(e.Ciphertext())
 	if err := d2.OpenConsent(); err == nil || err.Error() != "missing key for decryption" {
 		t.Fatalf("expected 'missing key for decryption', got %v", err)
 	}

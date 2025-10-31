@@ -110,12 +110,12 @@ func (e *PulseSymmetricEncryption) SetContractAddress(contractAddress *string) *
 }
 
 func (e *PulseSymmetricEncryption) decodeContractAddress() error {
-	e.contractAddressString = strings.TrimPrefix(e.contractAddressString, "0x")
-	if hex.DecodedLen(len(e.contractAddressString)) != EthAddressLength {
+	*e.contractAddressString = strings.TrimPrefix(*e.contractAddressString, "0x")
+	if hex.DecodedLen(len(*e.contractAddressString)) != EthAddressLength {
 		return ErrBadContractAddress
 	}
 	dstContractAddress := make([]byte, EthAddressLength)
-	decode, err := hex.Decode(dstContractAddress, []byte(e.contractAddressString))
+	decode, err := hex.Decode(dstContractAddress, []byte(*e.contractAddressString))
 	if err != nil || decode != EthAddressLength {
 		return errors.New("failed to decode contract address ")
 	}
@@ -256,7 +256,10 @@ func (e *PulseSymmetricEncryption) SealPlaintext() error {
 	if e.plaintext == nil || len(e.plaintext) == 0 {
 		return ErrNoPlaintext
 	}
-	if e.contractAddressString == "" || e.purpose == PulseNoSymmetricPurpose || e.chainId == 0 {
+	if e.contractAddressString == nil ||
+		*e.contractAddressString == "" ||
+		e.purpose == PulseNoSymmetricPurpose ||
+		e.chainId == 0 {
 		return ErrNoContractAddress
 	}
 	if err := e.decodeContractAddress(); err != nil {
@@ -328,7 +331,7 @@ func (e *PulseSymmetricEncryption) OpenUpdate() error {
 	return e.OpenCiphertext()
 }
 
-// openCiphertext decrypts the ciphertext using AES-256-GCM
+// OpenCiphertext decrypts the ciphertext using AES-256-GCM
 //
 //		The following fields must be set:
 //		  - ContractAddress
@@ -348,7 +351,10 @@ func (e *PulseSymmetricEncryption) OpenCiphertext() error {
 	if e.ciphertext == nil || len(e.ciphertext) == 0 {
 		return ErrNoCiphertext
 	}
-	if e.contractAddressString == "" || e.purpose == PulseNoSymmetricPurpose || e.chainId == 0 {
+	if e.contractAddressString == nil ||
+		*e.contractAddressString == "" ||
+		e.purpose == PulseNoSymmetricPurpose ||
+		e.chainId == 0 {
 		return ErrNoContractAddress
 	}
 	if err := e.decodeContractAddress(); err != nil {
