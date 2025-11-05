@@ -16,9 +16,6 @@ const PulseHKDFInfoStr = "ctx: v1 | AES-256-GCM session | Pulse Protocol"
 func PulseHKDFInfo() []byte { return []byte(PulseHKDFInfoStr) }
 
 //TODO: Split out types into new module
-//TODO: Add tests
-//TODO: Add documentation
-//TODO: Add known answer tests
 
 // PulseECEncryption is a struct for encrypting data using ECDH key exchange to generate a symmetric key.
 type PulseECEncryption struct {
@@ -134,7 +131,7 @@ func (e *PulseECEncryption) Encrypt() error {
 	}
 
 	symmetricEncryption := NewPulseSymmetricEncryption().
-		SetKey(PulseSymmetricKey(aesKey)).
+		SetKey(aesKey).
 		SetContractAddress(e.contractAddress).
 		SetPlaintext(e.plaintext).
 		SetChainId(e.chainId).
@@ -190,7 +187,7 @@ func (e *PulseECEncryption) Decrypt() error {
 	}
 
 	symmetricEncryption := NewPulseSymmetricEncryption().
-		SetKey(PulseSymmetricKey(aesKey)).
+		SetKey(aesKey).
 		SetContractAddress(e.contractAddress).
 		SetCiphertext(e.ciphertext).
 		SetChainId(e.chainId).
@@ -283,11 +280,7 @@ func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey) ([]byte, error) 
 	}
 	sharedSecret := secp.GenerateSharedSecret(me, other)
 
-	sharedKey, err := deriveKey(sharedSecret)
-	if err != nil {
-		return nil, err
-	}
-	return sharedKey, nil
+	return deriveKey(sharedSecret)
 }
 
 // deriveKey expands the shared secret into a key of length n using HKDF with

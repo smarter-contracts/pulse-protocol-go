@@ -44,10 +44,6 @@ var (
 	ErrNoContractAddress  = errors.New("no contract address, chainId or purpose")
 )
 
-// PulseSymmetricKey represents a cipher key used for symmetric encryption.
-// It's defined as a 32 byte array to match AES-256 requirements.
-type PulseSymmetricKey [AESGCMKeySize]byte
-
 // PulseSymmetricNonce represents a nonce used for symmetric encryption.
 // It's defined as a 12 byte array to match GCM requirements.'
 type PulseSymmetricNonce [AESGCMNonceSize]byte
@@ -65,8 +61,8 @@ var PulseAESBaseNonce = PulseSymmetricNonce{0x12, 0x34, 0x56, 0x78, 0x90, 0xAB, 
 // The Nonce is generated deterministically using the contract address, chainId and purpose. We set AAD for the
 // algorithm to be the nonce.
 type PulseSymmetricEncryption struct {
-	key                   PulseSymmetricKey     // key for AES-256-GCM
-	hasKey                bool                  // Marks if we've set the key already
+	key                   []byte // key for AES-256-GCM
+	hasKey                bool
 	nonce                 PulseSymmetricNonce   // nonce for GCM
 	purpose               PulseSymmetricPurpose // consent, revoke, update, for nonce generation
 	plaintext             []byte
@@ -85,14 +81,14 @@ func NewPulseSymmetricEncryption() *PulseSymmetricEncryption {
 }
 
 // SetKey sets the key for the encryption process.
-func (e *PulseSymmetricEncryption) SetKey(key PulseSymmetricKey) *PulseSymmetricEncryption {
+func (e *PulseSymmetricEncryption) SetKey(key []byte) *PulseSymmetricEncryption {
 	e.key = key
 	e.hasKey = true
 	return e
 }
 
 // Key returns the key for the encryption process.
-func (e *PulseSymmetricEncryption) Key() PulseSymmetricKey {
+func (e *PulseSymmetricEncryption) Key() []byte {
 	return e.key
 }
 
@@ -232,7 +228,7 @@ func (e *PulseSymmetricEncryption) SealUpdate() error {
 	return e.SealPlaintext()
 }
 
-// sealPlaintext encrypts the plaintext using AES-256-GCM
+// SealPlaintext encrypts the plaintext using AES-256-GCM
 //
 //		The following fields must be set:
 //		  - ContractAddress
@@ -267,7 +263,7 @@ func (e *PulseSymmetricEncryption) SealPlaintext() error {
 	}
 
 	if !e.hasKey {
-		err := generateAES256Key(&e.key)
+		err := e.generateAES256Key()
 		if err != nil {
 			return errors.New("failed to generate AES256 key: " + err.Error())
 		}
@@ -275,7 +271,7 @@ func (e *PulseSymmetricEncryption) SealPlaintext() error {
 
 	e.generateNonce()
 
-	block, err := aes.NewCipher(e.key[:])
+	block, err := aes.NewCipher(e.key)
 	if err != nil {
 		return errors.New("failed to generate AES Cipher: " + err.Error())
 	}
@@ -360,13 +356,13 @@ func (e *PulseSymmetricEncryption) OpenCiphertext() error {
 	if err := e.decodeContractAddress(); err != nil {
 		return errors.New("failed to decode contract address: " + err.Error())
 	}
-	if !e.hasKey {
+	if e.key == nil {
 		return ErrNoKey
 	}
 
 	e.generateNonce()
 
-	block, err := aes.NewCipher(e.key[:])
+	block, err := aes.NewCipher(e.key)
 	if err != nil {
 		return errors.New("failed to generate AES Cipher: " + err.Error())
 	}
@@ -380,8 +376,9 @@ func (e *PulseSymmetricEncryption) OpenCiphertext() error {
 	return err
 }
 
-func generateAES256Key(i *PulseSymmetricKey) error {
+func (e *PulseSymmetricEncryption) generateAES256Key() error {
 	key, err := randutil.Bytes(AESGCMKeySize)
-	i = (*PulseSymmetricKey)(key)
+	e.key = key
+	e.hasKey = true
 	return err
 }

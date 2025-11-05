@@ -35,9 +35,9 @@ func mustAddress(t *testing.T) *string {
 	return &retVal
 }
 
-func mustKey(t *testing.T) PulseSymmetricKey {
+func mustKey(t *testing.T) []byte {
 	t.Helper()
-	var key PulseSymmetricKey
+	key := make([]byte, AESGCMKeySize)
 	for i := range key {
 		key[i] = byte(i)
 	}
@@ -109,7 +109,7 @@ func TestPulseSymmetric_Consent_RoundTrip(t *testing.T) {
 // Tests below here a specific to this implementation, and are not essential to replicate
 
 func TestPulseSymmetric_EncryptErrors(t *testing.T) {
-	var key PulseSymmetricKey
+	key := make([]byte, AESGCMKeySize)
 	for i := range key {
 		key[i] = byte(i)
 	}
@@ -144,7 +144,7 @@ func TestPulseSymmetric_EncryptErrors(t *testing.T) {
 }
 
 func TestPulseSymmetric_DecryptErrors(t *testing.T) {
-	var key PulseSymmetricKey
+	key := make([]byte, AESGCMKeySize)
 	for i := range key {
 		key[i] = byte(i)
 	}
