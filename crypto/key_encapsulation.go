@@ -18,8 +18,8 @@ type PulsePQEncryption struct {
 	contractAddress        *string
 	myPrivateKey           *kyberPKE.PrivateKey
 	myPublicKey            *kyberPKE.PublicKey
-	myPublicKeyFingerPrint []byte
-	otherPublicKeys        []*kyberPKE.PublicKey
+	myPublicKeyFingerPrint [32]byte
+	otherPublicKeys        map[[32]byte]*kyberPKE.PublicKey
 	encapsulatedKeys       []*PulsePQEncryptionKey
 	purpose                PulseSymmetricPurpose
 	chainId                byte
@@ -33,7 +33,9 @@ type PulsePQEncryption struct {
 // NewPulsePQEncryption constructs a new PulsePQEncryption with zero values.
 // Configure it using the setter methods before calling Encrypt or Decrypt.
 func NewPulsePQEncryption() *PulsePQEncryption {
-	return &PulsePQEncryption{}
+	e := &PulsePQEncryption{}
+	e.otherPublicKeys = make(map[[32]byte]*kyberPKE.PublicKey)
+	return e
 }
 
 // SetPlaintext sets the plaintext bytes to be encrypted.
@@ -79,7 +81,7 @@ func (e *PulsePQEncryption) SetMyPrivateKey(myPrivateKey *kyberKEM.PrivateKey) *
 	e.myPublicKey.Unpack(buf[:kyberPKE.PublicKeySize])
 	e.myPublicKeyFingerPrint = getPubKeyFingerprint(e.myPublicKey)
 
-	e.otherPublicKeys = append(e.otherPublicKeys, e.myPublicKey)
+	e.otherPublicKeys[e.myPublicKeyFingerPrint] = e.myPublicKey
 	return e
 }
 
@@ -90,7 +92,9 @@ func (e *PulsePQEncryption) AddOtherPublicKey(otherPublicKey *kyberKEM.PublicKey
 	otherPublicKey.Pack(buf)
 	newKey := &kyberPKE.PublicKey{}
 	newKey.Unpack(buf)
-	e.otherPublicKeys = append(e.otherPublicKeys, newKey)
+
+	fp := getPubKeyFingerprint(newKey)
+	e.otherPublicKeys[fp] = newKey
 	return e
 }
 
@@ -138,7 +142,7 @@ func (e *PulsePQEncryption) setSeed(seed []byte) *PulsePQEncryption {
 // recipient. It combines the encrypted AES key with an fingerprint of the public MLKEMS key used to encrypt it.
 type PulsePQEncryptionKey struct {
 	_               struct{} `json:"-"               cbor:",toarray"`   // Enable CBOR array encoding for this type.
-	KeyFingerPrint  []byte   `json:"keyFingerPrint"  cbor:"0,keyasint"` // Hash of public key
+	KeyFingerPrint  [32]byte `json:"keyFingerPrint"  cbor:"0,keyasint"` // Hash of public key
 	EncapsulatedKey []byte   `json:"encapsulatedKey" cbor:"1,keyasint"` // Encapsulated/Encrypted AES Key
 }
 
@@ -213,7 +217,7 @@ func (e *PulsePQEncryption) Encrypt() error {
 	} else {
 		seed = make([]byte, kyberPKE.EncryptionSeedSize)
 	}
-	for _, kemPK := range e.otherPublicKeys {
+	for fingerPrint, kemPK := range e.otherPublicKeys {
 		if kemPK == nil {
 			continue
 		}
@@ -226,9 +230,8 @@ func (e *PulsePQEncryption) Encrypt() error {
 		}
 		encapsulatedKey := make([]byte, kyberPKE.CiphertextSize)
 		kemPK.EncryptTo(encapsulatedKey, aesKey[:], seed)
-		keyFingerPrint := getPubKeyFingerprint(kemPK)
 		e.encapsulatedKeys = append(e.encapsulatedKeys, &PulsePQEncryptionKey{
-			KeyFingerPrint:  keyFingerPrint,
+			KeyFingerPrint:  fingerPrint,
 			EncapsulatedKey: encapsulatedKey,
 		})
 	}
@@ -255,7 +258,7 @@ func (e *PulsePQEncryption) Decrypt() error {
 	foundKey := false
 	aesKey := make([]byte, kyberPKE.PlaintextSize)
 	for _, key := range e.encryptionResult.Keys {
-		if bytes.Equal(key.KeyFingerPrint, e.myPublicKeyFingerPrint) {
+		if bytes.Equal(key.KeyFingerPrint[:], e.myPublicKeyFingerPrint[:]) {
 			foundKey = true
 			e.myPrivateKey.DecryptTo(aesKey, key.EncapsulatedKey)
 			break
@@ -323,10 +326,10 @@ func (e *PulsePQEncryption) verifyDecryptReady() error {
 }
 
 // Returns a hash of a MLKEMS/Kyber-768 public key, which we can use to identify the key later.
-func getPubKeyFingerprint(pk *kyberPKE.PublicKey) []byte {
+func getPubKeyFingerprint(pk *kyberPKE.PublicKey) [32]byte {
 	hash := sha3.NewLegacyKeccak256()
 	buf := make([]byte, kyberPKE.PublicKeySize)
 	pk.Pack(buf)
 	hash.Write(buf)
-	return hash.Sum(nil)
+	return [32]byte(hash.Sum(nil))
 }

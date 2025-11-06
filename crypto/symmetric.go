@@ -16,7 +16,6 @@ import (
 	"crypto/cipher"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
@@ -130,7 +129,6 @@ func (e *PulseSymmetricEncryption) decodeContractAddress() error {
 //	XOR chainId with byte 8
 //	XOR purpose with byte 9
 func (e *PulseSymmetricEncryption) generateNonce() {
-	fmt.Printf("Contract Address: %x\n", e.contractAddress)
 	leftContractAddress := e.contractAddress[:AESGCMNonceSize]
 	rightContractAddress := e.contractAddress[AESGCMNonceSize:]
 
