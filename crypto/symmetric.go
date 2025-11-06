@@ -16,6 +16,7 @@ import (
 	"crypto/cipher"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
@@ -46,10 +47,10 @@ var (
 
 // PulseSymmetricNonce represents a nonce used for symmetric encryption.
 // It's defined as a 12 byte array to match GCM requirements.'
-type PulseSymmetricNonce [AESGCMNonceSize]byte
+//type PulseSymmetricNonce [AESGCMNonceSize]byte
 
 // A Fixed base nonce that we derive the encryption nonce from.
-var PulseAESBaseNonce = PulseSymmetricNonce{0x12, 0x34, 0x56, 0x78, 0x90, 0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78}
+var PulseAESBaseNonce = []byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78}
 
 // PulseSymmetricEncryption is a struct used to encapsulate the symmetric encryption process for the Pulse Protocol.
 // The object is opaque to the user, with all fields manipulated by function calls.
@@ -63,7 +64,7 @@ var PulseAESBaseNonce = PulseSymmetricNonce{0x12, 0x34, 0x56, 0x78, 0x90, 0xAB, 
 type PulseSymmetricEncryption struct {
 	key                   []byte // key for AES-256-GCM
 	hasKey                bool
-	nonce                 PulseSymmetricNonce   // nonce for GCM
+	nonce                 [AESGCMNonceSize]byte // nonce for GCM
 	purpose               PulseSymmetricPurpose // consent, revoke, update, for nonce generation
 	plaintext             []byte
 	ciphertext            []byte
@@ -129,6 +130,7 @@ func (e *PulseSymmetricEncryption) decodeContractAddress() error {
 //	XOR chainId with byte 8
 //	XOR purpose with byte 9
 func (e *PulseSymmetricEncryption) generateNonce() {
+	fmt.Printf("Contract Address: %x\n", e.contractAddress)
 	leftContractAddress := e.contractAddress[:AESGCMNonceSize]
 	rightContractAddress := e.contractAddress[AESGCMNonceSize:]
 
@@ -172,60 +174,6 @@ func (e *PulseSymmetricEncryption) Ciphertext() []byte {
 func (e *PulseSymmetricEncryption) SetPurpose(purpose PulseSymmetricPurpose) *PulseSymmetricEncryption {
 	e.purpose = purpose
 	return e
-}
-
-// SealConsent encrypts a consent record
-//
-//	The following fields must be set:
-//	  - ContractAddress
-//	  - ChainId
-//	  - Plaintext
-//
-//	The following things are optional:
-//	  - Key
-//
-// If key is not set, a random new key will be generated.
-//
-// Encrypted data is returned in Ciphertext(). Key() will return the generated key.
-func (e *PulseSymmetricEncryption) SealConsent() error {
-	e.purpose = PulseSymmetricConsent
-	return e.SealPlaintext()
-}
-
-// SealRevoke encrypts a revoke record
-//
-//	The following fields must be set:
-//	  - ContractAddress
-//	  - ChainId
-//	  - Plaintext
-//
-//	The following things are optional:
-//	  - Key
-//
-// If key is not set, a random new key will be generated.
-//
-// Encrypted data is returned in Ciphertext(). Key() will return the generated key.
-func (e *PulseSymmetricEncryption) SealRevoke() error {
-	e.purpose = PulseSymmetricRevoke
-	return e.SealPlaintext()
-}
-
-// SealUpdate encrypts an update record
-//
-//	The following fields must be set:
-//	  - ContractAddress
-//	  - ChainId
-//	  - Plaintext
-//
-//	The following things are optional:
-//	  - Key
-//
-// If key is not set, a random new key will be generated.
-//
-// Encrypted data is returned in Ciphertext(). Key() will return the generated key.
-func (e *PulseSymmetricEncryption) SealUpdate() error {
-	e.purpose = PulseSymmetricUpdate
-	return e.SealPlaintext()
 }
 
 // SealPlaintext encrypts the plaintext using AES-256-GCM
@@ -283,48 +231,6 @@ func (e *PulseSymmetricEncryption) SealPlaintext() error {
 	e.ciphertext = gcm.Seal(nil, e.nonce[:], e.plaintext, e.nonce[:])
 
 	return nil
-}
-
-// OpenConsent decrypts a consent record
-//
-//	The following fields must be set:
-//	  - ContractAddress
-//	  - ChainId
-//	  - Ciphertext
-//	  - Key
-//
-// Decrypted data is returned in Plaintext().
-func (e *PulseSymmetricEncryption) OpenConsent() error {
-	e.purpose = PulseSymmetricConsent
-	return e.OpenCiphertext()
-}
-
-// OpenRevoke decrypts a revoke record
-//
-//	The following fields must be set:
-//	  - ContractAddress
-//	  - ChainId
-//	  - Ciphertext
-//	  - Key
-//
-// Decrypted data is returned in Plaintext().
-func (e *PulseSymmetricEncryption) OpenRevoke() error {
-	e.purpose = PulseSymmetricRevoke
-	return e.OpenCiphertext()
-}
-
-// OpenUpdate decrypts an update record
-//
-//	The following fields must be set:
-//	  - ContractAddress
-//	  - ChainId
-//	  - Ciphertext
-//	  - Key
-//
-// Decrypted data is returned in Plaintext().
-func (e *PulseSymmetricEncryption) OpenUpdate() error {
-	e.purpose = PulseSymmetricUpdate
-	return e.OpenCiphertext()
 }
 
 // OpenCiphertext decrypts the ciphertext using AES-256-GCM
