@@ -43,6 +43,18 @@ func TestMustBytes_Length(t *testing.T) {
 	}
 }
 
+func TestBytes_TableDrivenValues(t *testing.T) {
+	for _, n := range []int{1, 12, 16, 32, 48, 0} {
+		b, err := Bytes(n)
+		if err != nil {
+			t.Fatalf("Bytes(%d) error: %v", n, err)
+		}
+		if len(b) != n {
+			t.Fatalf("Bytes length for n=%d: want %d got %d", n, n, len(b))
+		}
+	}
+}
+
 func TestUint64_Uniqueness(t *testing.T) {
 	u1, err := Uint64()
 	if err != nil {

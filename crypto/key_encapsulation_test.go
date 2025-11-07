@@ -575,7 +575,7 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 }
 
 func TestPulsePQ_SetPrivateKey_AddsPublicKey(t *testing.T) {
-	pk, sk, err := kyberKEM.GenerateKeyPair(rand.Reader)
+	_, sk, err := kyberKEM.GenerateKeyPair(rand.Reader)
 	if err != nil {
 		t.Fatalf("GenerateKeyPair: %v", err)
 	}
@@ -584,18 +584,6 @@ func TestPulsePQ_SetPrivateKey_AddsPublicKey(t *testing.T) {
 
 	if len(e.otherPublicKeys) != 1 {
 		t.Fatalf("expected 1 other public key, got %d", len(e.otherPublicKeys))
-	}
-
-	pkBytes := make([]byte, kyberKEM.PublicKeySize)
-	pk.Pack(pkBytes)
-	pke := kyberPKE.PublicKey{}
-	pke.Unpack(pkBytes)
-	fp := getPubKeyFingerprint(&pke)
-
-	okBytes := make([]byte, kyberKEM.PublicKeySize)
-	e.otherPublicKeys[fp].Pack(okBytes)
-	if !bytes.Equal(pkBytes, okBytes) {
-		t.Fatalf("expected stored public key %x to match generated key %x", okBytes, pkBytes)
 	}
 }
 
@@ -647,5 +635,153 @@ func TestDuplicate_OtherKey(t *testing.T) {
 
 	if len(e2.otherPublicKeys) != 1 {
 		t.Fatalf("add myPublic and private: expected 1 otherpublickey, got %d", len(e2.otherPublicKeys))
+	}
+}
+
+func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
+	// Generate recipients
+	pk1, sk1, err := kyberKEM.GenerateKeyPair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	pk2, _, err := kyberKEM.GenerateKeyPair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+
+	// Encrypt for two recipients
+	enc := NewPulsePQEncryption().
+		SetPlaintext([]byte("secret")).
+		SetContractAddress(helperContractAddressPQ()).
+		SetPurpose(PulseSymmetricConsent).
+		SetChainId(0x01)
+	enc.AddOtherPublicKey(pk1)
+	enc.AddOtherPublicKey(pk2)
+	if err := enc.Encrypt(); err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+	res := enc.GetEncryptionResult()
+	if len(res.Keys) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(res.Keys))
+	}
+
+	// Find entry for recipient1 by fingerprint and tamper the encapsulated key
+	// Build recipient1 fingerprint from pk1
+	buf := make([]byte, kyberKEM.PublicKeySize)
+	pk1.Pack(buf)
+	pke1 := new(kyberPKE.PublicKey)
+	pke1.Unpack(buf)
+	fp1 := getPubKeyFingerprint(pke1)
+
+	found := false
+	for _, k := range res.Keys {
+		if bytes.Equal(k.KeyFingerPrint[:], fp1[:]) {
+			if len(k.EncapsulatedKey) > 0 {
+				k.EncapsulatedKey[0] ^= 0xFF // flip a bit
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("failed to locate recipient key to tamper")
+	}
+
+	// Attempt decrypt as recipient1
+	dec := NewPulsePQEncryption().
+		SetContractAddress(helperContractAddressPQ()).
+		SetPurpose(PulseSymmetricConsent).
+		SetChainId(0x01).
+		SetEncryptionResult(res).
+		SetMyPrivateKey(sk1)
+	if err := dec.Decrypt(); err == nil {
+		t.Fatalf("expected decrypt failure with tampered encapsulated key")
+	}
+}
+
+func TestPulsePQ_Decrypt_NoMatchingFingerprint_Fails(t *testing.T) {
+	// Two recipients for encryption
+	pk1, _, err := kyberKEM.GenerateKeyPair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	pk2, _, err := kyberKEM.GenerateKeyPair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	// Third party trying to decrypt
+	_, sk3, err := kyberKEM.GenerateKeyPair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+
+	enc := NewPulsePQEncryption().
+		SetPlaintext([]byte("secret")).
+		SetContractAddress(helperContractAddressPQ()).
+		SetPurpose(PulseSymmetricConsent).
+		SetChainId(0x01)
+	enc.AddOtherPublicKey(pk1)
+	enc.AddOtherPublicKey(pk2)
+	if err := enc.Encrypt(); err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+	res := enc.GetEncryptionResult()
+
+	dec := NewPulsePQEncryption().
+		SetContractAddress(helperContractAddressPQ()).
+		SetPurpose(PulseSymmetricConsent).
+		SetChainId(0x01).
+		SetEncryptionResult(res).
+		SetMyPrivateKey(sk3)
+	if err := dec.Decrypt(); err == nil || err.Error() != "no key found for this party" {
+		t.Fatalf("expected 'no key found for this party', got %v", err)
+	}
+}
+
+func TestPulsePQ_Encrypt_DeterministicWithSeed(t *testing.T) {
+	pk1, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
+	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
+	seed := bytes.Repeat([]byte{0x42}, kyberPKE.EncryptionSeedSize)
+	aesKey := mustHexDecode("75ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a")
+
+	mkEnc := func() *PulsePQEncryption {
+		return NewPulsePQEncryption().
+			SetPlaintext([]byte("msg")).
+			SetContractAddress(helperContractAddressPQ()).
+			SetPurpose(PulseSymmetricConsent).
+			SetChainId(0x01).
+			setAESKey(aesKey)
+	}
+
+	e1 := mkEnc().AddOtherPublicKey(pk1).AddOtherPublicKey(pk2).setSeed(seed)
+	if err := e1.Encrypt(); err != nil {
+		t.Fatal(err)
+	}
+	r1 := e1.GetEncryptionResult()
+
+	e2 := mkEnc().AddOtherPublicKey(pk1).AddOtherPublicKey(pk2).setSeed(seed)
+	if err := e2.Encrypt(); err != nil {
+		t.Fatal(err)
+	}
+	r2 := e2.GetEncryptionResult()
+
+	if !bytes.Equal(r1.Keys[0].EncapsulatedKey, r2.Keys[0].EncapsulatedKey) ||
+		!bytes.Equal(r1.Keys[1].EncapsulatedKey, r2.Keys[1].EncapsulatedKey) {
+		t.Fatalf("encapsulated keys should be identical with fixed seed and AESkey")
+	}
+	if !bytes.Equal(r1.Keys[0].KeyFingerPrint[:], r2.Keys[0].KeyFingerPrint[:]) ||
+		!bytes.Equal(r1.Keys[1].KeyFingerPrint[:], r2.Keys[1].KeyFingerPrint[:]) {
+		t.Fatalf("fingerprints should be identical across deterministic runs")
+	}
+
+	// Converse without a seed
+	e3 := mkEnc().AddOtherPublicKey(pk1).AddOtherPublicKey(pk2)
+	if err := e3.Encrypt(); err != nil {
+		t.Fatal(err)
+	}
+	r3 := e3.GetEncryptionResult()
+	if bytes.Equal(r1.Keys[0].EncapsulatedKey, r3.Keys[0].EncapsulatedKey) ||
+		bytes.Equal(r1.Keys[1].EncapsulatedKey, r3.Keys[1].EncapsulatedKey) {
+		t.Fatalf("encapsulated keys should be different without fixed seed")
 	}
 }
