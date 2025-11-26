@@ -5,10 +5,15 @@ import (
 	"errors"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
-	kyberPKE "github.com/cloudflare/circl/pke/kyber/kyber768"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
+
 	"golang.org/x/crypto/sha3"
 )
+
+//TODO: Zero Sensitive Data
+//TODO: Update Known values post HKDF completion
+//TODO: Packing encryption result into single CBOR/byte array
+//TODO: Split Encrypt/Decrypt into smaller functions
+//TODO: Review test pack coverage
 
 // PulsePQEncryption is a struct for encrypting data using a post-quantum
 // key encapsulation mechanism (KEM) to derive a symmetric key.
@@ -16,10 +21,10 @@ type PulsePQEncryption struct {
 	plaintext              []byte
 	ciphertext             []byte
 	contractAddress        *string
-	myPrivateKey           *kyberPKE.PrivateKey
-	myPublicKey            *kyberPKE.PublicKey
+	myPrivateKey           *kyberKEM.PrivateKey
+	myPublicKey            *kyberKEM.PublicKey
 	myPublicKeyFingerPrint [32]byte
-	otherPublicKeys        map[[32]byte]*kyberPKE.PublicKey
+	otherPublicKeys        map[[32]byte]*kyberKEM.PublicKey
 	encapsulatedKeys       []*PulsePQEncryptionKey
 	purpose                PulseSymmetricPurpose
 	chainId                byte
@@ -34,7 +39,7 @@ type PulsePQEncryption struct {
 // Configure it using the setter methods before calling Encrypt or Decrypt.
 func NewPulsePQEncryption() *PulsePQEncryption {
 	e := &PulsePQEncryption{}
-	e.otherPublicKeys = make(map[[32]byte]*kyberPKE.PublicKey)
+	e.otherPublicKeys = make(map[[32]byte]*kyberKEM.PublicKey)
 	return e
 }
 
@@ -64,23 +69,11 @@ func (e *PulsePQEncryption) SetContractAddress(contractAddress *string) *PulsePQ
 // be populated by the caller using a dedicated setter in future. For now we
 // only store the private key. Returns the receiver to allow method chaining.
 func (e *PulsePQEncryption) SetMyPrivateKey(myPrivateKey *kyberKEM.PrivateKey) *PulsePQEncryption {
-	buf, err := myPrivateKey.MarshalBinary()
-	if err != nil {
-		return nil
-	}
-	// WARNING: the kyberKEM PrivateKey struct included a copy of the publicKey, hash etc.. which means that
-	// kyberKEM.PrivateKeySize > kyberPKE.PrivateKeySize. Thanks to the joys of open source, we know that the
-	// actual private key is the first kyberPKE.PrivateKeySize bytes of the buffer.
-	bufPrivate := buf[:kyberPKE.PrivateKeySize]
-	buf = buf[kyberPKE.PrivateKeySize:]
-	e.myPrivateKey = &kyberPKE.PrivateKey{}
-	e.myPrivateKey.Unpack(bufPrivate)
+	e.myPrivateKey = myPrivateKey
+	pubKey := myPrivateKey.Public()
+	e.myPublicKey = pubKey.(*kyberKEM.PublicKey)
 
-	// The next bytes in the buffer are the public key.
-	e.myPublicKey = &kyberPKE.PublicKey{}
-	e.myPublicKey.Unpack(buf[:kyberPKE.PublicKeySize])
 	e.myPublicKeyFingerPrint = getPubKeyFingerprint(e.myPublicKey)
-
 	e.otherPublicKeys[e.myPublicKeyFingerPrint] = e.myPublicKey
 	return e
 }
@@ -88,13 +81,8 @@ func (e *PulsePQEncryption) SetMyPrivateKey(myPrivateKey *kyberKEM.PrivateKey) *
 // AddOtherPublicKey sets the list of recipient public keys that should be able
 // to decrypt the sealed data. Returns the receiver to allow method chaining.
 func (e *PulsePQEncryption) AddOtherPublicKey(otherPublicKey *kyberKEM.PublicKey) *PulsePQEncryption {
-	buf := make([]byte, kyberKEM.PublicKeySize)
-	otherPublicKey.Pack(buf)
-	newKey := &kyberPKE.PublicKey{}
-	newKey.Unpack(buf)
-
-	fp := getPubKeyFingerprint(newKey)
-	e.otherPublicKeys[fp] = newKey
+	fp := getPubKeyFingerprint(otherPublicKey)
+	e.otherPublicKeys[fp] = otherPublicKey
 	return e
 }
 
@@ -141,9 +129,10 @@ func (e *PulsePQEncryption) setSeed(seed []byte) *PulsePQEncryption {
 // PulsePQEncryptionKey is a struct for holding the encapsulated key for a
 // recipient. It combines the encrypted AES key with an fingerprint of the public MLKEMS key used to encrypt it.
 type PulsePQEncryptionKey struct {
-	_               struct{} `json:"-"               cbor:",toarray"`   // Enable CBOR array encoding for this type.
-	KeyFingerPrint  [32]byte `json:"keyFingerPrint"  cbor:"0,keyasint"` // Hash of public key
-	EncapsulatedKey []byte   `json:"encapsulatedKey" cbor:"1,keyasint"` // Encapsulated/Encrypted AES Key
+	_                   struct{} `json:"-"               cbor:",toarray"`       // Enable CBOR array encoding for this type.
+	KeyFingerPrint      [32]byte `json:"keyFingerPrint"  cbor:"0,keyasint"`     // Hash of public key
+	EncapsulatedKeyKey  []byte   `json:"encapsulatedKeyKey" cbor:"1,keyasint"`  // Encapsulated/Encrypted AES EncryptionKey
+	EncapsulatedDataKey []byte   `json:"encapsulatedDataKey" cbor:"2,keyasint"` // Encapsulated/Encrypted AES Ciphertext
 }
 
 // PulsePQEncryptionResult is a struct for holding the result of an encryption
@@ -192,8 +181,8 @@ func (e *PulsePQEncryption) Encrypt() error {
 		return err
 	}
 
-	// Encrypt the plaintext using AESGCM. A random key will be generated.
-	symmetricEncryption := NewPulseSymmetricEncryption().
+	// Encrypt the plaintext using AES-GCM-256. A random key will be generated.
+	dataSymmetricEncryption := NewPulseSymmetricEncryption().
 		SetContractAddress(e.contractAddress).
 		SetPlaintext(e.plaintext).
 		SetChainId(e.chainId).
@@ -201,38 +190,59 @@ func (e *PulsePQEncryption) Encrypt() error {
 
 	// For testing purposes, we can set the key manually.
 	if e.hasKey {
-		symmetricEncryption.SetKey(e.aesKey)
+		dataSymmetricEncryption.SetEncryptionKey(e.aesKey)
 	}
 
-	if err := symmetricEncryption.SealPlaintext(); err != nil {
+	if err := dataSymmetricEncryption.SealPlaintext(); err != nil {
 		return errors.New("Failed to seal plaintext: " + err.Error())
 	}
-	e.ciphertext = symmetricEncryption.Ciphertext()
+	e.ciphertext = dataSymmetricEncryption.Ciphertext()
 
 	// Get the AEAD encryption key, and encapsulate it for each public key.
-	aesKey := symmetricEncryption.Key()
-	var seed []byte
-	if e.hasSeed {
-		seed = e.seed
-	} else {
-		seed = make([]byte, kyberPKE.EncryptionSeedSize)
-	}
+	dataAESKey := dataSymmetricEncryption.EncryptionKey()
+
+	scheme := kyberKEM.Scheme()
 	for fingerPrint, kemPK := range e.otherPublicKeys {
 		if kemPK == nil {
 			continue
 		}
 
+		var encapsulatedSecret, sharedSecret []byte
+		var err error
 		// Generally hasSeed == false, but true for some test cases.
-		if !e.hasSeed {
-			if err := randutil.Read(seed); err != nil {
-				return err
-			}
+		if e.hasSeed {
+			encapsulatedSecret, sharedSecret, err = scheme.EncapsulateDeterministically(kemPK, e.seed)
+		} else {
+			encapsulatedSecret, sharedSecret, err = scheme.Encapsulate(kemPK)
 		}
-		encapsulatedKey := make([]byte, kyberPKE.CiphertextSize)
-		kemPK.EncryptTo(encapsulatedKey, aesKey[:], seed)
+		if err != nil {
+			return err
+		}
+
+		hkdf := NewPulseHKDF().
+			SetSharedSecret(sharedSecret)
+
+		if err = hkdf.DeriveKey(); err != nil {
+			return err
+		}
+
+		keyAESKey := hkdf.GeneratedKey()
+		keyAESEncryption := NewPulseSymmetricEncryption().
+			SetContractAddress(e.contractAddress).
+			SetPlaintext(dataAESKey).
+			SetChainId(e.chainId).
+			SetPurpose(e.purpose).
+			SetEncryptionKey(keyAESKey)
+
+		if err = keyAESEncryption.SealPlaintext(); err != nil {
+			return err
+		}
+
+		// TODO: Zero sensitive data
 		e.encapsulatedKeys = append(e.encapsulatedKeys, &PulsePQEncryptionKey{
-			KeyFingerPrint:  fingerPrint,
-			EncapsulatedKey: encapsulatedKey,
+			KeyFingerPrint:      fingerPrint,
+			EncapsulatedKeyKey:  encapsulatedSecret,
+			EncapsulatedDataKey: keyAESEncryption.Ciphertext(),
 		})
 	}
 
@@ -256,11 +266,13 @@ func (e *PulsePQEncryption) Decrypt() error {
 
 	// Find the EncapsulatedKey assigned to my public key. Decrypt it using my private key to get the AES key.
 	foundKey := false
-	aesKey := make([]byte, kyberPKE.PlaintextSize)
-	for _, key := range e.encryptionResult.Keys {
+	sharedSecret := make([]byte, kyberKEM.SharedKeySize)
+	keyIndex := 0
+	for i, key := range e.encryptionResult.Keys {
 		if bytes.Equal(key.KeyFingerPrint[:], e.myPublicKeyFingerPrint[:]) {
 			foundKey = true
-			e.myPrivateKey.DecryptTo(aesKey, key.EncapsulatedKey)
+			keyIndex = i
+			e.myPrivateKey.DecapsulateTo(sharedSecret, key.EncapsulatedKeyKey)
 			break
 		}
 	}
@@ -268,18 +280,36 @@ func (e *PulsePQEncryption) Decrypt() error {
 		return errors.New("no key found for this party")
 	}
 
-	// Decrypt the ciphertext using the AES key.
-	symmetricEncryption := NewPulseSymmetricEncryption().
+	hkdf := NewPulseHKDF().
+		SetSharedSecret(sharedSecret)
+	if err := hkdf.DeriveKey(); err != nil {
+		return err
+	}
+
+	// Unseal the Data AES Key
+	keyEncryption := NewPulseSymmetricEncryption().
+		SetContractAddress(e.contractAddress).
+		SetCiphertext(e.encryptionResult.Keys[keyIndex].EncapsulatedDataKey).
+		SetChainId(e.chainId).
+		SetPurpose(e.purpose).
+		SetEncryptionKey(hkdf.generatedKey)
+
+	if err := keyEncryption.OpenCiphertext(); err != nil {
+		return errors.New("Failed to open encrypted key: " + err.Error())
+	}
+
+	// Now unseal the data
+	dataEncryption := NewPulseSymmetricEncryption().
 		SetContractAddress(e.contractAddress).
 		SetCiphertext(e.encryptionResult.SealedData).
 		SetChainId(e.chainId).
 		SetPurpose(e.purpose).
-		SetKey(aesKey)
+		SetEncryptionKey(keyEncryption.Plaintext())
 
-	if err := symmetricEncryption.OpenCiphertext(); err != nil {
-		return errors.New("Failed to open Ciphertext: " + err.Error())
+	if err := dataEncryption.OpenCiphertext(); err != nil {
+		return errors.New("Failed to open encrypted data: " + err.Error())
 	}
-	e.plaintext = symmetricEncryption.Plaintext()
+	e.plaintext = dataEncryption.Plaintext()
 
 	return nil
 }
@@ -326,9 +356,9 @@ func (e *PulsePQEncryption) verifyDecryptReady() error {
 }
 
 // Returns a hash of a MLKEMS/Kyber-768 public key, which we can use to identify the key later.
-func getPubKeyFingerprint(pk *kyberPKE.PublicKey) [32]byte {
+func getPubKeyFingerprint(pk *kyberKEM.PublicKey) [32]byte {
 	hash := sha3.NewLegacyKeccak256()
-	buf := make([]byte, kyberPKE.PublicKeySize)
+	buf := make([]byte, kyberKEM.PublicKeySize)
 	pk.Pack(buf)
 	hash.Write(buf)
 	return [32]byte(hash.Sum(nil))

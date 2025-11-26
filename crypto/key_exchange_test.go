@@ -15,19 +15,19 @@ import (
  * Further down are tests that are specific to this Go implementation, which are not essential to replicate.
  * [ Binary values are written as Hex strings below! ]
  *
- * Key values for the tests (binary/byte arrays coded as hex strings)::
- *    Alice Private Key = 0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f ( 32 bytes as hex)
- *    Bob Private Key = 0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e20 ( 32 bytes as hex)
+ * EncryptionKey values for the tests (binary/byte arrays coded as hex strings)::
+ *    Alice Private EncryptionKey = 0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f ( 32 bytes as hex)
+ *    Bob Private EncryptionKey = 0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e20 ( 32 bytes as hex)
  *    ChainId = 0x1
  *    Purpose = 1  ( Consent )
  *    ContractAddress = 0x0102030405060708090a0b0c0d0e0f1011121314 ( 20 bytes )
  *    Plaintext = "pulse test"
  *
  *    For a key exchange with this parameters, this should give you:
- *    Alice Public Key = 0x036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2
- *    Bob Public Key = 0x03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc
+ *    Alice Public EncryptionKey = 0x036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2
+ *    Bob Public EncryptionKey = 0x03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc
  *    Shared Secret (from ECDH exchange) = 0x3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e
- *    AES Key ( after HKDR ) = 0x75ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a
+ *    AES EncryptionKey ( after HKDR ) = 0x75ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a
  *    (Correct Nonce/AEAD handling checked in symmetric_test.go)
  *    Ciphertext = 0x7c2fc63d17f029d739c368463daf4bd5ad7dd284cfd41baa0907ea
  */
@@ -115,7 +115,7 @@ func TestEncrypt_Values(t *testing.T) {
 	}
 
 	// Alice encrypts to Bob -- if the shared secrets are correct above, it'll work the other way around too.
-	// Check AES Key generation, post HKDF
+	// Check AES EncryptionKey generation, post HKDF
 	aesKey, err := generateAESKey(alicePriv, bobPub)
 	if err != nil {
 		t.Fatalf("generateAESKey() failed: %v", err)

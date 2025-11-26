@@ -13,7 +13,7 @@ import (
  *
  * Further down are tests that are specific to this Go implementation, which are not essential to replicate.
  *
- * Key values for the tests (binary/byte arrays coded as hex strings)::
+ * EncryptionKey values for the tests (binary/byte arrays coded as hex strings)::
  *    AESKey = 0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f ( 32 bytes )
  *    ChainId = 0x1
  *    Purpose = 1  ( Consent )
@@ -67,7 +67,7 @@ func TestPulseSymmetric_Encrypt(t *testing.T) {
 	pt := []byte("pulse test")
 
 	e := NewPulseSymmetricEncryption().
-		SetKey(mustKey(t)).
+		SetEncryptionKey(mustKey(t)).
 		SetChainId(1).
 		SetContractAddress(mustAddress(t)).
 		SetPurpose(PulseSymmetricConsent).
@@ -85,7 +85,7 @@ func TestPulseSymmetric_Consent_RoundTrip(t *testing.T) {
 	pt := []byte("pulse test")
 
 	e := NewPulseSymmetricEncryption().
-		SetKey(mustKey(t)).
+		SetEncryptionKey(mustKey(t)).
 		SetChainId(1).
 		SetContractAddress(mustAddress(t)).
 		SetPurpose(PulseSymmetricConsent).
@@ -96,7 +96,7 @@ func TestPulseSymmetric_Consent_RoundTrip(t *testing.T) {
 
 	// Decrypt using a fresh instance with the same parameters
 	d := NewPulseSymmetricEncryption().
-		SetKey(mustKey(t)).
+		SetEncryptionKey(mustKey(t)).
 		SetChainId(1).
 		SetContractAddress(e.contractAddressString).
 		SetPurpose(PulseSymmetricConsent).
@@ -124,7 +124,7 @@ func TestPulseSymmetric_Consent_RoundTripNoKey(t *testing.T) {
 
 	// Decrypt using a fresh instance with the same parameters
 	d := NewPulseSymmetricEncryption().
-		SetKey(e.Key()).
+		SetEncryptionKey(e.EncryptionKey()).
 		SetChainId(1).
 		SetContractAddress(e.contractAddressString).
 		SetPurpose(PulseSymmetricConsent).
@@ -148,7 +148,7 @@ func TestPulseSymmetric_EncryptErrors(t *testing.T) {
 
 	// No plaintext provided
 	e1 := NewPulseSymmetricEncryption().
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetChainId(1).
 		SetPurpose(PulseSymmetricConsent).
 		SetContractAddress(mustAddress(t))
@@ -158,7 +158,7 @@ func TestPulseSymmetric_EncryptErrors(t *testing.T) {
 
 	// Missing contract address / chainId / purpose handled as 'no contract address' in current implementation
 	e2 := NewPulseSymmetricEncryption().
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetPlaintext([]byte("data"))
 	if err := e2.SealPlaintext(); err == nil || err.Error() != "no contract address, chainId or purpose" {
 		t.Fatalf("expected 'no contract address', got %v", err)
@@ -167,7 +167,7 @@ func TestPulseSymmetric_EncryptErrors(t *testing.T) {
 	// Bad contract address length
 	badAddress := "0x1234"
 	e3 := NewPulseSymmetricEncryption().
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetChainId(1).
 		SetContractAddress(&badAddress).
 		SetPurpose(PulseSymmetricConsent).
@@ -185,7 +185,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 
 	// No ciphertext
 	d1 := NewPulseSymmetricEncryption().
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetChainId(1).
 		SetPurpose(PulseSymmetricConsent).
 		SetContractAddress(mustAddress(t))
@@ -194,7 +194,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 	}
 
 	e := NewPulseSymmetricEncryption().
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetChainId(1).
 		SetContractAddress(mustAddress(t)).
 		SetPurpose(PulseSymmetricConsent).
@@ -216,7 +216,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 	missingChainIdDecrypt := NewPulseSymmetricEncryption().
 		SetContractAddress(e.contractAddressString).
 		SetPurpose(PulseSymmetricConsent).
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetCiphertext(e.Ciphertext())
 	if err := missingChainIdDecrypt.OpenCiphertext(); err == nil || err.Error() != "no contract address, chainId or purpose" {
 		t.Fatalf("expected 'no contract address, chainId or purpose', got %v", err)
@@ -225,7 +225,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 	missingPurposeDecrypt := NewPulseSymmetricEncryption().
 		SetContractAddress(e.contractAddressString).
 		SetChainId(1).
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetCiphertext(e.Ciphertext())
 	if err := missingPurposeDecrypt.OpenCiphertext(); err == nil || err.Error() != "no contract address, chainId or purpose" {
 		t.Fatalf("expected 'no contract address, chainId or purpose', got %v", err)
@@ -234,7 +234,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 	missingContractAddDecrypt := NewPulseSymmetricEncryption().
 		SetPurpose(PulseSymmetricConsent).
 		SetChainId(1).
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetCiphertext(e.Ciphertext())
 	if err := missingContractAddDecrypt.OpenCiphertext(); err == nil || err.Error() != "no contract address, chainId or purpose" {
 		t.Fatalf("expected 'no contract address, chainId or purpose', got %v", err)
@@ -246,7 +246,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 		SetContractAddress(e.contractAddressString).
 		SetPurpose(PulseSymmetricConsent).
 		SetChainId(2).
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetCiphertext(e.Ciphertext())
 	if err := wrongChainIdDecrypt.OpenCiphertext(); err == nil || err.Error() != "cipher: message authentication failed" {
 		t.Fatalf("expected 'message authentication failed', got %v", err)
@@ -256,7 +256,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 		SetContractAddress(e.contractAddressString).
 		SetPurpose(PulseSymmetricRevoke).
 		SetChainId(1).
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetCiphertext(e.Ciphertext())
 	if err := wrongPurposeDecrypt.OpenCiphertext(); err == nil || err.Error() != "cipher: message authentication failed" {
 		t.Fatalf("expected 'message authentication failed', got %v", err)
@@ -268,7 +268,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 		SetContractAddress(&badContract).
 		SetPurpose(PulseSymmetricRevoke).
 		SetChainId(1).
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetCiphertext(e.Ciphertext())
 	if err := wrongContractDecrypt.OpenCiphertext(); err == nil || err.Error() != "cipher: message authentication failed" {
 		t.Fatalf("expected 'message authentication failed', got %v", err)
@@ -282,7 +282,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 		SetContractAddress(e.contractAddressString).
 		SetPurpose(PulseSymmetricConsent).
 		SetChainId(1).
-		SetKey(badKey).
+		SetEncryptionKey(badKey).
 		SetCiphertext(e.Ciphertext())
 	if err := badKeyDecrypt.OpenCiphertext(); err == nil || err.Error() != "cipher: message authentication failed" {
 		t.Fatalf("expected 'cipher: message authentication failed', got %v", err)
@@ -297,7 +297,7 @@ func TestPulseSymmetric_DecryptErrors(t *testing.T) {
 		SetContractAddress(e.contractAddressString).
 		SetPurpose(PulseSymmetricConsent).
 		SetChainId(1).
-		SetKey(key).
+		SetEncryptionKey(key).
 		SetCiphertext(badCiphertext)
 	if err := badCipherTextDecrypt.OpenCiphertext(); err == nil || err.Error() != "cipher: message authentication failed" {
 		t.Fatalf("expected 'cipher: message authentication failed', got %v", err)

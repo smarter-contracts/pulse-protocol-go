@@ -16,6 +16,9 @@ const PulseHKDFInfoStr = "ctx: v1 | AES-256-GCM session | Pulse Protocol"
 func PulseHKDFInfo() []byte { return []byte(PulseHKDFInfoStr) }
 
 //TODO: Split out types into new module
+//TODO: Use new HKDF function
+//TODO: Update known values testpack
+//TODO: Review test pack coverage
 
 // PulseECEncryption is a struct for encrypting data using ECDH key exchange to generate a symmetric key.
 type PulseECEncryption struct {
@@ -131,7 +134,7 @@ func (e *PulseECEncryption) Encrypt() error {
 	}
 
 	symmetricEncryption := NewPulseSymmetricEncryption().
-		SetKey(aesKey).
+		SetEncryptionKey(aesKey).
 		SetContractAddress(e.contractAddress).
 		SetPlaintext(e.plaintext).
 		SetChainId(e.chainId).
@@ -187,7 +190,7 @@ func (e *PulseECEncryption) Decrypt() error {
 	}
 
 	symmetricEncryption := NewPulseSymmetricEncryption().
-		SetKey(aesKey).
+		SetEncryptionKey(aesKey).
 		SetContractAddress(e.contractAddress).
 		SetCiphertext(e.ciphertext).
 		SetChainId(e.chainId).
