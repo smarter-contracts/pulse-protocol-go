@@ -1,64 +1,120 @@
 package crypto
 
 import (
-	"errors"
+	"bytes"
+	"fmt"
 
 	"golang.org/x/crypto/hkdf"
 	"golang.org/x/crypto/sha3"
 )
 
-// TODO: Handle Seed values
-// TODO: Handle Info values
-// TODO: Test pack
-// TODO: Known Value Test pack
-
-// PulseHKDF provides a Hash Key Derivation Function (HKDF). We use an RFC 5869 HKDF, with the following parameters:
+// This file implements the HKDF functions used by Pulse. We use an industry standard
+// RFC5869 HMAC based HKDF. This wrapper handles:
+//
+// * Populating the Salt & Info values for Expand/Extract operations.
+// * Extracts a 32 byte AES-256 key from the shared secret.
+// * Extracts a 12 byte nonce from the shared secret.
 //
 // Hash Algorithm: keccak256 (consistent with the rest of the Pulse Protocol)
-// Seed: nil (translates to all 0 bytes)
-// Info:
+// Salt: Keccak256("pulse|kdf|v1|salt|" + exchangeAlgo + "|" + Keccak256(transcript) )
+//   - exchangeAlgo is either "kyber768" for kyber exchanges, or "secp256k1" for ECDH
+//   - transcript is passed in from the calling function, but will be either
+//     "secp256k1|keccak256(myPublicKey^theirPublicKey)"   OR
+//     "kyber768|<EncapsulatedSharedSecret>|keccak256(PubKey)"
+//
+// Info: "pulse|kdf|v1|aes-gcm|" + keyOrNonce + "|v1|" + recipientID + "|" + ctkHash
+//   - keyOrNonce is "key-wrap" for key derivation, or "nonce" for nonce derivation
+//   - recipientID
+//   - ctkHash
 //
 // The algorithm output is a 32-byte AES-256 key.
-type PulseHKDF struct {
-	sharedSecret []byte
-	generatedKey []byte
+func PulseHKDFKyber(sharedSecret []byte,
+	transcript []byte,
+	recipientId []byte,
+	context []byte,
+) ([]byte, []byte, error) {
+	parentAlgo := "kyber768"
+	purpose := "keywrap-aes"
+	suite := "kyber768+hkdf-keccak256"
+
+	return pulseHKDFImp(sharedSecret, parentAlgo, transcript, purpose, suite, recipientId, context)
 }
 
-// NewPulseHKDF creates a new HKDF instance.
-func NewPulseHKDF() *PulseHKDF {
-	return &PulseHKDF{}
+func PulseHKDFECDH(sharedSecret []byte,
+	transcript []byte,
+	recipientId []byte,
+	context []byte,
+) ([]byte, []byte, error) {
+	parentAlgo := "secp256k1"
+	purpose := "aead:channel:"
+	suite := "ecdh-secp256k1+hkdf-keccak256"
+
+	return pulseHKDFImp(sharedSecret, parentAlgo, transcript, purpose, suite, recipientId, context)
 }
 
-// SetSharedSecret sets the shared secret to be used in the HKDF.
-func (h *PulseHKDF) SetSharedSecret(sharedSecret []byte) *PulseHKDF {
-	h.sharedSecret = sharedSecret
-	return h
-}
+func pulseHKDFImp(sharedSecret []byte,
+	parentAlgo string,
+	transcript []byte,
+	purpose string,
+	suite string,
+	recipientId []byte,
+	context []byte) ([]byte, []byte, error) {
 
-// GeneratedKey returns the generated key.
-func (h *PulseHKDF) GeneratedKey() []byte {
-	return h.generatedKey
-}
+	salt := createSalt(parentAlgo, transcript)
 
-// DeriveKey derives a new key from the shared secret.
-func (h *PulseHKDF) DeriveKey() error {
-	if err := h.validateHKDF(); err != nil {
-		return err
+	keyInfo := createInfo(purpose, false, suite, recipientId, context)
+	nonceInfo := createInfo(purpose, true, suite, recipientId, context)
+
+	aesKey := make([]byte, AESGCMKeySize)
+	aesNonce := make([]byte, AESGCMNonceSize)
+
+	prk := hkdf.Extract(sha3.NewLegacyKeccak256, sharedSecret, salt)
+	keyReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, keyInfo)
+	nonceReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, nonceInfo)
+	if _, err := keyReader.Read(aesKey); err != nil {
+		return nil, nil, err
+	}
+	if _, err := nonceReader.Read(aesNonce); err != nil {
+		return nil, nil, err
 	}
 
-	keyReader := hkdf.New(sha3.NewLegacyKeccak256, h.sharedSecret, nil, nil)
-	newKey := make([]byte, AESGCMKeySize)
-
-	if _, err := keyReader.Read(newKey); err != nil {
-		return err
+	// Zero sensitive material
+	for i := range prk {
+		prk[i] = 0
 	}
-	h.generatedKey = newKey
-	return nil
+
+	return aesKey, aesNonce, nil
 }
 
-func (h *PulseHKDF) validateHKDF() error {
-	if h.sharedSecret == nil {
-		return errors.New("shared secret must be set")
+func createSalt(
+	exchangeAlgo string,
+	transcript []byte,
+) []byte {
+	saltString := "pulse|kdf|v1|salt|" + exchangeAlgo + "|"
+
+	outputHash := sha3.NewLegacyKeccak256()
+	outputHash.Write([]byte(saltString))
+
+	tHash := sha3.NewLegacyKeccak256()
+	transcriptHash := tHash.Sum(transcript)
+
+	return outputHash.Sum(transcriptHash)
+}
+
+func createInfo(purpose string,
+	isNonce bool,
+	suite string,
+	recipientID []byte,
+	context []byte,
+) []byte {
+	keyOrNonce := "key"
+	if isNonce {
+		keyOrNonce = "nonce"
 	}
-	return nil
+	contextHash := sha3.NewLegacyKeccak256().Sum(context)
+	output := bytes.Buffer{}
+	output.WriteString(fmt.Sprintf("pulse|kdf|v1|%s%s|%s|rid=%x|ctx=", purpose, keyOrNonce, suite, recipientID))
+	output.Write(contextHash[:])
+
+	return output.Bytes()
 }
