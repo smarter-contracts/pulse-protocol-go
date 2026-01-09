@@ -21,8 +21,6 @@ import (
 // This file contains the common functions for both purposes.
 
 //TODO: Update known values
-//TODO: Review Nonce usage -- should we random it
-//TODO: Pack Nonce/Ciphertext together in a struct (CBOR)
 
 const (
 	AESGCMKeySize    = 32 // AES-256
@@ -47,18 +45,6 @@ var (
 	ErrNoKey              = errors.New("missing key for decryption")
 	ErrNoContractAddress  = errors.New("no contract address, chainId or purpose")
 )
-
-type PulseSymmetricEncryption struct {
-	key                   []byte                // AES EncryptionKey used for AES-256-GCM
-	hasKey                bool                  // True if key is set
-	nonce                 [AESGCMNonceSize]byte // Encryption nonce
-	plaintext             []byte
-	ciphertext            []byte
-	purpose               PulseSymmetricPurpose // consent, revoke, update, for nonce generation
-	contractAddressString *string
-	contractAddress       *[EthAddressLength]byte // For deterministic nonce generation
-	chainId               byte                    // For deterministic nonce generation
-}
 
 func buildAAD(purpose PulseSymmetricPurpose,
 	cipherSuite string,

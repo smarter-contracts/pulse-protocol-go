@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
 
 	//"github.com/smarter-contracts/pulse-protocol-go/crypto"
 	"golang.org/x/crypto/hkdf"
@@ -72,6 +73,7 @@ func pulseHKDFImp(sharedSecret []byte,
 	aesNonce := make([]byte, symmetric.AESGCMNonceSize)
 
 	prk := hkdf.Extract(sha3.NewLegacyKeccak256, sharedSecret, salt)
+	defer wipe.SliceWipe(prk)
 	keyReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, keyInfo)
 	nonceReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, nonceInfo)
 	if _, err := keyReader.Read(aesKey); err != nil {
@@ -79,11 +81,6 @@ func pulseHKDFImp(sharedSecret []byte,
 	}
 	if _, err := nonceReader.Read(aesNonce); err != nil {
 		return nil, nil, err
-	}
-
-	// Zero sensitive material
-	for i := range prk {
-		prk[i] = 0
 	}
 
 	return aesKey, aesNonce, nil
