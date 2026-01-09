@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
 
 	//"github.com/smarter-contracts/pulse-protocol-go/crypto"
@@ -33,7 +34,7 @@ import (
 //
 // The algorithm output is a 32-byte AES-256 key.
 func PulseHKDFKyber(sharedSecret []byte,
-	transcript []byte,
+	transcriptHash []byte,
 	recipientId []byte,
 	context []byte,
 ) ([]byte, []byte, error) {
@@ -41,11 +42,11 @@ func PulseHKDFKyber(sharedSecret []byte,
 	purpose := "keywrap-aes"
 	suite := "kyber768+hkdf-keccak256"
 
-	return pulseHKDFImp(sharedSecret, parentAlgo, transcript, purpose, suite, recipientId, context)
+	return pulseHKDFImp(sharedSecret, parentAlgo, transcriptHash, purpose, suite, recipientId, context)
 }
 
 func PulseHKDFECDH(sharedSecret []byte,
-	transcript []byte,
+	transcriptHash []byte,
 	recipientId []byte,
 	context []byte,
 ) ([]byte, []byte, error) {
@@ -53,18 +54,18 @@ func PulseHKDFECDH(sharedSecret []byte,
 	purpose := "aead:channel:"
 	suite := "ecdh-secp256k1+hkdf-keccak256"
 
-	return pulseHKDFImp(sharedSecret, parentAlgo, transcript, purpose, suite, recipientId, context)
+	return pulseHKDFImp(sharedSecret, parentAlgo, transcriptHash, purpose, suite, recipientId, context)
 }
 
 func pulseHKDFImp(sharedSecret []byte,
 	parentAlgo string,
-	transcript []byte,
+	transcriptHash []byte,
 	purpose string,
 	suite string,
 	recipientId []byte,
 	context []byte) ([]byte, []byte, error) {
 
-	salt := createSalt(parentAlgo, transcript)
+	salt := createSalt(parentAlgo, transcriptHash)
 
 	keyInfo := createInfo(purpose, false, suite, recipientId, context)
 	nonceInfo := createInfo(purpose, true, suite, recipientId, context)
@@ -88,17 +89,11 @@ func pulseHKDFImp(sharedSecret []byte,
 
 func createSalt(
 	exchangeAlgo string,
-	transcript []byte,
+	transcriptHash []byte,
 ) []byte {
-	saltString := "pulse|kdf|v1|salt|" + exchangeAlgo + "|"
-
+	saltString := fmt.Sprintf("pulse|kdf|v1|salt|%s|%s", exchangeAlgo, textformat.FormatHex(transcriptHash))
 	outputHash := sha3.NewLegacyKeccak256()
-	outputHash.Write([]byte(saltString))
-
-	tHash := sha3.NewLegacyKeccak256()
-	transcriptHash := tHash.Sum(transcript)
-
-	return outputHash.Sum(transcriptHash)
+	return outputHash.Sum([]byte(saltString))
 }
 
 func createInfo(purpose string,

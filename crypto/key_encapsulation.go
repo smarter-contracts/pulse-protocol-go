@@ -94,9 +94,8 @@ func encapsulateKey(kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose symmet
 		return nil, err
 	}
 
-	// TODO: Arguments
 	// Derive AES key/nonce from shared secret for encrypting our data key
-	keyAESKey, keyNonce, err := hkdf.PulseHKDFKyber(sharedSecret, encapsulatedSecret, fingerPrint[:], []byte("context"))
+	keyAESKey, keyNonce, err := hkdf.PulseHKDFKyber(sharedSecret, encapsulatedSecret, fingerPrint[:], contextHash)
 	defer wipe.SliceWipe(keyAESKey)
 	defer wipe.SliceWipe(keyNonce)
 	if err != nil {
@@ -150,8 +149,7 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 
 	// Derive AES key from shared secret using HKDF
 	k := encryptionResult.Keys[keyIndex]
-	// TODO: Arguments
-	keyAESKey, keyNonce, err := hkdf.PulseHKDFKyber(sharedSecret, k.EncapsulatedKeyKey, k.KeyFingerPrint[:], []byte("context"))
+	keyAESKey, keyNonce, err := hkdf.PulseHKDFKyber(sharedSecret, k.EncapsulatedKeyKey, k.KeyFingerPrint[:], contextHash)
 	if err != nil {
 		return nil, err
 	}

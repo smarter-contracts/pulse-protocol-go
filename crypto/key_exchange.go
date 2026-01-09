@@ -38,16 +38,19 @@ func EncryptECDH(plaintext []byte,
 	chainId int32,
 	consentNumber int32,
 ) (*PulseECEncryptionResult, error) {
-	aesKey, nonce, err := generateAESKey(myPrivateKey, otherPublicKey)
+	if myPrivateKey == nil || otherPublicKey == nil {
+		return nil, errors.New("must provide both private and public keys to encrypt")
+	}
+	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
+	transcriptHash := generateTranscriptHash(textformat.FormatHex(myPrivateKey.PubKey().SerializeCompressed()),
+		textformat.FormatHex(otherPublicKey.SerializeCompressed()))
+	aesKey, nonce, err := generateAESKey(myPrivateKey, otherPublicKey, transcriptHash, contextHash)
 	defer wipe.SliceWipe(aesKey)
 	defer wipe.SliceWipe(nonce)
 	if err != nil {
 		return nil, errors.New("Failed to generate aes key and nonce: " + err.Error())
 	}
 
-	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
-	transcriptHash := generateTranscriptHash(textformat.FormatHex(myPrivateKey.PubKey().SerializeCompressed()),
-		textformat.FormatHex(otherPublicKey.SerializeCompressed()))
 	ciphertext, err := symmetric.PulseSeal(plaintext, aesKey, nonce, purpose, ECDHCipherSuite, nil, contextHash, transcriptHash)
 	if err != nil {
 		return nil, errors.New("Failed to seal plaintext: " + err.Error())
@@ -89,15 +92,15 @@ func DecryptEC(encryptionResult *PulseECEncryptionResult,
 	}
 
 	// Get the AES key and nonce from the ECDH exchange
-	aesKey, nonce, err := generateAESKey(myPrivateKey, otherPublicKey)
+	transcriptHash := generateTranscriptHash(textformat.FormatHex(encryptionResult.Key1),
+		textformat.FormatHex(encryptionResult.Key2))
+	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
+	aesKey, nonce, err := generateAESKey(myPrivateKey, otherPublicKey, transcriptHash, contextHash)
 	if err != nil {
 		return nil, errors.New("Failed to generate aes key: " + err.Error())
 	}
 
 	// Decrypt the ciphertext
-	transcriptHash := generateTranscriptHash(textformat.FormatHex(encryptionResult.Key1),
-		textformat.FormatHex(encryptionResult.Key2))
-	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
 	plaintext, err := symmetric.PulseOpen(encryptionResult.SealedData, aesKey, nonce, purpose, ECDHCipherSuite, nil, contextHash, transcriptHash)
 	if err != nil {
 		return nil, errors.New("Failed to open Ciphertext: " + err.Error())
@@ -109,14 +112,12 @@ func DecryptEC(encryptionResult *PulseECEncryptionResult,
 // generateAESKey computes a shared secret between two ECDH key pairs and derives a
 // 32-byte AES-256 key using an RFC 5869 HKDF. The result is suitable for use
 // with AES-GCM symmetric encryption.
-func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey) ([]byte, []byte, error) {
+func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey, transcriptHash []byte, contextHash []byte) ([]byte, []byte, error) {
 	if me == nil || other == nil {
 		return nil, nil, errors.New("must provide both private and public keys to derive a shared secret")
 	}
 	sharedSecret := secp.GenerateSharedSecret(me, other)
-
-	// TODO : Function arguments
-	return hkdf.PulseHKDFECDH(sharedSecret, []byte("transcript"), []byte("recipientid"), []byte("context"))
+	return hkdf.PulseHKDFECDH(sharedSecret, transcriptHash, nil, contextHash)
 }
 
 func generateTranscriptHash(key1 string, key2 string) []byte {
