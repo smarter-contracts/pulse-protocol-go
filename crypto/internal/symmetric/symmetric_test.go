@@ -2,8 +2,9 @@ package symmetric
 
 import (
 	"bytes"
-	"encoding/hex"
 	"testing"
+
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 )
 
 /*
@@ -48,13 +49,15 @@ func TestPulseSeal_PulseOpen_RoundTrip(t *testing.T) {
 	recipient := getTestRecipient()
 	purpose := PulseSymmetricConsent
 	context := []byte("context")
+	suite := "test-suite"
+	transcript := []byte("test transcript")
 
-	ciphertext, err := PulseSeal(plaintext, key, nonce, purpose, recipient, context)
+	ciphertext, err := PulseSeal(plaintext, key, nonce, purpose, suite, recipient, context, transcript)
 	if err != nil {
 		t.Fatalf("PulseSeal failed: %v", err)
 	}
 
-	decrypted, err := PulseOpen(ciphertext, key, nonce, purpose, recipient, context)
+	decrypted, err := PulseOpen(ciphertext, key, nonce, purpose, suite, recipient, context, transcript)
 	if err != nil {
 		t.Fatalf("PulseOpen failed: %v", err)
 	}
@@ -69,8 +72,10 @@ func TestPulseSealWithNewKey_RoundTrip(t *testing.T) {
 	recipient := getTestRecipient()
 	purpose := PulseSymmetricUpdate
 	context := []byte("another context")
+	suite := "test-suite"
+	transcript := []byte("test transcript")
 
-	ciphertext, key, nonce, err := PulseSealWithNewKey(plaintext, purpose, recipient, context)
+	ciphertext, key, nonce, err := PulseSealWithNewKey(plaintext, purpose, suite, recipient, context, transcript)
 	if err != nil {
 		t.Fatalf("PulseSealWithNewKey failed: %v", err)
 	}
@@ -82,7 +87,7 @@ func TestPulseSealWithNewKey_RoundTrip(t *testing.T) {
 		t.Errorf("Generated nonce size mismatch: got %d, want %d", len(nonce), AESGCMNonceSize)
 	}
 
-	decrypted, err := PulseOpen(ciphertext, key, nonce, purpose, recipient, context)
+	decrypted, err := PulseOpen(ciphertext, key, nonce, purpose, suite, recipient, context, transcript)
 	if err != nil {
 		t.Fatalf("PulseOpen failed: %v", err)
 	}
@@ -99,8 +104,10 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	recipient := getTestRecipient()
 	purpose := PulseSymmetricConsent
 	context := []byte("context")
+	suite := "test-suite"
+	transcript := []byte("transcript")
 
-	ciphertext, err := PulseSeal(plaintext, key, nonce, purpose, recipient, context)
+	ciphertext, err := PulseSeal(plaintext, key, nonce, purpose, suite, recipient, context, transcript)
 	if err != nil {
 		t.Fatalf("PulseSeal failed: %v", err)
 	}
@@ -109,7 +116,7 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	wrongKey := make([]byte, AESGCMKeySize)
 	copy(wrongKey, key)
 	wrongKey[0] ^= 0xFF
-	_, err = PulseOpen(ciphertext, wrongKey, nonce, purpose, recipient, context)
+	_, err = PulseOpen(ciphertext, wrongKey, nonce, purpose, suite, recipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong key")
 	}
@@ -118,13 +125,13 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	wrongNonce := make([]byte, AESGCMNonceSize)
 	copy(wrongNonce, nonce)
 	wrongNonce[0] ^= 0xFF
-	_, err = PulseOpen(ciphertext, key, wrongNonce, purpose, recipient, context)
+	_, err = PulseOpen(ciphertext, key, wrongNonce, purpose, suite, recipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong nonce")
 	}
 
 	// Test with wrong purpose
-	_, err = PulseOpen(ciphertext, key, nonce, PulseSymmetricRevoke, recipient, context)
+	_, err = PulseOpen(ciphertext, key, nonce, PulseSymmetricRevoke, suite, recipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong purpose")
 	}
@@ -133,13 +140,13 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	wrongRecipient := make([]byte, 20)
 	copy(wrongRecipient, recipient)
 	wrongRecipient[0] ^= 0xFF
-	_, err = PulseOpen(ciphertext, key, nonce, purpose, wrongRecipient, context)
+	_, err = PulseOpen(ciphertext, key, nonce, purpose, suite, wrongRecipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong recipient")
 	}
 
 	// Test with wrong context
-	_, err = PulseOpen(ciphertext, key, nonce, purpose, recipient, []byte("wrong context"))
+	_, err = PulseOpen(ciphertext, key, nonce, purpose, suite, recipient, []byte("wrong context"), transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong context")
 	}
@@ -148,7 +155,7 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	corruptedCiphertext := make([]byte, len(ciphertext))
 	copy(corruptedCiphertext, ciphertext)
 	corruptedCiphertext[0] ^= 0xFF
-	_, err = PulseOpen(corruptedCiphertext, key, nonce, purpose, recipient, context)
+	_, err = PulseOpen(corruptedCiphertext, key, nonce, purpose, suite, recipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with corrupted ciphertext")
 	}
@@ -160,8 +167,9 @@ func TestBuildAAD(t *testing.T) {
 	recipient := getTestRecipient()
 	nonce := getTestNonce()
 	context := []byte("context")
+	transcript := []byte("transcript")
 
-	aad := buildAAD(purpose, cipherSuite, recipient, nonce, context)
+	aad := buildAAD(purpose, cipherSuite, recipient, nonce, context, transcript)
 
 	// Verify that AAD contains expected components
 	if !bytes.Contains(aad, []byte("pulse|")) {
@@ -176,14 +184,17 @@ func TestBuildAAD(t *testing.T) {
 	if !bytes.Contains(aad, []byte(cipherSuite)) {
 		t.Error("AAD missing cipher suite")
 	}
-	if !bytes.Contains(aad, []byte(hex.EncodeToString(recipient))) {
+	if !bytes.Contains(aad, []byte("rid="+textformat.FormatHex(recipient))) {
 		t.Error("AAD missing recipient hex")
 	}
-	if !bytes.Contains(aad, []byte(hex.EncodeToString(nonce))) {
+	if !bytes.Contains(aad, []byte("nonce="+textformat.FormatHex(nonce))) {
 		t.Error("AAD missing nonce hex")
 	}
-	if !bytes.Contains(aad, []byte(hex.EncodeToString(context))) {
-		t.Error("AAD missing context hex")
+	if !bytes.Contains(aad, []byte("ctx=context")) {
+		t.Error("AAD missing context")
+	}
+	if !bytes.Contains(aad, []byte("th=transcript")) {
+		t.Error("AAD missing transcript")
 	}
 }
 
@@ -192,18 +203,19 @@ func TestPulseSymmetricPurposes(t *testing.T) {
 		purpose PulseSymmetricPurpose
 		want    string
 	}{
-		{PulseSymmetricConsent, "consent|"},
-		{PulseSymmetricRevoke, "revoke|"},
-		{PulseSymmetricUpdate, "update|"},
-		{PulseSymmetricKeyWrap, "keywrap|"},
+		{PulseSymmetricConsent, "consent"},
+		{PulseSymmetricRevoke, "revoke"},
+		{PulseSymmetricUpdate, "update"},
+		{PulseSymmetricKeyWrap, "keywrap"},
 	}
 
 	recipient := getTestRecipient()
 	nonce := getTestNonce()
 	context := []byte("ctx")
+	transcript := []byte("transcript")
 
 	for _, tt := range tests {
-		aad := buildAAD(tt.purpose, "test", recipient, nonce, context)
+		aad := buildAAD(tt.purpose, "test", recipient, nonce, context, transcript)
 		if !bytes.Contains(aad, []byte(tt.want)) {
 			t.Errorf("buildAAD for purpose %v: expected to contain %q, got %q", tt.purpose, tt.want, string(aad))
 		}

@@ -1,13 +1,13 @@
 package symmetric
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"encoding/hex"
 	"errors"
+	"fmt"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 )
 
 // This file contains cryptographic functions for symmetric encryption used in the Pulse Protocol.
@@ -38,6 +38,21 @@ const (
 	PulseSymmetricKeyWrap = 255
 )
 
+func (p PulseSymmetricPurpose) String() string {
+	switch p {
+	case PulseSymmetricConsent:
+		return "consent"
+	case PulseSymmetricRevoke:
+		return "revoke"
+	case PulseSymmetricUpdate:
+		return "update"
+	case PulseSymmetricKeyWrap:
+		return "keywrap"
+	default:
+		panic("unhandled default case")
+	}
+}
+
 var (
 	ErrBadContractAddress = errors.New("contract address must be 40 hex characters")
 	ErrNoPlaintext        = errors.New("no plaintext to sealPlaintext")
@@ -48,40 +63,30 @@ var (
 
 func buildAAD(purpose PulseSymmetricPurpose,
 	cipherSuite string,
-	recipient []byte,
+	recipientHash []byte,
 	nonce []byte,
 	context []byte,
+	transcript []byte,
 ) []byte {
-	aadBuf := bytes.Buffer{}
-	aadBuf.WriteString("pulse|")
-	switch purpose {
-	case PulseSymmetricConsent:
-		aadBuf.WriteString("consent|")
-	case PulseSymmetricRevoke:
-		aadBuf.WriteString("revoke|")
-	case PulseSymmetricUpdate:
-		aadBuf.WriteString("update|")
-	case PulseSymmetricKeyWrap:
-		aadBuf.WriteString("keywrap|")
-	}
-	aadBuf.WriteString("v1|")
-	aadBuf.WriteString(cipherSuite)
-	aadBuf.WriteString("|")
-	aadBuf.WriteString(hex.EncodeToString(recipient))
-	aadBuf.WriteString("|")
-	aadBuf.WriteString(hex.EncodeToString(nonce))
-	aadBuf.WriteString("|")
-	aadBuf.WriteString(hex.EncodeToString(context))
-	aadBuf.WriteString("|")
 
-	return aadBuf.Bytes()
+	aad := fmt.Sprintf("pulse|%s|v1|%s|rid=%s|ctx=%s|th=%s|nonce=%s",
+		purpose.String(),
+		cipherSuite,
+		textformat.FormatHex(recipientHash),
+		context,    // TODO:
+		transcript, // TODO:
+		textformat.FormatHex(nonce))
+
+	return []byte(aad)
 }
 
 func PulseSealWithNewKey(
 	plaintext []byte,
 	purpose PulseSymmetricPurpose,
+	cipherSuite string,
 	recipient []byte,
 	context []byte,
+	transcript []byte,
 ) ([]byte, []byte, []byte, error) {
 	aesKey, err := randutil.Bytes(AESGCMKeySize)
 	if err != nil {
@@ -91,7 +96,7 @@ func PulseSealWithNewKey(
 	if err != nil {
 		return nil, nil, nil, errors.New("failed to generate AES256 nonce: " + err.Error())
 	}
-	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, recipient, context)
+	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, cipherSuite, recipient, context, transcript)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -103,11 +108,13 @@ func PulseSeal(
 	aesKey []byte,
 	nonce []byte,
 	purpose PulseSymmetricPurpose,
+	cipherSuite string,
 	recipient []byte,
 	context []byte,
+	transcript []byte,
 ) ([]byte, error) {
 
-	aad := buildAAD(purpose, "aes-gcm", recipient, nonce, context)
+	aad := buildAAD(purpose, cipherSuite, recipient, nonce, context, transcript)
 
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {
@@ -126,9 +133,12 @@ func PulseOpen(
 	aesKey []byte,
 	nonce []byte,
 	purpose PulseSymmetricPurpose,
+	cipherSuite string,
 	recipient []byte,
-	context []byte) ([]byte, error) {
-	aad := buildAAD(purpose, "aes-gcm", recipient, nonce, context)
+	context []byte,
+	transcript []byte,
+) ([]byte, error) {
+	aad := buildAAD(purpose, cipherSuite, recipient, nonce, context, transcript)
 
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {

@@ -3,10 +3,12 @@ package crypto
 import (
 	"bytes"
 	"errors"
+	"slices"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
 
 	"golang.org/x/crypto/sha3"
@@ -36,17 +38,21 @@ type PulsePQEncryptionResult struct {
 	Keys       []*PulsePQEncryptionKey `json:"keys"       cbor:"1,keyasint"` // Public keys of parties that may be able to decrypt the data
 }
 
+var PQDataCipherSuite = "rng+aes-gcm-256"
+var PQKeyCipherSuite = "kyber768+hkdf-keccak256+aes-gcm-256"
+
 func EncryptPQ(plaintext []byte,
 	contractAddress *string,
-	myPrivateKey *kyberKEM.PrivateKey,
-	otherPublicKeys []*kyberKEM.PublicKey,
+	publicKeys []*kyberKEM.PublicKey,
 	purpose symmetric.PulseSymmetricPurpose,
 	chainId byte,
 ) (*PulsePQEncryptionResult, error) {
 	var result PulsePQEncryptionResult
 
 	// Encrypt the plaintext (consent data) using a random AES key
-	cipherText, aesKey, nonce, err := symmetric.PulseSealWithNewKey(plaintext, purpose, []byte("all-recipients"), []byte("context"))
+	recipientIDHash := getAllRecipientIDHashFromKeys(publicKeys)
+	// TODO: Arguments
+	cipherText, aesKey, nonce, err := symmetric.PulseSealWithNewKey(plaintext, purpose, PQDataCipherSuite, recipientIDHash, []byte("context"), []byte("transcript"))
 	if err != nil {
 		return nil, errors.New("Failed to seal plaintext: " + err.Error())
 	}
@@ -62,8 +68,8 @@ func EncryptPQ(plaintext []byte,
 	result.SealedData = cipherText
 
 	// Kyber stuff now -- lets encapsulate the AES key for each recipient
-	for idx := range otherPublicKeys {
-		kemPK := otherPublicKeys[idx]
+	for idx := range publicKeys {
+		kemPK := publicKeys[idx]
 
 		encKey, err := encapsulateKey(kemPK, dataAESKey, purpose)
 		if err != nil {
@@ -97,7 +103,7 @@ func encapsulateKey(kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose symmet
 
 	// TODO: Arguments
 	// Encrypt our data key using the derived AES key/nonce
-	encryptedKey, err := symmetric.PulseSeal(dataAESKey, keyAESKey, keyNonce, purpose, fingerPrint[:], []byte("context"))
+	encryptedKey, err := symmetric.PulseSeal(dataAESKey, keyAESKey, keyNonce, purpose, PQKeyCipherSuite, fingerPrint[:], []byte("context"), []byte("transcript"))
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +128,14 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 	foundKey := false
 	sharedSecret := make([]byte, kyberKEM.SharedKeySize)
 	defer wipe.SliceWipe(sharedSecret)
+	fingerPrints := make([]string, len(encryptionResult.Keys))
 	keyIndex := 0
 	for i, key := range encryptionResult.Keys {
-		if bytes.Equal(key.KeyFingerPrint[:], myKeyFingerprint[:]) {
+		fingerPrints[i] = textformat.FormatHex(key.KeyFingerPrint[:])
+		if !foundKey && bytes.Equal(key.KeyFingerPrint[:], myKeyFingerprint[:]) {
 			foundKey = true
 			keyIndex = i
 			myPrivateKey.DecapsulateTo(sharedSecret, key.EncapsulatedKeyKey)
-			break
 		}
 	}
 	if !foundKey {
@@ -145,7 +152,7 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 
 	// First AES Open -- Get the internal AES Key
 	// TODO: Arguments
-	dataAESKey, err := symmetric.PulseOpen(k.EncapsulatedDataKey, keyAESKey, keyNonce, purpose, k.KeyFingerPrint[:], []byte("context"))
+	dataAESKey, err := symmetric.PulseOpen(k.EncapsulatedDataKey, keyAESKey, keyNonce, purpose, PQKeyCipherSuite, k.KeyFingerPrint[:], []byte("context"), []byte("transcript"))
 	defer wipe.SliceWipe(dataAESKey)
 	if err != nil {
 		return nil, errors.New("Failed to open encrypted key: " + err.Error())
@@ -158,7 +165,8 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 
 	// Now unseal the consent data
 	// TODO: Arguments
-	plainText, err := symmetric.PulseOpen(encryptionResult.SealedData, dataKey, dataNonce, purpose, []byte("all-recipients"), []byte("context"))
+	recipientIdHash := getAllRecipientIDHashFromFingerPrints(fingerPrints)
+	plainText, err := symmetric.PulseOpen(encryptionResult.SealedData, dataKey, dataNonce, purpose, PQDataCipherSuite, recipientIdHash, []byte("context"), []byte("transcript"))
 	if err != nil {
 		return nil, errors.New("Failed to open encrypted data: " + err.Error())
 	}
@@ -174,6 +182,30 @@ func getPubKeyFingerprint(pk *kyberKEM.PublicKey) [32]byte {
 	pk.Pack(buf)
 	hash.Write(buf)
 	return [32]byte(hash.Sum(nil))
+}
+
+func getAllRecipientIDHashFromKeys(keys []*kyberKEM.PublicKey) []byte {
+	var fingerPrints []string
+	for _, pk := range keys {
+		fingerPrint := getPubKeyFingerprint(pk)
+		fingerPrints = append(fingerPrints, textformat.FormatHex(fingerPrint[:]))
+	}
+
+	return getAllRecipientIDHashFromFingerPrints(fingerPrints)
+}
+
+func getAllRecipientIDHashFromFingerPrints(fingerPrints []string) []byte {
+	slices.Sort(fingerPrints)
+	output := bytes.Buffer{}
+	output.WriteString("|pulse|group|v1|")
+	for _, fp := range fingerPrints {
+		output.WriteString(fp)
+		output.WriteString("|")
+	}
+
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write(output.Bytes())
+	return hash.Sum(nil)
 }
 
 func buildContext(chainId byte, contractAddress string) []byte {

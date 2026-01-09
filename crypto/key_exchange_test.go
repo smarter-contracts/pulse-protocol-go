@@ -90,7 +90,7 @@ func TestEncrypt_Values(t *testing.T) {
 	bobPubExpected := mustHexDecode("03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc")
 	sharedSecretExpected := mustHexDecode("3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e")
 	aesKeyExpected := mustHexDecode("bd9da74e79f8fd0825101e39d0070cc2e51fbcf1ee6e0baef2158da48b2cb979")
-	cipherTextExpected := mustHexDecode("b7ecde16dd92210d7ba904af353799a38c1f7ce959211946e3f77b")
+	cipherTextExpected := mustHexDecode("b7ecde16dd92210d7ba9043987f32ff9f1b1de4b3065433d6d7ceb")
 
 	alicePub := alicePriv.PubKey()
 	bobPub := bobPriv.PubKey()
@@ -262,5 +262,26 @@ func TestPulseECEncryption_Decrypt_Errors(t *testing.T) {
 	_, err = DecryptEC(&resTampered, addr, bobPriv, symmetric.PulseSymmetricConsent, 0x01)
 	if err == nil {
 		t.Fatal("expected error with tampered ciphertext")
+	}
+}
+
+func TestGenerateRecipientIdHash(t *testing.T) {
+	key1 := "036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2"
+	key2 := "03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc"
+
+	// keys sorted: key2, key1
+	// recipientString := "|pulse|group|v1|03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc|036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2|"
+
+	hash1 := generateRecipientIdHash(key1, key2)
+	hash2 := generateRecipientIdHash(key2, key1)
+
+	if !bytes.Equal(hash1, hash2) {
+		t.Errorf("generateRecipientIdHash is not deterministic: %x != %x", hash1, hash2)
+	}
+
+	// Known hash for these keys (Keccak256)
+	expectedHash := mustHexDecode("9ca7b2d7cf7a27f3bab1cbdfc0ed8d1d8462c28e4fc3d1b4ca40aedd805d117b")
+	if !bytes.Equal(hash1, expectedHash) {
+		t.Errorf("generateRecipientIdHash mismatch: got %x, want %x", hash1, expectedHash)
 	}
 }

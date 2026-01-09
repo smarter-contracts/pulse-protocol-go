@@ -154,11 +154,12 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 	chainId := uint8(0x01)
 
 	alicePrivate, _ := keyFromFile("alice_private.hex")
+	_ = alicePrivate
 	bobPrivate, _ := keyFromFile("bob_private.hex")
 	bobPublic := bobPrivate.Public().(*kyberKEM.PublicKey)
 
 	// EncryptPQ for Bob
-	result, err := EncryptPQ(plainText, contractAddress, alicePrivate, []*kyberKEM.PublicKey{bobPublic}, purpose, chainId)
+	result, err := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, chainId)
 	if err != nil {
 		t.Fatalf("EncryptPQ: %v", err)
 	}
@@ -178,9 +179,9 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	contractAddress := helperContractAddressPQ()
 	purpose := symmetric.PulseSymmetricConsent
 	chainId := uint8(0x01)
-	pk, sk, _ := kyberKEM.GenerateKeyPair(rand.Reader)
+	pk, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, _ := EncryptPQ(plainText, contractAddress, sk, []*kyberKEM.PublicKey{pk}, purpose, chainId)
+	result, _ := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk}, purpose, chainId)
 
 	// Decrypt with wrong private key
 	pkWrong, wrongSK, _ := kyberKEM.GenerateKeyPair(rand.Reader)
@@ -198,9 +199,10 @@ func TestPulsePQ_Encrypt_Success_WithRecipients(t *testing.T) {
 	chainId := uint8(0x01)
 
 	pk1, sk1, _ := kyberKEM.GenerateKeyPair(rand.Reader)
+	_ = sk1
 	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, err := EncryptPQ(plainText, contractAddress, sk1, []*kyberKEM.PublicKey{pk1, pk2}, purpose, chainId)
+	result, err := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, chainId)
 	if err != nil {
 		t.Fatalf("EncryptPQ: %v", err)
 	}
@@ -244,7 +246,7 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	pk1, sk1, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, _ := EncryptPQ(plainText, contractAddress, sk1, []*kyberKEM.PublicKey{pk1, pk2}, purpose, chainId)
+	result, _ := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, chainId)
 
 	// Find entry for recipient1 by fingerprint and tamper the encapsulated key
 	fp1 := getPubKeyFingerprint(pk1)
@@ -267,5 +269,27 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	_, err := DecryptPQ(result, contractAddress, sk1, purpose, chainId)
 	if err == nil {
 		t.Fatal("expected decrypt failure with tampered encapsulated key")
+	}
+}
+
+func TestGetAllRecipientIDHash(t *testing.T) {
+	// Use some fixed fingerprints for testing
+	fp1 := "01b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd"
+	fp2 := "70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde"
+
+	// fingerprints sorted: fp1, fp2
+	// recipientString := "|pulse|group|v1|01b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd|70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde|"
+
+	hash1 := getAllRecipientIDHashFromFingerPrints([]string{fp1, fp2})
+	hash2 := getAllRecipientIDHashFromFingerPrints([]string{fp2, fp1})
+
+	if !bytes.Equal(hash1, hash2) {
+		t.Errorf("getAllRecipientIDHashFromFingerPrints is not deterministic: %x != %x", hash1, hash2)
+	}
+
+	// Known hash for these fingerprints (Keccak256)
+	expectedHash := mustHexDecode("9674817700045e99280b08deebeb495374fd63823ed53130b16e84c3fc558922")
+	if !bytes.Equal(hash1, expectedHash) {
+		t.Errorf("getAllRecipientIDHashFromFingerPrints mismatch: got %x, want %x", hash1, expectedHash)
 	}
 }
