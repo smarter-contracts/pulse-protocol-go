@@ -5,7 +5,8 @@ import (
 	"errors"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 
 	"golang.org/x/crypto/sha3"
 )
@@ -27,7 +28,7 @@ type PulsePQEncryption struct {
 	myPublicKeyFingerPrint [32]byte
 	otherPublicKeys        map[[32]byte]*kyberKEM.PublicKey
 	encapsulatedKeys       []*PulsePQEncryptionKey
-	purpose                internal.PulseSymmetricPurpose
+	purpose                symmetric.PulseSymmetricPurpose
 	chainId                byte
 	encryptionResult       *PulsePQEncryptionResult
 	aesKey                 []byte
@@ -90,7 +91,7 @@ func (e *PulsePQEncryption) AddOtherPublicKey(otherPublicKey *kyberKEM.PublicKey
 // SetPurpose sets the purpose/context for symmetric encryption. This is used
 // as associated data and must match on encryption and decryption.
 // Returns the receiver to allow method chaining.
-func (e *PulsePQEncryption) SetPurpose(purpose internal.PulseSymmetricPurpose) *PulsePQEncryption {
+func (e *PulsePQEncryption) SetPurpose(purpose symmetric.PulseSymmetricPurpose) *PulsePQEncryption {
 	e.purpose = purpose
 	return e
 }
@@ -186,11 +187,11 @@ func (e *PulsePQEncryption) Encrypt() error {
 	var cipherText, aesKey, nonce []byte
 	var err error
 	if e.hasKey {
-		aesKey = e.aesKey[:internal.AESGCMKeySize]
-		nonce = e.aesKey[internal.AESGCMKeySize:]
-		cipherText, err = internal.PulseSeal(e.plaintext, aesKey, nonce, e.purpose, []byte("all-recipients"), context)
+		aesKey = e.aesKey[:symmetric.AESGCMKeySize]
+		nonce = e.aesKey[symmetric.AESGCMKeySize:]
+		cipherText, err = symmetric.PulseSeal(e.plaintext, aesKey, nonce, e.purpose, []byte("all-recipients"), context)
 	} else {
-		cipherText, aesKey, nonce, err = internal.PulseSealWithNewKey(e.plaintext, e.purpose, []byte("all-recipients"), context)
+		cipherText, aesKey, nonce, err = symmetric.PulseSealWithNewKey(e.plaintext, e.purpose, []byte("all-recipients"), context)
 	}
 	if err != nil {
 		return errors.New("Failed to seal plaintext: " + err.Error())
@@ -220,13 +221,13 @@ func (e *PulsePQEncryption) Encrypt() error {
 			return err
 		}
 
-		keyAESKey, keyNonce, err := internal.PulseHKDFKyber(sharedSecret, encapsulatedSecret, fingerPrint[:], context)
+		keyAESKey, keyNonce, err := hkdf.PulseHKDFKyber(sharedSecret, encapsulatedSecret, fingerPrint[:], context)
 		if err != nil {
 			return err
 		}
 
 		// TODO: Arguments
-		encryptedKey, err := internal.PulseSeal(dataAESKey, keyAESKey, keyNonce, e.purpose, fingerPrint[:], context)
+		encryptedKey, err := symmetric.PulseSeal(dataAESKey, keyAESKey, keyNonce, e.purpose, fingerPrint[:], context)
 		if err != nil {
 			return err
 		}
@@ -274,23 +275,23 @@ func (e *PulsePQEncryption) Decrypt() error {
 	}
 
 	k := e.encryptionResult.Keys[keyIndex]
-	keyAESKey, keyNonce, err := internal.PulseHKDFKyber(sharedSecret, k.EncapsulatedKeyKey, k.KeyFingerPrint[:], e.getContext())
+	keyAESKey, keyNonce, err := hkdf.PulseHKDFKyber(sharedSecret, k.EncapsulatedKeyKey, k.KeyFingerPrint[:], e.getContext())
 	if err != nil {
 		return err
 	}
 
 	// First AES Open -- Get the internal AES Key
 	// TODO: Arguments
-	dataAESKey, err := internal.PulseOpen(e.encryptionResult.Keys[keyIndex].EncapsulatedDataKey, keyAESKey, keyNonce, e.purpose, k.KeyFingerPrint[:], e.getContext())
+	dataAESKey, err := symmetric.PulseOpen(e.encryptionResult.Keys[keyIndex].EncapsulatedDataKey, keyAESKey, keyNonce, e.purpose, k.KeyFingerPrint[:], e.getContext())
 	if err != nil {
 		return errors.New("Failed to open encrypted key: " + err.Error())
 	}
 
-	dataKey := dataAESKey[:internal.AESGCMKeySize]
-	dataNonce := dataAESKey[internal.AESGCMKeySize:]
+	dataKey := dataAESKey[:symmetric.AESGCMKeySize]
+	dataNonce := dataAESKey[symmetric.AESGCMKeySize:]
 	// Now unseal the data
 	// TODO: Arguments
-	plainText, err := internal.PulseOpen(e.encryptionResult.SealedData, dataKey, dataNonce, e.purpose, []byte("all-recipients"), e.getContext())
+	plainText, err := symmetric.PulseOpen(e.encryptionResult.SealedData, dataKey, dataNonce, e.purpose, []byte("all-recipients"), e.getContext())
 	if err != nil {
 		return errors.New("Failed to open encrypted data: " + err.Error())
 	}
@@ -306,7 +307,7 @@ func (e *PulsePQEncryption) verifyReady() error {
 	if e.contractAddress == nil {
 		return errors.New("must provide contract address")
 	}
-	if e.purpose == internal.PulseNoSymmetricPurpose {
+	if e.purpose == symmetric.PulseNoSymmetricPurpose {
 		return errors.New("must provide purpose")
 	}
 	if e.chainId == 0 {

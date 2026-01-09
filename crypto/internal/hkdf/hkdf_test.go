@@ -1,8 +1,10 @@
-package internal
+package hkdf
 
 import (
 	"bytes"
 	"testing"
+
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 )
 
 func TestPulseHKDFKyber(t *testing.T) {
@@ -16,12 +18,12 @@ func TestPulseHKDFKyber(t *testing.T) {
 		t.Fatalf("PulseHKDFKyber failed: %v", err)
 	}
 
-	if len(key) != AESGCMKeySize {
-		t.Errorf("Expected key length %d, got %d", AESGCMKeySize, len(key))
+	if len(key) != symmetric.AESGCMKeySize {
+		t.Errorf("Expected key length %d, got %d", symmetric.AESGCMKeySize, len(key))
 	}
 
-	if len(nonce) != AESGCMNonceSize {
-		t.Errorf("Expected nonce length %d, got %d", AESGCMNonceSize, len(nonce))
+	if len(nonce) != symmetric.AESGCMNonceSize {
+		t.Errorf("Expected nonce length %d, got %d", symmetric.AESGCMNonceSize, len(nonce))
 	}
 
 	// Test consistency
@@ -53,12 +55,12 @@ func TestPulseHKDFECDH(t *testing.T) {
 		t.Fatalf("PulseHKDFECDH failed: %v", err)
 	}
 
-	if len(key) != AESGCMKeySize {
-		t.Errorf("Expected key length %d, got %d", AESGCMKeySize, len(key))
+	if len(key) != symmetric.AESGCMKeySize {
+		t.Errorf("Expected key length %d, got %d", symmetric.AESGCMKeySize, len(key))
 	}
 
-	if len(nonce) != AESGCMNonceSize {
-		t.Errorf("Expected nonce length %d, got %d", AESGCMNonceSize, len(nonce))
+	if len(nonce) != symmetric.AESGCMNonceSize {
+		t.Errorf("Expected nonce length %d, got %d", symmetric.AESGCMNonceSize, len(nonce))
 	}
 
 	// Test consistency
@@ -91,7 +93,7 @@ func TestPulseHKDFNilInputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PulseHKDFKyber failed with nil inputs: %v", err)
 	}
-	if len(key) != AESGCMKeySize || len(nonce) != AESGCMNonceSize {
+	if len(key) != symmetric.AESGCMKeySize || len(nonce) != symmetric.AESGCMNonceSize {
 		t.Error("Invalid output lengths for nil inputs")
 	}
 }

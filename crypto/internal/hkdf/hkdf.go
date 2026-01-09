@@ -1,8 +1,10 @@
-package internal
+package hkdf
 
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 
 	//"github.com/smarter-contracts/pulse-protocol-go/crypto"
 	"golang.org/x/crypto/hkdf"
@@ -66,8 +68,8 @@ func pulseHKDFImp(sharedSecret []byte,
 	keyInfo := createInfo(purpose, false, suite, recipientId, context)
 	nonceInfo := createInfo(purpose, true, suite, recipientId, context)
 
-	aesKey := make([]byte, AESGCMKeySize)
-	aesNonce := make([]byte, AESGCMNonceSize)
+	aesKey := make([]byte, symmetric.AESGCMKeySize)
+	aesNonce := make([]byte, symmetric.AESGCMNonceSize)
 
 	prk := hkdf.Extract(sha3.NewLegacyKeccak256, sharedSecret, salt)
 	keyReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, keyInfo)

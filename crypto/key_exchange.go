@@ -5,7 +5,8 @@ import (
 	"errors"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 )
 
 const PulseHKDFInfoStr = "ctx: v1 | AES-256-GCM session | Pulse Protocol"
@@ -25,7 +26,7 @@ type PulseECEncryption struct {
 	myPrivateKey     *secp.PrivateKey
 	myPublicKey      *secp.PublicKey
 	otherPublicKey   *secp.PublicKey
-	purpose          internal.PulseSymmetricPurpose
+	purpose          symmetric.PulseSymmetricPurpose
 	chainId          byte
 	encryptionResult *PulseECEncryptionResult
 }
@@ -75,7 +76,7 @@ func (e *PulseECEncryption) SetOtherPublicKey(otherPublicKey *secp.PublicKey) *P
 // SetPurpose sets the purpose/context for symmetric encryption. This is used
 // as associated data and must match on encryption and decryption.
 // Returns the receiver to allow method chaining.
-func (e *PulseECEncryption) SetPurpose(purpose internal.PulseSymmetricPurpose) *PulseECEncryption {
+func (e *PulseECEncryption) SetPurpose(purpose symmetric.PulseSymmetricPurpose) *PulseECEncryption {
 	e.purpose = purpose
 	return e
 }
@@ -130,7 +131,7 @@ func (e *PulseECEncryption) Encrypt() error {
 		return errors.New("Failed to generate aes key and nonce: " + err.Error())
 	}
 
-	e.ciphertext, err = internal.PulseSeal(e.plaintext, aesKey, nonce, e.purpose, e.otherPublicKey.SerializeCompressed(), e.getContext())
+	e.ciphertext, err = symmetric.PulseSeal(e.plaintext, aesKey, nonce, e.purpose, e.otherPublicKey.SerializeCompressed(), e.getContext())
 	if err != nil {
 		return errors.New("Failed to seal plaintext: " + err.Error())
 	}
@@ -177,7 +178,7 @@ func (e *PulseECEncryption) Decrypt() error {
 		return errors.New("Failed to generate aes key: " + err.Error())
 	}
 
-	e.plaintext, err = internal.PulseOpen(e.ciphertext, aesKey, nonce, e.purpose, e.myPublicKey.SerializeCompressed(), e.getContext())
+	e.plaintext, err = symmetric.PulseOpen(e.ciphertext, aesKey, nonce, e.purpose, e.myPublicKey.SerializeCompressed(), e.getContext())
 	if err != nil {
 		return errors.New("Failed to open Ciphertext: " + err.Error())
 	}
@@ -191,7 +192,7 @@ func (e *PulseECEncryption) verifyReady() error {
 	if e.contractAddress == nil {
 		return errors.New("must provide contract address")
 	}
-	if e.purpose == internal.PulseNoSymmetricPurpose {
+	if e.purpose == symmetric.PulseNoSymmetricPurpose {
 		return errors.New("must provide purpose")
 	}
 	if e.chainId == 0 {
@@ -273,5 +274,5 @@ func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey) ([]byte, []byte,
 	sharedSecret := secp.GenerateSharedSecret(me, other)
 
 	// TODO : Function arguments
-	return internal.PulseHKDFECDH(sharedSecret, []byte("transcript"), []byte("recipientid"), []byte("context"))
+	return hkdf.PulseHKDFECDH(sharedSecret, []byte("transcript"), []byte("recipientid"), []byte("context"))
 }

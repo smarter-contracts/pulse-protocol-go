@@ -11,7 +11,7 @@ import (
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
 	kyberPKE "github.com/cloudflare/circl/pke/kyber/kyber768"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 )
 
 /*
@@ -92,8 +92,8 @@ import (
 
 // helperContractAddressPQ duplicates the helper used in EC tests to avoid import cycles.
 func helperContractAddressPQ() *string {
-	var b [internal.EthAddressLength]byte
-	for i := 0; i < internal.EthAddressLength; i++ {
+	var b [symmetric.EthAddressLength]byte
+	for i := 0; i < symmetric.EthAddressLength; i++ {
 		b[i] = byte(i + 1)
 	}
 	hexLocal := func(x byte) string {
@@ -152,7 +152,7 @@ func unpackHexToPublicKey(hexString string, pk *kyberKEM.PublicKey) error {
 func TestPulsePQ_KnownValues(t *testing.T) {
 	plainText := []byte("pulse text")
 	contractAddress := helperContractAddressPQ()
-	purpose := internal.PulseSymmetricConsent
+	purpose := symmetric.PulseSymmetricConsent
 	chainId := uint8(0x01)
 
 	alicePrivate, err := keyFromFile("alice_private.hex")
@@ -242,7 +242,7 @@ func TestPulsePQ_SettersAndGetEncryptionResult(t *testing.T) {
 	e := NewPulsePQEncryption().
 		SetPlaintext(pt).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	// Sanity: Plaintext getter
@@ -287,7 +287,7 @@ func TestPulsePQ_Encrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			SetChainId(0x01)
 		if err := e.Encrypt(); err == nil || err.Error() != "must provide plaintext" {
 			t.Fatalf("expected missing plaintext error, got %v", err)
@@ -307,7 +307,7 @@ func TestPulsePQ_Encrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetPlaintext([]byte("data")).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			SetChainId(0x01).
 			AddOtherPublicKey(pk1).
 			AddOtherPublicKey(pk2)
@@ -334,7 +334,7 @@ func TestPulsePQ_Encrypt_Errors(t *testing.T) {
 		e := NewPulsePQEncryption().
 			SetPlaintext([]byte("data")).
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			AddOtherPublicKey(pk1).
 			AddOtherPublicKey(pk2)
 		if err := e.Encrypt(); err == nil || err.Error() != "must provide chainId" {
@@ -347,7 +347,7 @@ func TestPulsePQ_Encrypt_Errors(t *testing.T) {
 		e := NewPulsePQEncryption().
 			SetPlaintext([]byte("data")).
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			SetChainId(0x01).
 			AddOtherPublicKey(pk1)
 		if err := e.Encrypt(); err == nil || err.Error() != "must provide another public key" {
@@ -361,7 +361,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			SetChainId(0x01)
 		if err := e.Decrypt(); err == nil || err.Error() != "must provide private key" {
 			t.Fatalf("expected missing private key error, got %v", err)
@@ -372,7 +372,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			SetChainId(0x01)
 		// Provide a non-nil private key to get past first check
 		e.myPrivateKey = new(kyberKEM.PrivateKey)
@@ -385,7 +385,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			SetChainId(0x01)
 		e.myPrivateKey = new(kyberKEM.PrivateKey)
 		e.encryptionResult = &PulsePQEncryptionResult{SealedData: nil}
@@ -398,7 +398,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			SetChainId(0x01)
 		// Set a dummy private key to pass verify, but do not set myPublicKeyFingerPrint so it won't match
 		e.myPrivateKey = new(kyberKEM.PrivateKey)
@@ -430,7 +430,7 @@ func TestPulsePQ_Encrypt_Success_WithRecipients(t *testing.T) {
 	enc := NewPulsePQEncryption().
 		SetPlaintext([]byte("top secret pq data")).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	enc.AddOtherPublicKey(pk1)
@@ -508,7 +508,7 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 	enc := NewPulsePQEncryption().
 		SetPlaintext(plainText).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	enc.AddOtherPublicKey(alicePub)
@@ -528,7 +528,7 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 
 	decAlice := NewPulsePQEncryption().
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(encResult).
 		SetMyPrivateKey(alicePriv)
@@ -542,7 +542,7 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 
 	decBob := NewPulsePQEncryption().
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(encResult).
 		SetMyPrivateKey(bobPriv)
@@ -575,7 +575,7 @@ func TestPulsePQ_SingleParty_Fails(t *testing.T) {
 	e := NewPulsePQEncryption().
 		SetMyPrivateKey(sk).
 		SetChainId(1).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetContractAddress(helperContractAddressPQ()).
 		SetPlaintext([]byte("hello pq"))
 
@@ -595,7 +595,7 @@ func TestDuplicate_OtherKey(t *testing.T) {
 	}
 	e := NewPulsePQEncryption().
 		SetChainId(1).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetContractAddress(helperContractAddressPQ()).
 		SetPlaintext([]byte("hello pq")).
 		AddOtherPublicKey(pk).
@@ -607,7 +607,7 @@ func TestDuplicate_OtherKey(t *testing.T) {
 
 	e2 := NewPulsePQEncryption().
 		SetChainId(1).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetContractAddress(helperContractAddressPQ()).
 		SetPlaintext([]byte("hello pq")).
 		AddOtherPublicKey(pk).
@@ -633,7 +633,7 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	enc := NewPulsePQEncryption().
 		SetPlaintext([]byte("secret")).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01)
 	enc.AddOtherPublicKey(pk1)
 	enc.AddOtherPublicKey(pk2)
@@ -666,7 +666,7 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	// Attempt decrypt as recipient1
 	dec := NewPulsePQEncryption().
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(res).
 		SetMyPrivateKey(sk1)
@@ -694,7 +694,7 @@ func TestPulsePQ_Decrypt_NoMatchingFingerprint_Fails(t *testing.T) {
 	enc := NewPulsePQEncryption().
 		SetPlaintext([]byte("secret")).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01)
 	enc.AddOtherPublicKey(pk1)
 	enc.AddOtherPublicKey(pk2)
@@ -705,7 +705,7 @@ func TestPulsePQ_Decrypt_NoMatchingFingerprint_Fails(t *testing.T) {
 
 	dec := NewPulsePQEncryption().
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(internal.PulseSymmetricConsent).
+		SetPurpose(symmetric.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(res).
 		SetMyPrivateKey(sk3)
@@ -724,7 +724,7 @@ func TestPulsePQ_Encrypt_DeterministicWithSeed(t *testing.T) {
 		return NewPulsePQEncryption().
 			SetPlaintext([]byte("msg")).
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(internal.PulseSymmetricConsent).
+			SetPurpose(symmetric.PulseSymmetricConsent).
 			SetChainId(0x01).
 			setAESKey(aesKey)
 	}
