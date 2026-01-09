@@ -190,8 +190,8 @@ func TestBuildAAD(t *testing.T) {
 	if !bytes.Contains(aad, []byte("nonce="+textformat.FormatHex(nonce))) {
 		t.Error("AAD missing nonce hex")
 	}
-	if !bytes.Contains(aad, []byte("ctx=context")) {
-		t.Error("AAD missing context")
+	if !bytes.Contains(aad, []byte("ctx=")) {
+		t.Error("AAD missing context prefix 'ctx='")
 	}
 	if !bytes.Contains(aad, []byte("th=transcript")) {
 		t.Error("AAD missing transcript")

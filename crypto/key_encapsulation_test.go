@@ -159,13 +159,13 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 	bobPublic := bobPrivate.Public().(*kyberKEM.PublicKey)
 
 	// EncryptPQ for Bob
-	result, err := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, chainId)
+	result, err := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, int32(chainId), 0)
 	if err != nil {
 		t.Fatalf("EncryptPQ: %v", err)
 	}
 
 	// DecryptPQ for Bob
-	decrypted, err := DecryptPQ(result, contractAddress, bobPrivate, purpose, chainId)
+	decrypted, err := DecryptPQ(result, contractAddress, bobPrivate, purpose, int32(chainId), 0)
 	if err != nil {
 		t.Fatalf("DecryptPQ (Bob): %v", err)
 	}
@@ -181,12 +181,12 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	chainId := uint8(0x01)
 	pk, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, _ := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk}, purpose, chainId)
+	result, _ := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk}, purpose, int32(chainId), 0)
 
 	// Decrypt with wrong private key
 	pkWrong, wrongSK, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 	_ = pkWrong
-	_, err := DecryptPQ(result, contractAddress, wrongSK, purpose, chainId)
+	_, err := DecryptPQ(result, contractAddress, wrongSK, purpose, int32(chainId), 0)
 	if err == nil || err.Error() != "no key found for this party" {
 		t.Fatalf("expected 'no key found for this party', got %v", err)
 	}
@@ -202,7 +202,7 @@ func TestPulsePQ_Encrypt_Success_WithRecipients(t *testing.T) {
 	_ = sk1
 	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, err := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, chainId)
+	result, err := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, int32(chainId), 0)
 	if err != nil {
 		t.Fatalf("EncryptPQ: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	pk1, sk1, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, _ := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, chainId)
+	result, _ := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, int32(chainId), 0)
 
 	// Find entry for recipient1 by fingerprint and tamper the encapsulated key
 	fp1 := getPubKeyFingerprint(pk1)
@@ -266,7 +266,7 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	}
 
 	// Attempt decrypt as recipient1
-	_, err := DecryptPQ(result, contractAddress, sk1, purpose, chainId)
+	_, err := DecryptPQ(result, contractAddress, sk1, purpose, int32(chainId), 0)
 	if err == nil {
 		t.Fatal("expected decrypt failure with tampered encapsulated key")
 	}

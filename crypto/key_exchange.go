@@ -35,7 +35,9 @@ func EncryptECDH(plaintext []byte,
 	myPrivateKey *secp.PrivateKey,
 	otherPublicKey *secp.PublicKey,
 	purpose symmetric.PulseSymmetricPurpose,
-	chainId byte) (*PulseECEncryptionResult, error) {
+	chainId int32,
+	consentNumber int32,
+) (*PulseECEncryptionResult, error) {
 	aesKey, nonce, err := generateAESKey(myPrivateKey, otherPublicKey)
 	defer wipe.SliceWipe(aesKey)
 	defer wipe.SliceWipe(nonce)
@@ -62,7 +64,8 @@ func DecryptEC(encryptionResult *PulseECEncryptionResult,
 	contractAddress *string,
 	myPrivateKey *secp.PrivateKey,
 	purpose symmetric.PulseSymmetricPurpose,
-	chainId byte,
+	chainId int32,
+	consentNumber int32,
 ) ([]byte, error) {
 	myPublicKey := myPrivateKey.PubKey().SerializeCompressed()
 

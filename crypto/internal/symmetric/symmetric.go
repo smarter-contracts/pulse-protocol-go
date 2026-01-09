@@ -65,15 +65,14 @@ func buildAAD(purpose PulseSymmetricPurpose,
 	cipherSuite string,
 	recipientHash []byte,
 	nonce []byte,
-	context []byte,
+	contextHash []byte,
 	transcript []byte,
 ) []byte {
-
 	aad := fmt.Sprintf("pulse|%s|v1|%s|rid=%s|ctx=%s|th=%s|nonce=%s",
 		purpose.String(),
 		cipherSuite,
 		textformat.FormatHex(recipientHash),
-		context,    // TODO:
+		textformat.FormatHex(contextHash),
 		transcript, // TODO:
 		textformat.FormatHex(nonce))
 
@@ -85,7 +84,7 @@ func PulseSealWithNewKey(
 	purpose PulseSymmetricPurpose,
 	cipherSuite string,
 	recipient []byte,
-	context []byte,
+	contextHash []byte,
 	transcript []byte,
 ) ([]byte, []byte, []byte, error) {
 	aesKey, err := randutil.Bytes(AESGCMKeySize)
@@ -96,7 +95,7 @@ func PulseSealWithNewKey(
 	if err != nil {
 		return nil, nil, nil, errors.New("failed to generate AES256 nonce: " + err.Error())
 	}
-	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, cipherSuite, recipient, context, transcript)
+	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, cipherSuite, recipient, contextHash, transcript)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -110,11 +109,11 @@ func PulseSeal(
 	purpose PulseSymmetricPurpose,
 	cipherSuite string,
 	recipient []byte,
-	context []byte,
+	contextHash []byte,
 	transcript []byte,
 ) ([]byte, error) {
 
-	aad := buildAAD(purpose, cipherSuite, recipient, nonce, context, transcript)
+	aad := buildAAD(purpose, cipherSuite, recipient, nonce, contextHash, transcript)
 
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {
@@ -135,10 +134,10 @@ func PulseOpen(
 	purpose PulseSymmetricPurpose,
 	cipherSuite string,
 	recipient []byte,
-	context []byte,
+	contextHash []byte,
 	transcript []byte,
 ) ([]byte, error) {
-	aad := buildAAD(purpose, cipherSuite, recipient, nonce, context, transcript)
+	aad := buildAAD(purpose, cipherSuite, recipient, nonce, contextHash, transcript)
 
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {
