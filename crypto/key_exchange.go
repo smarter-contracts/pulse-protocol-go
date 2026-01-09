@@ -3,12 +3,9 @@ package crypto
 import (
 	"bytes"
 	"errors"
-	"io"
-
-	"golang.org/x/crypto/hkdf"
-	"golang.org/x/crypto/sha3"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal"
 )
 
 const PulseHKDFInfoStr = "ctx: v1 | AES-256-GCM session | Pulse Protocol"
@@ -28,7 +25,7 @@ type PulseECEncryption struct {
 	myPrivateKey     *secp.PrivateKey
 	myPublicKey      *secp.PublicKey
 	otherPublicKey   *secp.PublicKey
-	purpose          PulseSymmetricPurpose
+	purpose          internal.PulseSymmetricPurpose
 	chainId          byte
 	encryptionResult *PulseECEncryptionResult
 }
@@ -78,7 +75,7 @@ func (e *PulseECEncryption) SetOtherPublicKey(otherPublicKey *secp.PublicKey) *P
 // SetPurpose sets the purpose/context for symmetric encryption. This is used
 // as associated data and must match on encryption and decryption.
 // Returns the receiver to allow method chaining.
-func (e *PulseECEncryption) SetPurpose(purpose PulseSymmetricPurpose) *PulseECEncryption {
+func (e *PulseECEncryption) SetPurpose(purpose internal.PulseSymmetricPurpose) *PulseECEncryption {
 	e.purpose = purpose
 	return e
 }
@@ -128,24 +125,15 @@ func (e *PulseECEncryption) Encrypt() error {
 		return err
 	}
 
-	aesKey, err := generateAESKey(e.myPrivateKey, e.otherPublicKey)
+	aesKey, nonce, err := generateAESKey(e.myPrivateKey, e.otherPublicKey)
 	if err != nil {
-		return errors.New("Failed to generate aes key: " + err.Error())
+		return errors.New("Failed to generate aes key and nonce: " + err.Error())
 	}
 
-	symmetricEncryption := NewPulseSymmetricEncryption().
-		SetEncryptionKey(aesKey).
-		SetContractAddress(e.contractAddress).
-		SetPlaintext(e.plaintext).
-		SetChainId(e.chainId).
-		SetPurpose(e.purpose)
-
-	err = symmetricEncryption.SealPlaintext()
+	e.ciphertext, err = internal.PulseSeal(e.plaintext, aesKey, nonce, e.purpose, e.otherPublicKey.SerializeCompressed(), e.getContext())
 	if err != nil {
 		return errors.New("Failed to seal plaintext: " + err.Error())
 	}
-
-	e.ciphertext = symmetricEncryption.Ciphertext()
 
 	return nil
 }
@@ -184,24 +172,16 @@ func (e *PulseECEncryption) Decrypt() error {
 		return errors.New("must provide ciphertext")
 	}
 
-	aesKey, err := generateAESKey(e.myPrivateKey, e.otherPublicKey)
+	aesKey, nonce, err := generateAESKey(e.myPrivateKey, e.otherPublicKey)
 	if err != nil {
 		return errors.New("Failed to generate aes key: " + err.Error())
 	}
 
-	symmetricEncryption := NewPulseSymmetricEncryption().
-		SetEncryptionKey(aesKey).
-		SetContractAddress(e.contractAddress).
-		SetCiphertext(e.ciphertext).
-		SetChainId(e.chainId).
-		SetPurpose(e.purpose)
-
-	err = symmetricEncryption.OpenCiphertext()
+	e.plaintext, err = internal.PulseOpen(e.ciphertext, aesKey, nonce, e.purpose, e.myPublicKey.SerializeCompressed(), e.getContext())
 	if err != nil {
 		return errors.New("Failed to open Ciphertext: " + err.Error())
 	}
 
-	e.plaintext = symmetricEncryption.Plaintext()
 	return nil
 }
 
@@ -211,7 +191,7 @@ func (e *PulseECEncryption) verifyReady() error {
 	if e.contractAddress == nil {
 		return errors.New("must provide contract address")
 	}
-	if e.purpose == PulseNoSymmetricPurpose {
+	if e.purpose == internal.PulseNoSymmetricPurpose {
 		return errors.New("must provide purpose")
 	}
 	if e.chainId == 0 {
@@ -274,28 +254,24 @@ func (e *PulseECEncryption) unpackECEncryptionResult() error {
 	return nil
 }
 
+func (e *PulseECEncryption) getContext() []byte {
+	contextBuffer := bytes.Buffer{}
+	contextBuffer.WriteByte(e.chainId)
+	if e.contractAddress != nil {
+		contextBuffer.WriteString(*e.contractAddress)
+	}
+	return contextBuffer.Bytes()
+}
+
 // generateAESKey computes a shared secret between two ECDH key pairs and derives a
 // 32-byte AES-256 key using an RFC 5869 HKDF. The result is suitable for use
 // with AES-GCM symmetric encryption.
-func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey) ([]byte, error) {
+func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey) ([]byte, []byte, error) {
 	if me == nil || other == nil {
-		return nil, errors.New("must provide both private and public keys to derive a shared secret")
+		return nil, nil, errors.New("must provide both private and public keys to derive a shared secret")
 	}
 	sharedSecret := secp.GenerateSharedSecret(me, other)
 
-	return deriveKey(sharedSecret)
-}
-
-// deriveKey expands the shared secret into a key of length n using HKDF with
-// Keccak-256 as the hash function. The salt and info parameters provide context
-// per RFC 5869. Salt is nil (translates to all 0 bytes), and info is the
-// constant PulseHKDFInfo. We use Keccak-256 to be consistent with the rest of
-// the Pulse Protocol.
-func deriveKey(shared []byte) ([]byte, error) {
-	h := hkdf.New(sha3.NewLegacyKeccak256, shared, nil, PulseHKDFInfo())
-	key := make([]byte, AESGCMKeySize)
-	if _, err := io.ReadFull(h, key); err != nil {
-		return nil, err
-	}
-	return key, nil
+	// TODO : Function arguments
+	return internal.PulseHKDFECDH(sharedSecret, []byte("transcript"), []byte("recipientid"), []byte("context"))
 }

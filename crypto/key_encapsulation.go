@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal"
 
 	"golang.org/x/crypto/sha3"
 )
@@ -26,7 +27,7 @@ type PulsePQEncryption struct {
 	myPublicKeyFingerPrint [32]byte
 	otherPublicKeys        map[[32]byte]*kyberKEM.PublicKey
 	encapsulatedKeys       []*PulsePQEncryptionKey
-	purpose                PulseSymmetricPurpose
+	purpose                internal.PulseSymmetricPurpose
 	chainId                byte
 	encryptionResult       *PulsePQEncryptionResult
 	aesKey                 []byte
@@ -89,7 +90,7 @@ func (e *PulsePQEncryption) AddOtherPublicKey(otherPublicKey *kyberKEM.PublicKey
 // SetPurpose sets the purpose/context for symmetric encryption. This is used
 // as associated data and must match on encryption and decryption.
 // Returns the receiver to allow method chaining.
-func (e *PulsePQEncryption) SetPurpose(purpose PulseSymmetricPurpose) *PulsePQEncryption {
+func (e *PulsePQEncryption) SetPurpose(purpose internal.PulseSymmetricPurpose) *PulsePQEncryption {
 	e.purpose = purpose
 	return e
 }
@@ -180,26 +181,26 @@ func (e *PulsePQEncryption) Encrypt() error {
 	if err := e.verifyEncryptReady(); err != nil {
 		return err
 	}
+	context := e.getContext()
 
-	// Encrypt the plaintext using AES-GCM-256. A random key will be generated.
-	dataSymmetricEncryption := NewPulseSymmetricEncryption().
-		SetContractAddress(e.contractAddress).
-		SetPlaintext(e.plaintext).
-		SetChainId(e.chainId).
-		SetPurpose(e.purpose)
-
-	// For testing purposes, we can set the key manually.
+	var cipherText, aesKey, nonce []byte
+	var err error
 	if e.hasKey {
-		dataSymmetricEncryption.SetEncryptionKey(e.aesKey)
+		aesKey = e.aesKey[:internal.AESGCMKeySize]
+		nonce = e.aesKey[internal.AESGCMKeySize:]
+		cipherText, err = internal.PulseSeal(e.plaintext, aesKey, nonce, e.purpose, []byte("all-recipients"), context)
+	} else {
+		cipherText, aesKey, nonce, err = internal.PulseSealWithNewKey(e.plaintext, e.purpose, []byte("all-recipients"), context)
 	}
-
-	if err := dataSymmetricEncryption.SealPlaintext(); err != nil {
+	if err != nil {
 		return errors.New("Failed to seal plaintext: " + err.Error())
 	}
-	e.ciphertext = dataSymmetricEncryption.Ciphertext()
+	keyBuffer := bytes.Buffer{}
+	keyBuffer.Write(aesKey)
+	keyBuffer.Write(nonce)
+	dataAESKey := keyBuffer.Bytes()
 
-	// Get the AEAD encryption key, and encapsulate it for each public key.
-	dataAESKey := dataSymmetricEncryption.EncryptionKey()
+	e.ciphertext = cipherText
 
 	scheme := kyberKEM.Scheme()
 	for fingerPrint, kemPK := range e.otherPublicKeys {
@@ -219,22 +220,14 @@ func (e *PulsePQEncryption) Encrypt() error {
 			return err
 		}
 
-		hkdf := NewPulseHKDF().
-			SetSharedSecret(sharedSecret)
-
-		if err = hkdf.DeriveKey(); err != nil {
+		keyAESKey, keyNonce, err := internal.PulseHKDFKyber(sharedSecret, encapsulatedSecret, fingerPrint[:], context)
+		if err != nil {
 			return err
 		}
 
-		keyAESKey := hkdf.GeneratedKey()
-		keyAESEncryption := NewPulseSymmetricEncryption().
-			SetContractAddress(e.contractAddress).
-			SetPlaintext(dataAESKey).
-			SetChainId(e.chainId).
-			SetPurpose(e.purpose).
-			SetEncryptionKey(keyAESKey)
-
-		if err = keyAESEncryption.SealPlaintext(); err != nil {
+		// TODO: Arguments
+		encryptedKey, err := internal.PulseSeal(dataAESKey, keyAESKey, keyNonce, e.purpose, fingerPrint[:], context)
+		if err != nil {
 			return err
 		}
 
@@ -242,7 +235,7 @@ func (e *PulsePQEncryption) Encrypt() error {
 		e.encapsulatedKeys = append(e.encapsulatedKeys, &PulsePQEncryptionKey{
 			KeyFingerPrint:      fingerPrint,
 			EncapsulatedKeyKey:  encapsulatedSecret,
-			EncapsulatedDataKey: keyAESEncryption.Ciphertext(),
+			EncapsulatedDataKey: encryptedKey,
 		})
 	}
 
@@ -280,37 +273,30 @@ func (e *PulsePQEncryption) Decrypt() error {
 		return errors.New("no key found for this party")
 	}
 
-	hkdf := NewPulseHKDF().
-		SetSharedSecret(sharedSecret)
-	if err := hkdf.DeriveKey(); err != nil {
+	k := e.encryptionResult.Keys[keyIndex]
+	keyAESKey, keyNonce, err := internal.PulseHKDFKyber(sharedSecret, k.EncapsulatedKeyKey, k.KeyFingerPrint[:], e.getContext())
+	if err != nil {
 		return err
 	}
 
-	// Unseal the Data AES Key
-	keyEncryption := NewPulseSymmetricEncryption().
-		SetContractAddress(e.contractAddress).
-		SetCiphertext(e.encryptionResult.Keys[keyIndex].EncapsulatedDataKey).
-		SetChainId(e.chainId).
-		SetPurpose(e.purpose).
-		SetEncryptionKey(hkdf.generatedKey)
-
-	if err := keyEncryption.OpenCiphertext(); err != nil {
+	// First AES Open -- Get the internal AES Key
+	// TODO: Arguments
+	dataAESKey, err := internal.PulseOpen(e.encryptionResult.Keys[keyIndex].EncapsulatedDataKey, keyAESKey, keyNonce, e.purpose, k.KeyFingerPrint[:], e.getContext())
+	if err != nil {
 		return errors.New("Failed to open encrypted key: " + err.Error())
 	}
 
+	dataKey := dataAESKey[:internal.AESGCMKeySize]
+	dataNonce := dataAESKey[internal.AESGCMKeySize:]
 	// Now unseal the data
-	dataEncryption := NewPulseSymmetricEncryption().
-		SetContractAddress(e.contractAddress).
-		SetCiphertext(e.encryptionResult.SealedData).
-		SetChainId(e.chainId).
-		SetPurpose(e.purpose).
-		SetEncryptionKey(keyEncryption.Plaintext())
-
-	if err := dataEncryption.OpenCiphertext(); err != nil {
+	// TODO: Arguments
+	plainText, err := internal.PulseOpen(e.encryptionResult.SealedData, dataKey, dataNonce, e.purpose, []byte("all-recipients"), e.getContext())
+	if err != nil {
 		return errors.New("Failed to open encrypted data: " + err.Error())
 	}
-	e.plaintext = dataEncryption.Plaintext()
+	e.plaintext = plainText
 
+	//TODO: Zero sensitive data
 	return nil
 }
 
@@ -320,7 +306,7 @@ func (e *PulsePQEncryption) verifyReady() error {
 	if e.contractAddress == nil {
 		return errors.New("must provide contract address")
 	}
-	if e.purpose == PulseNoSymmetricPurpose {
+	if e.purpose == internal.PulseNoSymmetricPurpose {
 		return errors.New("must provide purpose")
 	}
 	if e.chainId == 0 {
@@ -362,4 +348,11 @@ func getPubKeyFingerprint(pk *kyberKEM.PublicKey) [32]byte {
 	pk.Pack(buf)
 	hash.Write(buf)
 	return [32]byte(hash.Sum(nil))
+}
+
+func (e *PulsePQEncryption) getContext() []byte {
+	contextBuffer := bytes.Buffer{}
+	contextBuffer.WriteByte(e.chainId)
+	contextBuffer.WriteString(*e.contractAddress)
+	return contextBuffer.Bytes()
 }

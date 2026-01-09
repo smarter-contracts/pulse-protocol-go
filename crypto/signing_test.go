@@ -3,6 +3,8 @@ package crypto
 import (
 	"bytes"
 	"testing"
+
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal"
 )
 
 /* Test pack for the signing code. This consists of a set of known value tests which can be copied to other
@@ -27,8 +29,8 @@ const KnownCid = "bafyreihd744kp3ua6svk5t3chwlqicnzag22zmcohrwowvyqawjqogr65i"
 
 // helperContractAddressPQ duplicates the helper used in EC tests to avoid import cycles.
 func helperContractAddressBytes() *[20]byte {
-	var b [EthAddressLength]byte
-	for i := 0; i < EthAddressLength; i++ {
+	var b [internal.EthAddressLength]byte
+	for i := 0; i < internal.EthAddressLength; i++ {
 		b[i] = byte(i + 1)
 	}
 	return &b

@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"sort"
 	"testing"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
 	kyberPKE "github.com/cloudflare/circl/pke/kyber/kyber768"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal"
 )
 
 /*
@@ -90,8 +92,8 @@ import (
 
 // helperContractAddressPQ duplicates the helper used in EC tests to avoid import cycles.
 func helperContractAddressPQ() *string {
-	var b [EthAddressLength]byte
-	for i := 0; i < EthAddressLength; i++ {
+	var b [internal.EthAddressLength]byte
+	for i := 0; i < internal.EthAddressLength; i++ {
 		b[i] = byte(i + 1)
 	}
 	hexLocal := func(x byte) string {
@@ -150,7 +152,7 @@ func unpackHexToPublicKey(hexString string, pk *kyberKEM.PublicKey) error {
 func TestPulsePQ_KnownValues(t *testing.T) {
 	plainText := []byte("pulse text")
 	contractAddress := helperContractAddressPQ()
-	purpose := PulseSymmetricConsent
+	purpose := internal.PulseSymmetricConsent
 	chainId := uint8(0x01)
 
 	alicePrivate, err := keyFromFile("alice_private.hex")
@@ -169,7 +171,7 @@ func TestPulsePQ_KnownValues(t *testing.T) {
 	bobPublicIface := bobPrivate.Public()
 	bobPublic := bobPublicIface.(*kyberKEM.PublicKey)
 
-	aesKey := mustHexDecode("75ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a")
+	aesKey := mustHexDecode("75ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a" + "000102030405060708090a0b")
 	seed := mustHexDecode("76ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a")
 
 	enc := NewPulsePQEncryption().
@@ -190,53 +192,9 @@ func TestPulsePQ_KnownValues(t *testing.T) {
 	if result == nil {
 		t.Fatalf("result is nil")
 	}
-	expectedSealedData := mustHexDecode("643fc6221df02dc72dc4f9381993d1682d252ce0838742ab19b5")
+	expectedSealedData := mustHexDecode("e0584e6c16bcf1b2e20959e084b6bbcc67dfcea96462d0c21d63")
 	expectedKey1FingerPrint := mustHexDecode("01b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd")
 	expectedKey2FingerPrint := mustHexDecode("70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde")
-	expectedKey1Hex := "" +
-		"435f6ca7397dc7faf9e8103658fc03c294968d80b5e07a87186876dba4b69f78a06cd6108b2a31d9f392380e38b966eafb7a79b9e358" +
-		"668c01a3e4c3fffa0b25e4bf565942caf70abb624affe6c36318766f9353f5971552356efcba08a68ccebfe61d5886e753a32354dbeb" +
-		"e4d330b29295821eb81e9f9280e8b96b5a1d3721e68b0d6311c9461e1a2b0fd50df3fb7da4dc326dc4e267380de7c23817aefc2c303b" +
-		"437b3acaddde0b845c3afc9dd8ffbc6f5ad2f56f52336c8776aefd591c2f8085f42a6080bdf80d61b5318cf6bad7c215da515a7705c9" +
-		"339def2e26fd3ee1513560b7f3ba78eaadff8c3ce44d172abe99a9accd2ebd485277986b378e22851505f5d0481f1502e5a803c8d0ea" +
-		"c203f4effca91c54690c70d9821de6bc6ffc86d5371ad718f8e5e2b9b28809d2603bba1b9cc03a8a63f3e6aaeabfdc199609f7a58806" +
-		"6bc10657489048311327105c01c9e12fd22927af18df82480b01b25aef9c39a64dd66a1be53e2f829bc9e6062a3dbd3f40a4cc88401e" +
-		"9a86fcfb0e154abb8a22ee1101243fe2673795638c082a44e58ba5a299565247829c5fc96ffa9564d3d0541f5c88d29ae2aa2eda9121" +
-		"c9d5783b336c394dbd1bff0fb655d87739f658221185e30c64a8af3e88f563ff4c984efe16ea3caec49fa451879c89e10994afbfb572" +
-		"1344b8a2ce2026d7a7e66bf01a20b667335096be5aa09dda1d449790b50da63e0e26a8e8052c1b304d64f883e7bfcdd074c485b299fb" +
-		"973a3ae61a50dcf300dadca043dd1896055946abb61d2cecabfa84dbc099ae34dbb18df4c4645377deb7bf2e8ea4cafad89e4a59d9b4" +
-		"830aa4fbef65c12e9eaa94e6d7c011d9802df62d6ee3905f4b5d5cc4ed81e63cd63a1f65b35951e3a576e1298731711c305708c4513b" +
-		"8ec31080d7934fc4b1533d18452040d576bfba83bbfe61c54a054c6109a9c3986796368a1986443f15268733a85b527342b2f1d13cc2" +
-		"e2ae1c4591cb2f5d61f3cfba49e050e1ff6b043fef20fef3b01c62336a42c38f6d813248c30cedf864294ec2592669905b43870d13c6" +
-		"ba2ffa54b04d6d642898dd97163b0e3936c264cb481c8674fa54f08813259b3fadbb6f7e5be1b0193c8902611e1165bf576d227bea68" +
-		"cc6c61277a11fae0301de97a2d6b0419071459e2c3979a0b710b63bf5c6297fabaf499088170a6d46ffd7664b0ce7dc1f354f0c0b983" +
-		"08f4e593f8b796e2fd1996d8cf5a85cb0b9742b850c62af67052c5a85323d4004395d0fa50d591c4ddfb6dfef9a437bffc05a076a4ce" +
-		"5a67a98ff154d904f201b29905b99096ad78577fc10cf1d988878616ac8aa07da2624cdfbf642384e85fd4be720877a555980761c5b9" +
-		"eb907fc0b46eaa81236a92055e504bad99fca593851da5d244c9742e67a97ea3ebb99c0498df7cd6062d1edc44837eb14dabffb4bfe7" +
-		"a3f3ef2b70472e5b462f8fa34c033960d42ffde233e2611f89bf5ba0c694f61eda9ccbf0f1bc4f25564faab6c1452e5dc1f615afe81b" +
-		"798cacafc4601c74"
-	expectedKey1Key := mustHexDecode(expectedKey1Hex)
-	expectedKey2Hex := "" +
-		"a34d045829f83bee80109bcc057d3e0b25e9773f50bad45a7b8deadb16d823c0ee830cc2fe6b03cbf4caf6b1ac09f6bc5dc44e58c32ba35e37dd" +
-		"e9c570f6724275074daf78b2625e067945eb03e676c2c267ef2e0a9cd2ba7865290320e1d7466dc593a1d9fc5508ddc61b1b0e2c1aa4413a689b" +
-		"dfdb47214346fc94472f94d6292929f25bd54498ed1bfeb5621044182d2dff320c04e311d8545be8c05f436cf4fb64bc55bcab8c6a413886e598" +
-		"175b93cc5e5121c55b90a834d559395101fdca654310224156c1b59ecd2289ea1a1904def962d617aa010be5aca1aa4e8aa2b694cc0a779de0b1" +
-		"e53d4a6abcfc0b11294099c4bd44964e5a59bc1a317a3f7ad228b913639ac47ce888f6aa81b98693e484b90e1f80a0ebabfaf2afe0f3022782c8" +
-		"1dd0c6d7b55386d25ef75100d0e4d2a7c638da19bcf37729b2a19e82c1a4967fab6d336b71379e951b5fc51b55991dab302a74e3348ad3a6bb9a" +
-		"80a7f1cae3991e15c66762cc58bcc18c7f580d9416bb01aa915f38aa3fe615c5dc66848903f523df89944a16706b5e9d0a329edff74691d7d171" +
-		"23f1c6bb986b9a4c8d61f7b428aaf372f6a24dea1436e61568497c8ea2abb7dfa3c220a3ae8098d3f39c3d4d026552f577190a9a7f01916985ec" +
-		"6e56c0e43f59e6a7b39c98bc2fd58e2f8fbdd996cdca43e60c54a1c1b6bd8957fbfaa20ee3edb84f7c7b358941f6289916c737504aec8066a744" +
-		"7c77a8ae838bd7c4d6c5a658d691c387d952ecc53dec1b1af09670351bab11cb960d05f3010ae62c7d011a18c1c8d7abb4b9ab4f3be462c9aebf" +
-		"45dd196edeb77878355c1348fa336efad79b97ebb06f70acf10e3b8bd74779ea772ab68a54845bf3f21b2ebb34400a5da51286589fd58cfdd264" +
-		"1f8264a1a6ed25350099bbb440e98c7f5248e1bd7f809f1f40b1e8bb8f1c31144580452b05116941593cddbfcee177e57949c031882ddb60b8e0" +
-		"9fed2f6513ea55923a1a4b46204fe293c7eac9d671434eb7ce3c3ce7ec93180fbc1aed42eb0229be1a0ac0b65433e0c9a03bde4f8afe2a6dafb6" +
-		"bc857ed4aa905b09c65b3df00d9de583ea08e00edc0146c66f64b09b3923433ec127fac129d45807b9a0d4ed8303e689661381b12de75777d2a1" +
-		"5421076eeee9aa227fc3fe92e566128425b499803fbb20164eaf7494ac9208beedd5c95a978af2dd279ad9ac193e30b34afbd78d142e308855d2" +
-		"190537cc126afcfe88604c9fc1deaec21564104226cf600919ad9d6e36614d21f0056f980a01f30bbd062ebacaa4344265a96531c593b4ba252c" +
-		"ac96a4b4df8055a1714626ee876dae2cf2afb03095e29e8af4295322248c5d73f6d5c54cc4e084441ee3c7f434a7364b114a88b8dadebcbe820b" +
-		"a0ec885a4c152ffc6aba770c4704e6680e761b312fa3e5554f3f5b3bc587a61c444ff0d6e22e739f62d4674d5105c521cfbd38ac5449cafe1ddc" +
-		"e92b0a6de2b3bc03bcdc28fbc58524a33674ff51cd1ea9d2a81f225b2545fef30b567efeab8297f8d4223911"
-	expectedKey2Key := mustHexDecode(expectedKey2Hex)
 
 	if !bytes.Equal(result.SealedData, expectedSealedData) {
 		t.Fatalf("expected sealed data mismatch: got %x want %x", result.SealedData, expectedSealedData)
@@ -251,40 +209,30 @@ func TestPulsePQ_KnownValues(t *testing.T) {
 		if !bytes.Equal(result.Keys[1].KeyFingerPrint[:], expectedKey2FingerPrint) {
 			t.Fatalf("second key fingerprint mismatch: got %x want %x", result.Keys[1].KeyFingerPrint, expectedKey2FingerPrint)
 		}
-		if !bytes.Equal(result.Keys[0].EncapsulatedKeyKey, expectedKey1Key) {
-			t.Fatalf("first key mismatch: got %x want %x", result.Keys[0].EncapsulatedKeyKey, expectedKey1Key)
-		}
-		if !bytes.Equal(result.Keys[1].EncapsulatedKeyKey, expectedKey2Key) {
-			t.Fatalf("second key mismatch: got %x want %x", result.Keys[1].EncapsulatedKeyKey, expectedKey2Key)
-		}
-		if !bytes.Equal(result.Keys[0].EncapsulatedDataKey, expectedKey1Key) {
-			t.Fatalf("first key mismatch: got %x want %x", result.Keys[0].EncapsulatedKeyKey, expectedKey1Key)
-		}
-		if !bytes.Equal(result.Keys[1].EncapsulatedDataKey, expectedKey2Key) {
-			t.Fatalf("second key mismatch: got %x want %x", result.Keys[1].EncapsulatedKeyKey, expectedKey2Key)
-		}
 	} else if bytes.Equal(result.Keys[0].KeyFingerPrint[:], expectedKey2FingerPrint) {
 		// expected2 == Keys[0] !
 		if !bytes.Equal(result.Keys[1].KeyFingerPrint[:], expectedKey1FingerPrint) {
 			t.Fatalf("second key fingerprint mismatch: got %x want %x", result.Keys[1].KeyFingerPrint, expectedKey1FingerPrint)
-		}
-		if !bytes.Equal(result.Keys[0].EncapsulatedKeyKey, expectedKey2Key) {
-			t.Fatalf("first key mismatch: got %x want %x", result.Keys[0].EncapsulatedKeyKey, expectedKey2Key)
-		}
-		if !bytes.Equal(result.Keys[1].EncapsulatedKeyKey, expectedKey1Key) {
-			t.Fatalf("second key mismatch: got %x want %x", result.Keys[1].EncapsulatedKeyKey, expectedKey1Key)
-		}
-		if !bytes.Equal(result.Keys[0].EncapsulatedDataKey, expectedKey2Key) {
-			t.Fatalf("first key mismatch: got %x want %x", result.Keys[0].EncapsulatedKeyKey, expectedKey2Key)
-		}
-		if !bytes.Equal(result.Keys[1].EncapsulatedDataKey, expectedKey1Key) {
-			t.Fatalf("second key mismatch: got %x want %x", result.Keys[1].EncapsulatedKeyKey, expectedKey1Key)
 		}
 	} else {
 		// Neither expected1 nor expected2 == Keys[0] !
 		t.Fatalf("neither keyFingerPrint1 nor keyFingerPrint2 found in result")
 	}
 
+	// Verify we can decrypt it back
+	dec := NewPulsePQEncryption().
+		SetContractAddress(contractAddress).
+		SetPurpose(purpose).
+		SetChainId(chainId).
+		SetEncryptionResult(result).
+		SetMyPrivateKey(alicePrivate)
+
+	if err := dec.Decrypt(); err != nil {
+		t.Fatalf("Decrypt: %v", err)
+	}
+	if !bytes.Equal(dec.Plaintext(), plainText) {
+		t.Fatalf("decrypted plaintext mismatch: got %q want %q", dec.Plaintext(), plainText)
+	}
 }
 
 func TestPulsePQ_SettersAndGetEncryptionResult(t *testing.T) {
@@ -294,7 +242,7 @@ func TestPulsePQ_SettersAndGetEncryptionResult(t *testing.T) {
 	e := NewPulsePQEncryption().
 		SetPlaintext(pt).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	// Sanity: Plaintext getter
@@ -339,7 +287,7 @@ func TestPulsePQ_Encrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			SetChainId(0x01)
 		if err := e.Encrypt(); err == nil || err.Error() != "must provide plaintext" {
 			t.Fatalf("expected missing plaintext error, got %v", err)
@@ -359,7 +307,7 @@ func TestPulsePQ_Encrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetPlaintext([]byte("data")).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			SetChainId(0x01).
 			AddOtherPublicKey(pk1).
 			AddOtherPublicKey(pk2)
@@ -386,7 +334,7 @@ func TestPulsePQ_Encrypt_Errors(t *testing.T) {
 		e := NewPulsePQEncryption().
 			SetPlaintext([]byte("data")).
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			AddOtherPublicKey(pk1).
 			AddOtherPublicKey(pk2)
 		if err := e.Encrypt(); err == nil || err.Error() != "must provide chainId" {
@@ -399,7 +347,7 @@ func TestPulsePQ_Encrypt_Errors(t *testing.T) {
 		e := NewPulsePQEncryption().
 			SetPlaintext([]byte("data")).
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			SetChainId(0x01).
 			AddOtherPublicKey(pk1)
 		if err := e.Encrypt(); err == nil || err.Error() != "must provide another public key" {
@@ -413,7 +361,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			SetChainId(0x01)
 		if err := e.Decrypt(); err == nil || err.Error() != "must provide private key" {
 			t.Fatalf("expected missing private key error, got %v", err)
@@ -424,7 +372,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			SetChainId(0x01)
 		// Provide a non-nil private key to get past first check
 		e.myPrivateKey = new(kyberKEM.PrivateKey)
@@ -437,7 +385,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			SetChainId(0x01)
 		e.myPrivateKey = new(kyberKEM.PrivateKey)
 		e.encryptionResult = &PulsePQEncryptionResult{SealedData: nil}
@@ -450,7 +398,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	{
 		e := NewPulsePQEncryption().
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			SetChainId(0x01)
 		// Set a dummy private key to pass verify, but do not set myPublicKeyFingerPrint so it won't match
 		e.myPrivateKey = new(kyberKEM.PrivateKey)
@@ -482,7 +430,7 @@ func TestPulsePQ_Encrypt_Success_WithRecipients(t *testing.T) {
 	enc := NewPulsePQEncryption().
 		SetPlaintext([]byte("top secret pq data")).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	enc.AddOtherPublicKey(pk1)
@@ -560,7 +508,7 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 	enc := NewPulsePQEncryption().
 		SetPlaintext(plainText).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	enc.AddOtherPublicKey(alicePub)
@@ -580,7 +528,7 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 
 	decAlice := NewPulsePQEncryption().
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(encResult).
 		SetMyPrivateKey(alicePriv)
@@ -594,7 +542,7 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 
 	decBob := NewPulsePQEncryption().
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(encResult).
 		SetMyPrivateKey(bobPriv)
@@ -627,7 +575,7 @@ func TestPulsePQ_SingleParty_Fails(t *testing.T) {
 	e := NewPulsePQEncryption().
 		SetMyPrivateKey(sk).
 		SetChainId(1).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetContractAddress(helperContractAddressPQ()).
 		SetPlaintext([]byte("hello pq"))
 
@@ -647,7 +595,7 @@ func TestDuplicate_OtherKey(t *testing.T) {
 	}
 	e := NewPulsePQEncryption().
 		SetChainId(1).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetContractAddress(helperContractAddressPQ()).
 		SetPlaintext([]byte("hello pq")).
 		AddOtherPublicKey(pk).
@@ -659,7 +607,7 @@ func TestDuplicate_OtherKey(t *testing.T) {
 
 	e2 := NewPulsePQEncryption().
 		SetChainId(1).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetContractAddress(helperContractAddressPQ()).
 		SetPlaintext([]byte("hello pq")).
 		AddOtherPublicKey(pk).
@@ -685,7 +633,7 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	enc := NewPulsePQEncryption().
 		SetPlaintext([]byte("secret")).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 	enc.AddOtherPublicKey(pk1)
 	enc.AddOtherPublicKey(pk2)
@@ -718,7 +666,7 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	// Attempt decrypt as recipient1
 	dec := NewPulsePQEncryption().
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(res).
 		SetMyPrivateKey(sk1)
@@ -746,7 +694,7 @@ func TestPulsePQ_Decrypt_NoMatchingFingerprint_Fails(t *testing.T) {
 	enc := NewPulsePQEncryption().
 		SetPlaintext([]byte("secret")).
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 	enc.AddOtherPublicKey(pk1)
 	enc.AddOtherPublicKey(pk2)
@@ -757,7 +705,7 @@ func TestPulsePQ_Decrypt_NoMatchingFingerprint_Fails(t *testing.T) {
 
 	dec := NewPulsePQEncryption().
 		SetContractAddress(helperContractAddressPQ()).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(res).
 		SetMyPrivateKey(sk3)
@@ -770,13 +718,13 @@ func TestPulsePQ_Encrypt_DeterministicWithSeed(t *testing.T) {
 	pk1, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 	seed := bytes.Repeat([]byte{0x42}, kyberPKE.EncryptionSeedSize)
-	aesKey := mustHexDecode("75ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a")
+	aesKey := mustHexDecode("75ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a" + "000102030405060708090a0b")
 
 	mkEnc := func() *PulsePQEncryption {
 		return NewPulsePQEncryption().
 			SetPlaintext([]byte("msg")).
 			SetContractAddress(helperContractAddressPQ()).
-			SetPurpose(PulseSymmetricConsent).
+			SetPurpose(internal.PulseSymmetricConsent).
 			SetChainId(0x01).
 			setAESKey(aesKey)
 	}
@@ -792,6 +740,14 @@ func TestPulsePQ_Encrypt_DeterministicWithSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	r2 := e2.GetEncryptionResult()
+
+	sortKeys := func(res *PulsePQEncryptionResult) {
+		sort.Slice(res.Keys, func(i, j int) bool {
+			return bytes.Compare(res.Keys[i].KeyFingerPrint[:], res.Keys[j].KeyFingerPrint[:]) < 0
+		})
+	}
+	sortKeys(r1)
+	sortKeys(r2)
 
 	if !bytes.Equal(r1.Keys[0].EncapsulatedKeyKey, r2.Keys[0].EncapsulatedKeyKey) ||
 		!bytes.Equal(r1.Keys[1].EncapsulatedKeyKey, r2.Keys[1].EncapsulatedKeyKey) {

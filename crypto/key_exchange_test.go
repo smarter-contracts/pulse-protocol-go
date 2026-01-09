@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal"
 )
 
 /*
@@ -35,8 +36,8 @@ import (
 // helperContractAddress returns a valid 20-byte Ethereum-like address string pointer (0x + 40 hex chars).
 func helperContractAddress() *string {
 	// 20 sequential bytes -> 0x010203...14
-	var b [EthAddressLength]byte
-	for i := 0; i < EthAddressLength; i++ {
+	var b [internal.EthAddressLength]byte
+	for i := 0; i < internal.EthAddressLength; i++ {
 		b[i] = byte(i + 1)
 	}
 	// Manually format to avoid bringing in hex for a tiny helper
@@ -88,8 +89,8 @@ func TestEncrypt_Values(t *testing.T) {
 	alicePubExpected := mustHexDecode("036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2")
 	bobPubExpected := mustHexDecode("03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc")
 	sharedSecretExpected := mustHexDecode("3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e")
-	aesKeyExpected := mustHexDecode("75ab8bc72f3e2b201e0d0146dff8dfdcbc0c9581ba729cf39145ad459bea745a")
-	cipherTextExpected := mustHexDecode("7c2fc63d17f029d739c368463daf4bd5ad7dd284cfd41baa0907ea")
+	aesKeyExpected := mustHexDecode("bd9da74e79f8fd0825101e39d0070cc2e51fbcf1ee6e0baef2158da48b2cb979")
+	cipherTextExpected := mustHexDecode("b7ecde16dd92210d7ba90483ee84df402701dab67adeeb09532e48")
 
 	alicePub := alicePriv.PubKey()
 	bobPub := bobPriv.PubKey()
@@ -116,13 +117,17 @@ func TestEncrypt_Values(t *testing.T) {
 
 	// Alice encrypts to Bob -- if the shared secrets are correct above, it'll work the other way around too.
 	// Check AES EncryptionKey generation, post HKDF
-	aesKey, err := generateAESKey(alicePriv, bobPub)
+	aesKey, aesNonce, err := generateAESKey(alicePriv, bobPub)
 	if err != nil {
 		t.Fatalf("generateAESKey() failed: %v", err)
 	}
 
 	if !bytes.Equal(aesKey, aesKeyExpected) {
 		t.Fatalf("AES key mismatch: expected %x, got %x", aesKeyExpected, aesKey)
+	}
+
+	if len(aesNonce) != internal.AESGCMNonceSize {
+		t.Fatalf("AES nonce size mismatch: expected %d, got %d", internal.AESGCMNonceSize, len(aesNonce))
 	}
 
 	// Finally, check the ciphertext post encryption
@@ -133,7 +138,7 @@ func TestEncrypt_Values(t *testing.T) {
 		SetContractAddress(addr).
 		SetMyPrivateKey(alicePriv).
 		SetOtherPublicKey(bobPub).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	if err := enc.Encrypt(); err != nil {
@@ -161,7 +166,7 @@ func TestEncrypt_Values(t *testing.T) {
 	dec := NewPulseECEncryption().
 		SetContractAddress(addr).
 		SetMyPrivateKey(bobPriv).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(result)
 
@@ -185,7 +190,7 @@ func TestPulseECEncryption_RoundTrip_WithResult(t *testing.T) {
 		SetContractAddress(addr).
 		SetMyPrivateKey(alicePriv).
 		SetOtherPublicKey(bobPub).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	if err := enc.Encrypt(); err != nil {
@@ -208,7 +213,7 @@ func TestPulseECEncryption_RoundTrip_WithResult(t *testing.T) {
 	dec := NewPulseECEncryption().
 		SetContractAddress(addr).
 		SetMyPrivateKey(bobPriv).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(res)
 
@@ -231,7 +236,7 @@ func TestPulseECEncryption_UnpackResult_KeyOrderIrrelevant(t *testing.T) {
 		SetContractAddress(addr).
 		SetMyPrivateKey(alicePriv).
 		SetOtherPublicKey(bobPub).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 
 	if err := enc.Encrypt(); err != nil {
@@ -245,7 +250,7 @@ func TestPulseECEncryption_UnpackResult_KeyOrderIrrelevant(t *testing.T) {
 	dec := NewPulseECEncryption().
 		SetContractAddress(addr).
 		SetMyPrivateKey(bobPriv).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(res)
 
@@ -270,7 +275,7 @@ func TestPulseECEncryption_Encrypt_Errors(t *testing.T) {
 		SetContractAddress(addr).
 		SetMyPrivateKey(alicePriv).
 		SetOtherPublicKey(bobPub).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 	if err := e.Encrypt(); err == nil || err.Error() != "must provide plaintext" {
 		t.Fatalf("expected plaintext error, got %v", err)
@@ -281,7 +286,7 @@ func TestPulseECEncryption_Encrypt_Errors(t *testing.T) {
 		SetPlaintext([]byte("x")).
 		SetMyPrivateKey(alicePriv).
 		SetOtherPublicKey(bobPub).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 	if err := e.Encrypt(); err == nil || err.Error() != "must provide contract address" {
 		t.Fatalf("expected contract address error, got %v", err)
@@ -304,7 +309,7 @@ func TestPulseECEncryption_Encrypt_Errors(t *testing.T) {
 		SetContractAddress(addr).
 		SetMyPrivateKey(alicePriv).
 		SetOtherPublicKey(bobPub).
-		SetPurpose(PulseSymmetricConsent)
+		SetPurpose(internal.PulseSymmetricConsent)
 	if err := e.Encrypt(); err == nil || err.Error() != "must provide chainId" {
 		t.Fatalf("expected chainId error, got %v", err)
 	}
@@ -314,7 +319,7 @@ func TestPulseECEncryption_Encrypt_Errors(t *testing.T) {
 		SetPlaintext([]byte("x")).
 		SetContractAddress(addr).
 		SetOtherPublicKey(bobPub).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 	if err := e.Encrypt(); err == nil || err.Error() != "must provide private key" {
 		t.Fatalf("expected private key error, got %v", err)
@@ -325,7 +330,7 @@ func TestPulseECEncryption_Encrypt_Errors(t *testing.T) {
 		SetPlaintext([]byte("x")).
 		SetContractAddress(addr).
 		SetMyPrivateKey(alicePriv).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 	if err := e.Encrypt(); err == nil || err.Error() != "must provide public key" {
 		t.Fatalf("expected public key error, got %v", err)
@@ -340,7 +345,7 @@ func TestPulseECEncryption_Decrypt_Errors(t *testing.T) {
 	d := NewPulseECEncryption().
 		SetContractAddress(addr).
 		SetMyPrivateKey(bobPriv).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 	if err := d.Decrypt(); err == nil || err.Error() != "problem deciphering encryption result: missing encryption result structure, and no ciphertext or otherPublicKey provided" {
 		t.Fatalf("expected missing result error, got %v", err)
@@ -352,7 +357,7 @@ func TestPulseECEncryption_Decrypt_Errors(t *testing.T) {
 		SetContractAddress(addr).
 		SetMyPrivateKey(alicePriv).
 		SetOtherPublicKey(bobPub).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01)
 	if err := enc.Encrypt(); err != nil {
 		t.Fatalf("Encrypt() failed: %v", err)
@@ -367,7 +372,7 @@ func TestPulseECEncryption_Decrypt_Errors(t *testing.T) {
 	d = NewPulseECEncryption().
 		SetContractAddress(addr).
 		SetMyPrivateKey(bobPriv).
-		SetPurpose(PulseSymmetricConsent).
+		SetPurpose(internal.PulseSymmetricConsent).
 		SetChainId(0x01).
 		SetEncryptionResult(res)
 	if err := d.Decrypt(); err == nil || err.Error() != "problem deciphering encryption result: no matching public key found in encryption result" {

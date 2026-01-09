@@ -1,9 +1,10 @@
-package crypto
+package internal
 
 import (
 	"bytes"
 	"fmt"
 
+	//"github.com/smarter-contracts/pulse-protocol-go/crypto"
 	"golang.org/x/crypto/hkdf"
 	"golang.org/x/crypto/sha3"
 )
