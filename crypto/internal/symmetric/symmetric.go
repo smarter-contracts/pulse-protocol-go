@@ -8,6 +8,7 @@ import (
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
+	"golang.org/x/crypto/sha3"
 )
 
 // This file contains cryptographic functions for symmetric encryption used in the Pulse Protocol.
@@ -66,14 +67,14 @@ func buildAAD(purpose PulseSymmetricPurpose,
 	recipientHash []byte,
 	nonce []byte,
 	contextHash []byte,
-	transcript []byte,
+	transcriptHash []byte,
 ) []byte {
 	aad := fmt.Sprintf("pulse|%s|v1|%s|rid=%s|ctx=%s|th=%s|nonce=%s",
 		purpose.String(),
 		cipherSuite,
 		textformat.FormatHex(recipientHash),
 		textformat.FormatHex(contextHash),
-		transcript, // TODO:
+		textformat.FormatHex(transcriptHash),
 		textformat.FormatHex(nonce))
 
 	return []byte(aad)
@@ -85,7 +86,6 @@ func PulseSealWithNewKey(
 	cipherSuite string,
 	recipient []byte,
 	contextHash []byte,
-	transcript []byte,
 ) ([]byte, []byte, []byte, error) {
 	aesKey, err := randutil.Bytes(AESGCMKeySize)
 	if err != nil {
@@ -95,7 +95,9 @@ func PulseSealWithNewKey(
 	if err != nil {
 		return nil, nil, nil, errors.New("failed to generate AES256 nonce: " + err.Error())
 	}
-	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, cipherSuite, recipient, contextHash, transcript)
+	hash := sha3.NewLegacyKeccak256()
+	transcriptHash := hash.Sum(nonce)
+	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, cipherSuite, recipient, contextHash, transcriptHash)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -110,10 +112,10 @@ func PulseSeal(
 	cipherSuite string,
 	recipient []byte,
 	contextHash []byte,
-	transcript []byte,
+	transcriptHash []byte,
 ) ([]byte, error) {
 
-	aad := buildAAD(purpose, cipherSuite, recipient, nonce, contextHash, transcript)
+	aad := buildAAD(purpose, cipherSuite, recipient, nonce, contextHash, transcriptHash)
 
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {
@@ -135,9 +137,9 @@ func PulseOpen(
 	cipherSuite string,
 	recipient []byte,
 	contextHash []byte,
-	transcript []byte,
+	transcriptHash []byte,
 ) ([]byte, error) {
-	aad := buildAAD(purpose, cipherSuite, recipient, nonce, contextHash, transcript)
+	aad := buildAAD(purpose, cipherSuite, recipient, nonce, contextHash, transcriptHash)
 
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {

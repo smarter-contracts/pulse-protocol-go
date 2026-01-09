@@ -53,8 +53,8 @@ func EncryptPQ(plaintext []byte,
 	// Encrypt the plaintext (consent data) using a random AES key
 	recipientIDHash := getAllRecipientIDHashFromKeys(publicKeys)
 	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
-	// TODO: Arguments
-	cipherText, aesKey, nonce, err := symmetric.PulseSealWithNewKey(plaintext, purpose, PQDataCipherSuite, recipientIDHash, contextHash, []byte("transcript"))
+
+	cipherText, aesKey, nonce, err := symmetric.PulseSealWithNewKey(plaintext, purpose, PQDataCipherSuite, recipientIDHash, contextHash)
 	if err != nil {
 		return nil, errors.New("Failed to seal plaintext: " + err.Error())
 	}
@@ -103,9 +103,10 @@ func encapsulateKey(kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose symmet
 		return nil, err
 	}
 
-	// TODO: Arguments
 	// Encrypt our data key using the derived AES key/nonce
-	encryptedKey, err := symmetric.PulseSeal(dataAESKey, keyAESKey, keyNonce, purpose, PQKeyCipherSuite, fingerPrint[:], contextHash, []byte("transcript"))
+	hash := sha3.NewLegacyKeccak256()
+	transcriptHash := hash.Sum(encapsulatedSecret)
+	encryptedKey, err := symmetric.PulseSeal(dataAESKey, keyAESKey, keyNonce, purpose, PQKeyCipherSuite, fingerPrint[:], contextHash, transcriptHash)
 	if err != nil {
 		return nil, err
 	}
@@ -156,8 +157,9 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 	}
 
 	// First AES Open -- Get the internal AES Key
-	// TODO: Arguments
-	dataAESKey, err := symmetric.PulseOpen(k.EncapsulatedDataKey, keyAESKey, keyNonce, purpose, PQKeyCipherSuite, k.KeyFingerPrint[:], contextHash, []byte("transcript"))
+	tHash := sha3.NewLegacyKeccak256()
+	transcriptHash := tHash.Sum(k.EncapsulatedKeyKey)
+	dataAESKey, err := symmetric.PulseOpen(k.EncapsulatedDataKey, keyAESKey, keyNonce, purpose, PQKeyCipherSuite, k.KeyFingerPrint[:], contextHash, transcriptHash)
 	defer wipe.SliceWipe(dataAESKey)
 	if err != nil {
 		return nil, errors.New("Failed to open encrypted key: " + err.Error())
@@ -169,9 +171,10 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 	defer wipe.SliceWipe(dataNonce)
 
 	// Now unseal the consent data
-	// TODO: Arguments
 	recipientIdHash := getAllRecipientIDHashFromFingerPrints(fingerPrints)
-	plainText, err := symmetric.PulseOpen(encryptionResult.SealedData, dataKey, dataNonce, purpose, PQDataCipherSuite, recipientIdHash, contextHash, []byte("transcript"))
+	nHash := sha3.NewLegacyKeccak256()
+	dataTranscript := nHash.Sum(dataNonce)
+	plainText, err := symmetric.PulseOpen(encryptionResult.SealedData, dataKey, dataNonce, purpose, PQDataCipherSuite, recipientIdHash, contextHash, dataTranscript)
 	if err != nil {
 		return nil, errors.New("Failed to open encrypted data: " + err.Error())
 	}

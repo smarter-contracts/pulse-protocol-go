@@ -45,9 +45,10 @@ func EncryptECDH(plaintext []byte,
 		return nil, errors.New("Failed to generate aes key and nonce: " + err.Error())
 	}
 
-	recipientIdHash := generateRecipientIdHash(textformat.FormatHex(myPrivateKey.PubKey().SerializeCompressed()),
+	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
+	transcriptHash := generateTranscriptHash(textformat.FormatHex(myPrivateKey.PubKey().SerializeCompressed()),
 		textformat.FormatHex(otherPublicKey.SerializeCompressed()))
-	ciphertext, err := symmetric.PulseSeal(plaintext, aesKey, nonce, purpose, ECDHCipherSuite, recipientIdHash, []byte("context"), []byte("transcript"))
+	ciphertext, err := symmetric.PulseSeal(plaintext, aesKey, nonce, purpose, ECDHCipherSuite, nil, contextHash, transcriptHash)
 	if err != nil {
 		return nil, errors.New("Failed to seal plaintext: " + err.Error())
 	}
@@ -94,10 +95,10 @@ func DecryptEC(encryptionResult *PulseECEncryptionResult,
 	}
 
 	// Decrypt the ciphertext
-	// TODO: Arguments
-	recipientIdHash := generateRecipientIdHash(textformat.FormatHex(encryptionResult.Key1),
+	transcriptHash := generateTranscriptHash(textformat.FormatHex(encryptionResult.Key1),
 		textformat.FormatHex(encryptionResult.Key2))
-	plaintext, err := symmetric.PulseOpen(encryptionResult.SealedData, aesKey, nonce, purpose, ECDHCipherSuite, recipientIdHash, []byte("context"), []byte("transcript"))
+	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
+	plaintext, err := symmetric.PulseOpen(encryptionResult.SealedData, aesKey, nonce, purpose, ECDHCipherSuite, nil, contextHash, transcriptHash)
 	if err != nil {
 		return nil, errors.New("Failed to open Ciphertext: " + err.Error())
 	}
@@ -118,11 +119,11 @@ func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey) ([]byte, []byte,
 	return hkdf.PulseHKDFECDH(sharedSecret, []byte("transcript"), []byte("recipientid"), []byte("context"))
 }
 
-func generateRecipientIdHash(key1 string, key2 string) []byte {
+func generateTranscriptHash(key1 string, key2 string) []byte {
 	keys := [2]string{key1, key2}
 	slices.Sort(keys[:])
 
-	recipientString := fmt.Sprintf("|pulse|group|v1|%s|%s|", keys[0], keys[1])
+	recipientString := fmt.Sprintf("|pulse|group|v1|%s|%s|%s", keys[0], keys[1], ECDHCipherSuite)
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write([]byte(recipientString))
 	return hash.Sum(nil)

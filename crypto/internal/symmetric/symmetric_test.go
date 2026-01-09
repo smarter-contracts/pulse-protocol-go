@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
+	"golang.org/x/crypto/sha3"
 )
 
 /*
@@ -73,9 +74,8 @@ func TestPulseSealWithNewKey_RoundTrip(t *testing.T) {
 	purpose := PulseSymmetricUpdate
 	context := []byte("another context")
 	suite := "test-suite"
-	transcript := []byte("test transcript")
 
-	ciphertext, key, nonce, err := PulseSealWithNewKey(plaintext, purpose, suite, recipient, context, transcript)
+	ciphertext, key, nonce, err := PulseSealWithNewKey(plaintext, purpose, suite, recipient, context)
 	if err != nil {
 		t.Fatalf("PulseSealWithNewKey failed: %v", err)
 	}
@@ -87,7 +87,11 @@ func TestPulseSealWithNewKey_RoundTrip(t *testing.T) {
 		t.Errorf("Generated nonce size mismatch: got %d, want %d", len(nonce), AESGCMNonceSize)
 	}
 
-	decrypted, err := PulseOpen(ciphertext, key, nonce, purpose, suite, recipient, context, transcript)
+	// PulseSealWithNewKey uses Keccak256(nonce) as transcriptHash
+	hash := sha3.NewLegacyKeccak256()
+	transcriptHash := hash.Sum(nonce)
+
+	decrypted, err := PulseOpen(ciphertext, key, nonce, purpose, suite, recipient, context, transcriptHash)
 	if err != nil {
 		t.Fatalf("PulseOpen failed: %v", err)
 	}
@@ -193,8 +197,8 @@ func TestBuildAAD(t *testing.T) {
 	if !bytes.Contains(aad, []byte("ctx=")) {
 		t.Error("AAD missing context prefix 'ctx='")
 	}
-	if !bytes.Contains(aad, []byte("th=transcript")) {
-		t.Error("AAD missing transcript")
+	if !bytes.Contains(aad, []byte("th=")) {
+		t.Error("AAD missing transcript prefix 'th='")
 	}
 }
 
