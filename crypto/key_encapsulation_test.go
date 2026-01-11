@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 )
 
 /*
@@ -159,7 +161,7 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 	bobPublic := bobPrivate.Public().(*kyberKEM.PublicKey)
 
 	// EncryptPQ for Bob
-	result, err := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, int32(chainId), 0)
+	result, err := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, int32(chainId), 0)
 	if err != nil {
 		t.Fatalf("EncryptPQ: %v", err)
 	}
@@ -181,7 +183,7 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	chainId := uint8(0x01)
 	pk, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, _ := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk}, purpose, int32(chainId), 0)
+	result, _ := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk}, purpose, int32(chainId), 0)
 
 	// Decrypt with wrong private key
 	pkWrong, wrongSK, _ := kyberKEM.GenerateKeyPair(rand.Reader)
@@ -202,7 +204,7 @@ func TestPulsePQ_Encrypt_Success_WithRecipients(t *testing.T) {
 	_ = sk1
 	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, err := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, int32(chainId), 0)
+	result, err := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, int32(chainId), 0)
 	if err != nil {
 		t.Fatalf("EncryptPQ: %v", err)
 	}
@@ -246,7 +248,7 @@ func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
 	pk1, sk1, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, _ := EncryptPQ(plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, int32(chainId), 0)
+	result, _ := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, int32(chainId), 0)
 
 	// Find entry for recipient1 by fingerprint and tamper the encapsulated key
 	fp1 := getPubKeyFingerprint(pk1)
@@ -291,5 +293,86 @@ func TestGetAllRecipientIDHash(t *testing.T) {
 	expectedHash := mustHexDecode("9674817700045e99280b08deebeb495374fd63823ed53130b16e84c3fc558922")
 	if !bytes.Equal(hash1, expectedHash) {
 		t.Errorf("getAllRecipientIDHashFromFingerPrints mismatch: got %x, want %x", hash1, expectedHash)
+	}
+}
+
+func TestEncryptPQ_KnownValues(t *testing.T) {
+	// Setup fixed entropy source
+	seed := make([]byte, 1024)
+	entropy := bytes.NewReader(seed) // All zeros entropy
+
+	plaintext := []byte("pulse test")
+	contractAddress := "0x0102030405060708090a0b0c0d0e0f1011121314"
+	purpose := symmetric.PulseSymmetricConsent
+	chainId := int32(1)
+	consentNumber := int32(0)
+
+	// Use Bob's key from file (deterministic as well)
+	bobPrivate, _ := keyFromFile("bob_private.hex")
+	bobPublic := bobPrivate.Public().(*kyberKEM.PublicKey)
+
+	// Calculate expected intermediate values
+	recipientIDHash := getAllRecipientIDHashFromKeys([]*kyberKEM.PublicKey{bobPublic})
+	contextHash := textformat.ContextHash(chainId, contractAddress, consentNumber)
+
+	// For dataAESKey and nonce, we need to know how they are generated in PulseSealWithNewKey
+	// PulseSealWithNewKey(entropy, ...) calls randutil.Bytes(entropy, 32) then randutil.Bytes(entropy, 12)
+	entropyClone := bytes.NewReader(seed)
+	dataAESKeyGenerated, _ := randutil.Bytes(entropyClone, 32)
+	nonceGenerated, _ := randutil.Bytes(entropyClone, 12)
+
+	result, err := EncryptPQ(entropy, plaintext, &contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, chainId, consentNumber)
+	if err != nil {
+		t.Fatalf("EncryptPQ failed: %v", err)
+	}
+
+	// Verify all requested "known values"
+	expectedRecipientIDHash := "defb6b9c9ee90833454eff2c033843bbd6070e6fceb8d2cbd095a88b4956e2fc"
+	if hex.EncodeToString(recipientIDHash) != expectedRecipientIDHash {
+		t.Errorf("recipientIDHash mismatch: got %x, want %s", recipientIDHash, expectedRecipientIDHash)
+	}
+
+	expectedContextHash := "7c70756c73657c6374787c76317c636861696e3d317c636f6e74726163743d3078303130323033303430353036303730383039306130623063306430653066313031313132313331347c636f6e73656e744e756d6265723d30c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+	if hex.EncodeToString(contextHash) != expectedContextHash {
+		t.Errorf("contextHash mismatch: got %x, want %s", contextHash, expectedContextHash)
+	}
+
+	expectedDataAESKey := "0000000000000000000000000000000000000000000000000000000000000000"
+	if hex.EncodeToString(dataAESKeyGenerated) != expectedDataAESKey {
+		t.Errorf("dataAESKey mismatch: got %x, want %s", dataAESKeyGenerated, expectedDataAESKey)
+	}
+
+	expectedNonce := "000000000000000000000000"
+	if hex.EncodeToString(nonceGenerated) != expectedNonce {
+		t.Errorf("nonce mismatch: got %x, want %s", nonceGenerated, expectedNonce)
+	}
+
+	expectedSealedData := "bed22c4e28401f0b743a2555e29abfc7f2ff4e0212ddf02f4bb6"
+	if hex.EncodeToString(result.SealedData) != expectedSealedData {
+		t.Errorf("SealedData mismatch: got %x, want %s", result.SealedData, expectedSealedData)
+	}
+
+	expectedFingerprint := "70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde"
+	if hex.EncodeToString(result.Keys[0].KeyFingerPrint[:]) != expectedFingerprint {
+		t.Errorf("KeyFingerPrint mismatch: got %x, want %s", result.Keys[0].KeyFingerPrint, expectedFingerprint)
+	}
+
+	expectedEncapsulatedKey := "a69fc428d306085ef8f79ccbe3d99b5070366a1264b7425e36a048e0119d620f885a2cda5d811a0c18beed14bde0a8bb8e069e16a826250bab2dbd547d4de0ff4de75b9014ad8bdb55628037141fb1e749d97e3db95b1c533e168e7974f4acf18048e93f4931e73f7d865af62d7552c4455c1ec7baeb86b696ee7ebf350c452f82242392f92bfd131564e305370c2c87be4cb4538b5325afd7d989e8850e0d76e63bc55cebed61e123752a455b9f04f022c53845c16ffe384a1b2f3369a1647b35164737b54d2dc7caa6363669a9a9efe33384777750677577a58bea494752ceba6e40b9d99cd9d843d40710ba313acff881218e241d2241a58391a53ebf3ec6e2f751fc5851e039a875953961782245f798fd43f567bc0d9d8663fad091590ca737606f5f651e74d2cbe2b10e14278a954f4192d2d1f612b43adc92a5cdd3498615e7689377a04c271a3b3ab8cd4eb0db8d5768666aa5e61b2a60649ffe8df5e775fa7b45c31b8dad5a1e73b17af9400b9b4f5f954fef18e2151a563337a43cc448690f8075a808efd1c13a11f5d6fc30f2ede542c3b9a54d033b3eb9b11f44c4be6fd20f8a6d1f928b4cede47259b2f54c40752d9ad4f7b3588c283a655638f497a6b03544273a292f501d59b21697309164f84d7344bc227d50590b810fce1ae0d81a996e9a0d279be62720818fce3f1b0ebcec5d0c392ec4c1e05108e48246099f8e87f66e983b1913422d46b6853de0e1c7056a6fe481aafc82439512741f58ad030ff567567eafa3650393b3156fa7620aee89002ddfa291e8bf0e3c9d1293cbce8d0eec4ff1eb613f4327acf114e0864f5d78373172af24ced15aac6d889f4c34713c905db1eb5fb75cdea3d96c3b3775efebfba3f8f3a15a3ce5169f007cfbf9e876976539d91858274a3d85dd07147f276fb0375b431317845d84308e283735cbea65a97df6a9798d4b2c447535e77e20204bcd8780f745734a6c8e8af441be9c9f6889a014b27226631d9af39e075bf53a6d83aa97e9d0e3602ba7ece204836d66e354ff03343d5d4fbd271fe4d4603d9eaf121b777d7e32cc832dd3500cfc9336d3ec04487f338b3a2057323738dd06534a316e2746abdb647b98a2b2fa1b62ab41d5aff7cb03d6dda768e6d045cca7394edf518b023aba6e65d34543b91ee616957765644ae2542bb704190fce9702d6af7415b2ab4cfc7a7c7e2d6c91bcc1c7834e3b01735fc12d2d27047f21a30138de09fcacff9df05b8b0b989853ab66003af5406542d79c32eab287bff9f412189da377dde08c28ad42e88d0789be6a3acf5cce43393b1142ed78f04cc2fb251490a506a9c4cbc16dd9ec8febba8f4a5a9624c962091ae54904b1e70d7bd47ae7f8f26ad92aa9ae52458da23e8f8076a34f89257fe7934b4df1ce188dfab4dd53032cf8fbb9a90f22b829bea68389be81c016cf6311df599e07946f891e6937c0230ced6767f478ef6b106d8debe7eccf58bf4b77279a083f3f5a73cdf0f28102d18e7b1f64bd393c6b73"
+	if hex.EncodeToString(result.Keys[0].EncapsulatedKeyKey) != expectedEncapsulatedKey {
+		t.Errorf("EncapsulatedKeyKey mismatch: got %x, want %s", result.Keys[0].EncapsulatedKeyKey, expectedEncapsulatedKey)
+	}
+
+	expectedEncapsulatedDataKey := "007ff672f889559e1af7b3b2b73c8ce602fd1d97d7262e261585bf4a139d1027bb1ff69026308bf46a85112f1d0e5d54548a9bcde88ed19468868242"
+	if hex.EncodeToString(result.Keys[0].EncapsulatedDataKey) != expectedEncapsulatedDataKey {
+		t.Errorf("EncapsulatedDataKey mismatch: got %x, want %s", result.Keys[0].EncapsulatedDataKey, expectedEncapsulatedDataKey)
+	}
+
+	// Round-trip check
+	decrypted, err := DecryptPQ(result, &contractAddress, bobPrivate, purpose, chainId, consentNumber)
+	if err != nil {
+		t.Fatalf("DecryptPQ failed: %v", err)
+	}
+	if !bytes.Equal(decrypted, plaintext) {
+		t.Errorf("Decrypted mismatch: got %q, want %q", decrypted, plaintext)
 	}
 }

@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"errors"
+	"io"
 	"slices"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
@@ -46,6 +47,7 @@ var PQKeyCipherSuite = "kyber768+hkdf-keccak256+aes-gcm-256"
 // for each recipient using Kyber768 (ML-KEM).
 //
 // Arguments:
+//   - entropy: Optional source of randomness (if nil, uses crypto/rand.Reader).
 //   - plaintext: The data to be encrypted.
 //   - contractAddress: Pointer to the contract address hex string.
 //   - publicKeys: A slice of Kyber768 public keys for all intended recipients.
@@ -56,7 +58,8 @@ var PQKeyCipherSuite = "kyber768+hkdf-keccak256+aes-gcm-256"
 // Returns:
 //   - A PulsePQEncryptionResult containing the sealed data and a list of encapsulated keys.
 //   - An error if encryption or encapsulation fails.
-func EncryptPQ(plaintext []byte,
+func EncryptPQ(entropy io.Reader,
+	plaintext []byte,
 	contractAddress *string,
 	publicKeys []*kyberKEM.PublicKey,
 	purpose symmetric.PulseSymmetricPurpose,
@@ -69,7 +72,7 @@ func EncryptPQ(plaintext []byte,
 	recipientIDHash := getAllRecipientIDHashFromKeys(publicKeys)
 	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
 
-	cipherText, aesKey, nonce, err := symmetric.PulseSealWithNewKey(plaintext, purpose, PQDataCipherSuite, recipientIDHash, contextHash)
+	cipherText, aesKey, nonce, err := symmetric.PulseSealWithNewKey(entropy, plaintext, purpose, PQDataCipherSuite, recipientIDHash, contextHash)
 	if err != nil {
 		return nil, errors.New("Failed to seal plaintext: " + err.Error())
 	}
@@ -88,7 +91,7 @@ func EncryptPQ(plaintext []byte,
 	for idx := range publicKeys {
 		kemPK := publicKeys[idx]
 
-		encKey, err := encapsulateKey(kemPK, dataAESKey, purpose, contextHash)
+		encKey, err := encapsulateKey(entropy, kemPK, dataAESKey, purpose, contextHash)
 		if err != nil {
 			return nil, err
 		}
@@ -102,6 +105,7 @@ func EncryptPQ(plaintext []byte,
 // It generates a Kyber shared secret, derives an AES key via HKDF, and encrypts the data AES key.
 //
 // Arguments:
+//   - entropy: Optional source of randomness (if nil, uses crypto/rand.Reader).
 //   - kemPK: The recipient's Kyber public key.
 //   - dataAESKey: The packed AES key and nonce used for the main data.
 //   - purpose: The purpose of the encryption.
@@ -110,12 +114,22 @@ func EncryptPQ(plaintext []byte,
 // Returns:
 //   - A PulsePQEncryptionKey containing the encapsulated and encrypted key material.
 //   - An error if encapsulation or encryption fails.
-func encapsulateKey(kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose symmetric.PulseSymmetricPurpose, contextHash []byte) (*PulsePQEncryptionKey, error) {
+func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose symmetric.PulseSymmetricPurpose, contextHash []byte) (*PulsePQEncryptionKey, error) {
 	scheme := kyberKEM.Scheme()
 	fingerPrint := getPubKeyFingerprint(kemPK)
 
 	// Generate a shared secret and encapsulated secret for this recipient
-	encapsulatedSecret, sharedSecret, err := scheme.Encapsulate(kemPK)
+	var encapsulatedSecret, sharedSecret []byte
+	var err error
+	if entropy != nil {
+		seed := make([]byte, scheme.EncapsulationSeedSize())
+		if _, err := io.ReadFull(entropy, seed); err != nil {
+			return nil, err
+		}
+		encapsulatedSecret, sharedSecret, err = scheme.EncapsulateDeterministically(kemPK, seed)
+	} else {
+		encapsulatedSecret, sharedSecret, err = scheme.Encapsulate(kemPK)
+	}
 	defer wipe.SliceWipe(sharedSecret)
 	if err != nil {
 		return nil, err

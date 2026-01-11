@@ -90,7 +90,7 @@ func TestEncrypt_Values(t *testing.T) {
 	alicePubExpected := mustHexDecode("036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2")
 	bobPubExpected := mustHexDecode("03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc")
 	sharedSecretExpected := mustHexDecode("3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e")
-	aesKeyExpected := mustHexDecode("c9ae71fe55522a05260be2b9e781e8361cb3443384a965f1cd399b201aca3e25")
+	aesKeyExpected := mustHexDecode("20842b58d852d9ae50b8c13871ab40be66aa1bab88a732610bf6899335cb7a0c")
 	cipherTextExpected := mustHexDecode("5f92a03688c83bd73fda26cffb908427a32bfa2b3fcbecf1a4a940")
 
 	alicePub := alicePriv.PubKey()

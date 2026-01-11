@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
@@ -98,6 +99,7 @@ func buildAAD(purpose PulseSymmetricPurpose,
 // It uses AES-256-GCM and derives a transcript hash from the generated nonce.
 //
 // Arguments:
+//   - entropy: Optional source of randomness (if nil, uses crypto/rand.Reader).
 //   - plaintext: The data to be encrypted.
 //   - purpose: The intended purpose of the encryption.
 //   - cipherSuite: Identifier for the cryptographic suite.
@@ -110,23 +112,24 @@ func buildAAD(purpose PulseSymmetricPurpose,
 //   - The generated 12-byte nonce.
 //   - An error if key generation or encryption fails.
 func PulseSealWithNewKey(
+	entropy io.Reader,
 	plaintext []byte,
 	purpose PulseSymmetricPurpose,
 	cipherSuite string,
-	recipient []byte,
+	recipientHash []byte,
 	contextHash []byte,
 ) ([]byte, []byte, []byte, error) {
-	aesKey, err := randutil.Bytes(AESGCMKeySize)
+	aesKey, err := randutil.Bytes(entropy, AESGCMKeySize)
 	if err != nil {
 		return nil, nil, nil, errors.New("failed to generate AES256 key: " + err.Error())
 	}
-	nonce, err := randutil.Bytes(AESGCMNonceSize)
+	nonce, err := randutil.Bytes(entropy, AESGCMNonceSize)
 	if err != nil {
 		return nil, nil, nil, errors.New("failed to generate AES256 nonce: " + err.Error())
 	}
 	hash := sha3.NewLegacyKeccak256()
 	transcriptHash := hash.Sum(nonce)
-	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, cipherSuite, recipient, contextHash, transcriptHash)
+	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, cipherSuite, recipientHash, contextHash, transcriptHash)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -155,12 +158,12 @@ func PulseSeal(
 	nonce []byte,
 	purpose PulseSymmetricPurpose,
 	cipherSuite string,
-	recipient []byte,
+	recipientHash []byte,
 	contextHash []byte,
 	transcriptHash []byte,
 ) ([]byte, error) {
 
-	aad := buildAAD(purpose, cipherSuite, recipient, nonce, contextHash, transcriptHash)
+	aad := buildAAD(purpose, cipherSuite, recipientHash, nonce, contextHash, transcriptHash)
 
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {

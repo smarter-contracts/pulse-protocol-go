@@ -169,8 +169,8 @@ func createInfo(purpose string,
 	}
 	contextHash := sha3.NewLegacyKeccak256().Sum(context)
 	output := bytes.Buffer{}
-	output.WriteString(fmt.Sprintf("pulse|kdf|v1|%s%s|%s|rid=%x|ctx=", purpose, keyOrNonce, suite, recipientID))
-	output.Write(contextHash[:])
+	output.WriteString(fmt.Sprintf("pulse|kdf|v1|%s%s|%s|rid=%s|ctx=", purpose, keyOrNonce, suite, textformat.FormatHex(recipientID)))
+	output.WriteString(textformat.FormatHex(contextHash[:]))
 
 	return output.Bytes()
 }

@@ -75,7 +75,7 @@ func TestPulseSealWithNewKey_RoundTrip(t *testing.T) {
 	context := []byte("another context")
 	suite := "test-suite"
 
-	ciphertext, key, nonce, err := PulseSealWithNewKey(plaintext, purpose, suite, recipient, context)
+	ciphertext, key, nonce, err := PulseSealWithNewKey(nil, plaintext, purpose, suite, recipient, context)
 	if err != nil {
 		t.Fatalf("PulseSealWithNewKey failed: %v", err)
 	}

@@ -8,21 +8,21 @@ import (
 
 func TestRead_ZeroLenOK(t *testing.T) {
 	var b []byte
-	if err := Read(b); err != nil {
+	if err := Read(nil, b); err != nil {
 		t.Fatalf("Read(0) error: %v", err)
 	}
 }
 
 func TestBytes_LengthAndUniqueness(t *testing.T) {
 	const n = 32
-	b1, err := Bytes(n)
+	b1, err := Bytes(nil, n)
 	if err != nil {
 		t.Fatalf("Bytes(%d) error: %v", n, err)
 	}
 	if len(b1) != n {
 		t.Fatalf("Bytes length: want %d got %d", n, len(b1))
 	}
-	b2, err := Bytes(n)
+	b2, err := Bytes(nil, n)
 	if err != nil {
 		t.Fatalf("Bytes(%d) 2nd error: %v", n, err)
 	}
@@ -37,7 +37,7 @@ func TestBytes_LengthAndUniqueness(t *testing.T) {
 
 func TestMustBytes_Length(t *testing.T) {
 	const n = 16
-	b := MustBytes(n)
+	b := MustBytes(nil, n)
 	if len(b) != n {
 		t.Fatalf("MustBytes length: want %d got %d", n, len(b))
 	}
@@ -45,7 +45,7 @@ func TestMustBytes_Length(t *testing.T) {
 
 func TestBytes_TableDrivenValues(t *testing.T) {
 	for _, n := range []int{1, 12, 16, 32, 48, 0} {
-		b, err := Bytes(n)
+		b, err := Bytes(nil, n)
 		if err != nil {
 			t.Fatalf("Bytes(%d) error: %v", n, err)
 		}
@@ -56,11 +56,11 @@ func TestBytes_TableDrivenValues(t *testing.T) {
 }
 
 func TestUint64_Uniqueness(t *testing.T) {
-	u1, err := Uint64()
+	u1, err := Uint64(nil)
 	if err != nil {
 		t.Fatalf("Uint64 error: %v", err)
 	}
-	u2, err := Uint64()
+	u2, err := Uint64(nil)
 	if err != nil {
 		t.Fatalf("Uint64 2nd error: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestUint64_Uniqueness(t *testing.T) {
 func TestBigInt_Range(t *testing.T) {
 	max := big.NewInt(1000)
 	for i := 0; i < 100; i++ {
-		v, err := BigInt(max)
+		v, err := BigInt(nil, max)
 		if err != nil {
 			t.Fatalf("BigInt error: %v", err)
 		}
@@ -84,7 +84,7 @@ func TestBigInt_Range(t *testing.T) {
 
 func TestStringURLSafe_LengthAndAlphabet(t *testing.T) {
 	for _, n := range []int{1, 2, 3, 4, 15, 16, 32} {
-		s, err := StringURLSafe(n)
+		s, err := StringURLSafe(nil, n)
 		if err != nil {
 			t.Fatalf("StringURLSafe(%d) error: %v", n, err)
 		}
