@@ -62,6 +62,20 @@ var (
 	ErrNoContractAddress  = errors.New("no contract address, chainId or purpose")
 )
 
+// buildAAD constructs the Additional Authenticated Data (AAD) for AES-GCM encryption.
+// It combines the purpose, cipher suite, recipient hash, nonce, context, and transcript
+// into a single string for cryptographic domain separation.
+//
+// Arguments:
+//   - purpose: The intended use of the encryption (consent, revoke, update, or keywrap).
+//   - cipherSuite: A string identifier for the cryptographic algorithms used.
+//   - recipientHash: A binary hash/identifier for the recipient(s).
+//   - nonce: The 12-byte GCM nonce.
+//   - contextHash: A hash of the context (chainId, contract address, etc.).
+//   - transcriptHash: A hash of the exchange transcript.
+//
+// Returns:
+//   - A byte slice containing the formatted AAD string.
 func buildAAD(purpose PulseSymmetricPurpose,
 	cipherSuite string,
 	recipientHash []byte,
@@ -80,6 +94,21 @@ func buildAAD(purpose PulseSymmetricPurpose,
 	return []byte(aad)
 }
 
+// PulseSealWithNewKey generates a new random AES key and nonce, then seals the plaintext.
+// It uses AES-256-GCM and derives a transcript hash from the generated nonce.
+//
+// Arguments:
+//   - plaintext: The data to be encrypted.
+//   - purpose: The intended purpose of the encryption.
+//   - cipherSuite: Identifier for the cryptographic suite.
+//   - recipient: Identifier/hash of the recipient.
+//   - contextHash: Hash of the encryption context.
+//
+// Returns:
+//   - The resulting ciphertext.
+//   - The generated 32-byte AES key.
+//   - The generated 12-byte nonce.
+//   - An error if key generation or encryption fails.
 func PulseSealWithNewKey(
 	plaintext []byte,
 	purpose PulseSymmetricPurpose,
@@ -104,6 +133,22 @@ func PulseSealWithNewKey(
 	return ciphertext, aesKey, nonce, nil
 }
 
+// PulseSeal encrypts the plaintext using AES-256-GCM with the provided key and nonce.
+// It incorporates Additional Authenticated Data (AAD) for improved security and domain separation.
+//
+// Arguments:
+//   - plaintext: The data to be encrypted.
+//   - aesKey: The 32-byte AES key.
+//   - nonce: The 12-byte GCM nonce.
+//   - purpose: The intended purpose of the encryption.
+//   - cipherSuite: Identifier for the cryptographic suite.
+//   - recipient: Identifier/hash of the recipient.
+//   - contextHash: Hash of the encryption context.
+//   - transcriptHash: Hash of the exchange transcript.
+//
+// Returns:
+//   - The authenticated ciphertext (including the 16-byte GCM tag).
+//   - An error if encryption setup fails.
 func PulseSeal(
 	plaintext []byte,
 	aesKey []byte,
@@ -129,6 +174,22 @@ func PulseSeal(
 	return gcm.Seal(nil, nonce, plaintext, aad), nil
 }
 
+// PulseOpen decrypts and authenticates the ciphertext using AES-256-GCM.
+// It verifies that the Additional Authenticated Data (AAD) matches the one used during encryption.
+//
+// Arguments:
+//   - ciphertext: The encrypted data (including the 16-byte GCM tag).
+//   - aesKey: The 32-byte AES key.
+//   - nonce: The 12-byte GCM nonce.
+//   - purpose: The intended purpose of the encryption.
+//   - cipherSuite: Identifier for the cryptographic suite.
+//   - recipient: Identifier/hash of the recipient.
+//   - contextHash: Hash of the encryption context.
+//   - transcriptHash: Hash of the exchange transcript.
+//
+// Returns:
+//   - The original plaintext if authentication succeeds.
+//   - An error if decryption or authentication fails.
 func PulseOpen(
 	ciphertext []byte,
 	aesKey []byte,
