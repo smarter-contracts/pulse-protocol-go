@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
@@ -57,7 +58,7 @@ func EncryptECDH(plaintext []byte,
 	if myPrivateKey == nil || otherPublicKey == nil {
 		return nil, errors.New("must provide both private and public keys to encrypt")
 	}
-	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
+	contextHash := context.ContextHash(chainId, *contractAddress, consentNumber)
 	transcriptHash := generateTranscriptHash(textformat.FormatHex(myPrivateKey.PubKey().SerializeCompressed()),
 		textformat.FormatHex(otherPublicKey.SerializeCompressed()))
 	aesKey, nonce, err := generateAESKey(myPrivateKey, otherPublicKey, transcriptHash, contextHash)
@@ -125,7 +126,7 @@ func DecryptEC(encryptionResult *PulseECEncryptionResult,
 	// Get the AES key and nonce from the ECDH exchange
 	transcriptHash := generateTranscriptHash(textformat.FormatHex(encryptionResult.Key1),
 		textformat.FormatHex(encryptionResult.Key2))
-	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
+	contextHash := context.ContextHash(chainId, *contractAddress, consentNumber)
 	aesKey, nonce, err := generateAESKey(myPrivateKey, otherPublicKey, transcriptHash, contextHash)
 	if err != nil {
 		return nil, errors.New("Failed to generate aes key: " + err.Error())

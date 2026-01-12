@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
@@ -70,7 +71,7 @@ func EncryptPQ(entropy io.Reader,
 
 	// Encrypt the plaintext (consent data) using a random AES key
 	recipientIDHash := getAllRecipientIDHashFromKeys(publicKeys)
-	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
+	contextHash := context.ContextHash(chainId, *contractAddress, consentNumber)
 
 	cipherText, aesKey, nonce, err := symmetric.PulseSealWithNewKey(entropy, plaintext, purpose, PQDataCipherSuite, recipientIDHash, contextHash)
 	if err != nil {
@@ -181,7 +182,7 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 	chainId int32,
 	consentNumber int32,
 ) ([]byte, error) {
-	contextHash := textformat.ContextHash(chainId, *contractAddress, consentNumber)
+	contextHash := context.ContextHash(chainId, *contractAddress, consentNumber)
 
 	// Scan the encryptionResult for my public key fingerprint, and get the shared secret.
 	myKeyFingerprint := getPubKeyFingerprint(myPrivateKey.Public().(*kyberKEM.PublicKey))

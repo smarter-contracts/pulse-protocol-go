@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 )
@@ -119,7 +120,7 @@ func TestEncrypt_Values(t *testing.T) {
 	// Alice encrypts to Bob -- if the shared secrets are correct above, it'll work the other way around too.
 	// Check AES EncryptionKey generation, post HKDF
 	addr := helperContractAddress()
-	contextHash := textformat.ContextHash(0x01, *addr, 0)
+	contextHash := context.ContextHash(0x01, *addr, 0)
 	transcriptHash := generateTranscriptHash(textformat.FormatHex(alicePub.SerializeCompressed()),
 		textformat.FormatHex(bobPub.SerializeCompressed()))
 

@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 )
 
 /*
@@ -313,7 +313,7 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 
 	// Calculate expected intermediate values
 	recipientIDHash := getAllRecipientIDHashFromKeys([]*kyberKEM.PublicKey{bobPublic})
-	contextHash := textformat.ContextHash(chainId, contractAddress, consentNumber)
+	contextHash := context.ContextHash(chainId, contractAddress, consentNumber)
 
 	// For dataAESKey and nonce, we need to know how they are generated in PulseSealWithNewKey
 	// PulseSealWithNewKey(entropy, ...) calls randutil.Bytes(entropy, 32) then randutil.Bytes(entropy, 12)
