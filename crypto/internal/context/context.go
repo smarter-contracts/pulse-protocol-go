@@ -3,7 +3,7 @@ package context
 import (
 	"fmt"
 
-	"golang.org/x/crypto/sha3"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 )
 
 // ContextString builds a human-readable string representing the encryption context.
@@ -38,7 +38,5 @@ func ContextHash(chainId int32,
 	contractAddress string,
 	consentNumber int32,
 ) []byte {
-
-	hash := sha3.NewLegacyKeccak256()
-	return hash.Sum([]byte(ContextString(chainId, contractAddress, consentNumber)))
+	return hash.PulseHashString(ContextString(chainId, contractAddress, consentNumber))
 }

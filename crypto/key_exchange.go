@@ -8,11 +8,11 @@ import (
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
-	"golang.org/x/crypto/sha3"
 )
 
 //TODO: Update known values testpack
@@ -176,7 +176,5 @@ func generateTranscriptHash(key1 string, key2 string) []byte {
 	slices.Sort(keys[:])
 
 	transcriptString := fmt.Sprintf("|pulse|group|v1|%s|%s|%s|", keys[0], keys[1], ECDHCipherSuite)
-	hash := sha3.NewLegacyKeccak256()
-	hash.Write([]byte(transcriptString))
-	return hash.Sum(nil)
+	return hash.PulseHashString(transcriptString)
 }

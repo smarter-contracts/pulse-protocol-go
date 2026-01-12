@@ -8,12 +8,11 @@ import (
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
-
-	"golang.org/x/crypto/sha3"
 )
 
 //TODO: Update Known values post HKDF completion
@@ -145,8 +144,7 @@ func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []b
 	}
 
 	// Encrypt our data key using the derived AES key/nonce
-	hash := sha3.NewLegacyKeccak256()
-	transcriptHash := hash.Sum(encapsulatedSecret)
+	transcriptHash := hash.PulseHashBytes(encapsulatedSecret)
 	encryptedKey, err := symmetric.PulseSeal(dataAESKey, keyAESKey, keyNonce, purpose, PQKeyCipherSuite, fingerPrint[:], contextHash, transcriptHash)
 	if err != nil {
 		return nil, err
@@ -212,8 +210,7 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 	}
 
 	// First AES Open -- Get the internal AES Key
-	tHash := sha3.NewLegacyKeccak256()
-	transcriptHash := tHash.Sum(k.EncapsulatedKeyKey)
+	transcriptHash := hash.PulseHashBytes(k.EncapsulatedKeyKey)
 	dataAESKey, err := symmetric.PulseOpen(k.EncapsulatedDataKey, keyAESKey, keyNonce, purpose, PQKeyCipherSuite, k.KeyFingerPrint[:], contextHash, transcriptHash)
 	defer wipe.SliceWipe(dataAESKey)
 	if err != nil {
@@ -227,9 +224,8 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 
 	// Now unseal the consent data
 	recipientIdHash := getAllRecipientIDHashFromFingerPrints(fingerPrints)
-	nHash := sha3.NewLegacyKeccak256()
-	dataTranscript := nHash.Sum(dataNonce)
-	plainText, err := symmetric.PulseOpen(encryptionResult.SealedData, dataKey, dataNonce, purpose, PQDataCipherSuite, recipientIdHash, contextHash, dataTranscript)
+	dataTranscriptHash := hash.PulseHashBytes(dataNonce)
+	plainText, err := symmetric.PulseOpen(encryptionResult.SealedData, dataKey, dataNonce, purpose, PQDataCipherSuite, recipientIdHash, contextHash, dataTranscriptHash)
 	if err != nil {
 		return nil, errors.New("Failed to open encrypted data: " + err.Error())
 	}
@@ -247,11 +243,9 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 // Returns:
 //   - A 32-byte hash (fingerprint) of the public key.
 func getPubKeyFingerprint(pk *kyberKEM.PublicKey) [32]byte {
-	hash := sha3.NewLegacyKeccak256()
 	buf := make([]byte, kyberKEM.PublicKeySize)
 	pk.Pack(buf)
-	hash.Write(buf)
-	return [32]byte(hash.Sum(nil))
+	return [32]byte(hash.PulseHashBytes(buf))
 }
 
 // getAllRecipientIDHashFromKeys computes a single hash representing all recipients.
@@ -289,7 +283,5 @@ func getAllRecipientIDHashFromFingerPrints(fingerPrints []string) []byte {
 		output.WriteString("|")
 	}
 
-	hash := sha3.NewLegacyKeccak256()
-	hash.Write(output.Bytes())
-	return hash.Sum(nil)
+	return hash.PulseHashBytes(output.Bytes())
 }

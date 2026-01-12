@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
-	"golang.org/x/crypto/sha3"
 )
 
 // This file contains cryptographic functions for symmetric encryption used in the Pulse Protocol.
@@ -127,8 +127,7 @@ func PulseSealWithNewKey(
 	if err != nil {
 		return nil, nil, nil, errors.New("failed to generate AES256 nonce: " + err.Error())
 	}
-	hash := sha3.NewLegacyKeccak256()
-	transcriptHash := hash.Sum(nonce)
+	transcriptHash := hash.PulseHashBytes(nonce)
 	ciphertext, err := PulseSeal(plaintext, aesKey, nonce, purpose, cipherSuite, recipientHash, contextHash, transcriptHash)
 	if err != nil {
 		return nil, nil, nil, err

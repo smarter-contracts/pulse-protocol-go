@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
-	"golang.org/x/crypto/sha3"
 )
 
 /*
@@ -88,8 +88,7 @@ func TestPulseSealWithNewKey_RoundTrip(t *testing.T) {
 	}
 
 	// PulseSealWithNewKey uses Keccak256(nonce) as transcriptHash
-	hash := sha3.NewLegacyKeccak256()
-	transcriptHash := hash.Sum(nonce)
+	transcriptHash := hash.PulseHashBytes(nonce)
 
 	decrypted, err := PulseOpen(ciphertext, key, nonce, purpose, suite, recipient, context, transcriptHash)
 	if err != nil {

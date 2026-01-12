@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
@@ -141,8 +142,7 @@ func createSalt(
 	transcriptHash []byte,
 ) []byte {
 	saltString := fmt.Sprintf("pulse|kdf|v1|salt|%s|%s", exchangeAlgo, textformat.FormatHex(transcriptHash))
-	outputHash := sha3.NewLegacyKeccak256()
-	return outputHash.Sum([]byte(saltString))
+	return hash.PulseHashString(saltString)
 }
 
 // createInfo constructs the info parameter for the HKDF Expand step.
@@ -167,10 +167,10 @@ func createInfo(purpose string,
 	if isNonce {
 		keyOrNonce = "nonce"
 	}
-	contextHash := sha3.NewLegacyKeccak256().Sum(context)
+	contextHash := hash.PulseHashBytes(context)
 	output := bytes.Buffer{}
 	output.WriteString(fmt.Sprintf("pulse|kdf|v1|%s%s|%s|rid=%s|ctx=", purpose, keyOrNonce, suite, textformat.FormatHex(recipientID)))
-	output.WriteString(textformat.FormatHex(contextHash[:]))
+	output.WriteString(textformat.FormatHex(contextHash))
 
 	return output.Bytes()
 }

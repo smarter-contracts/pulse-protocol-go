@@ -332,7 +332,7 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 		t.Errorf("recipientIDHash mismatch: got %x, want %s", recipientIDHash, expectedRecipientIDHash)
 	}
 
-	expectedContextHash := "7c70756c73657c6374787c76317c636861696e3d317c636f6e74726163743d3078303130323033303430353036303730383039306130623063306430653066313031313132313331347c636f6e73656e744e756d6265723d30c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+	expectedContextHash := "6d7aace2b827d9377fc9bfb261f50b2ab4dbf041500a2ac837d8dcba19e54aea"
 	if hex.EncodeToString(contextHash) != expectedContextHash {
 		t.Errorf("contextHash mismatch: got %x, want %s", contextHash, expectedContextHash)
 	}
@@ -347,7 +347,7 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 		t.Errorf("nonce mismatch: got %x, want %s", nonceGenerated, expectedNonce)
 	}
 
-	expectedSealedData := "bed22c4e28401f0b743a2555e29abfc7f2ff4e0212ddf02f4bb6"
+	expectedSealedData := "bed22c4e28401f0b743ad17335dddb6de2eee91bbbbcbd1f1d01"
 	if hex.EncodeToString(result.SealedData) != expectedSealedData {
 		t.Errorf("SealedData mismatch: got %x, want %s", result.SealedData, expectedSealedData)
 	}
@@ -362,7 +362,7 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 		t.Errorf("EncapsulatedKeyKey mismatch: got %x, want %s", result.Keys[0].EncapsulatedKeyKey, expectedEncapsulatedKey)
 	}
 
-	expectedEncapsulatedDataKey := "007ff672f889559e1af7b3b2b73c8ce602fd1d97d7262e261585bf4a139d1027bb1ff69026308bf46a85112f1d0e5d54548a9bcde88ed19468868242"
+	expectedEncapsulatedDataKey := "da31544a31b2a05597ae575831bfa5e33b737b53a39b5d57121b965360b30c0d28776b10ae9151df9e3d8462993dec856ffa186d6734651eb0b601b0"
 	if hex.EncodeToString(result.Keys[0].EncapsulatedDataKey) != expectedEncapsulatedDataKey {
 		t.Errorf("EncapsulatedDataKey mismatch: got %x, want %s", result.Keys[0].EncapsulatedDataKey, expectedEncapsulatedDataKey)
 	}
