@@ -90,8 +90,8 @@ func TestEncrypt_Values(t *testing.T) {
 	alicePubExpected := mustHexDecode("036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2")
 	bobPubExpected := mustHexDecode("03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc")
 	sharedSecretExpected := mustHexDecode("3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e")
-	aesKeyExpected := mustHexDecode("20842b58d852d9ae50b8c13871ab40be66aa1bab88a732610bf6899335cb7a0c")
-	cipherTextExpected := mustHexDecode("5f92a03688c83bd73fda26cffb908427a32bfa2b3fcbecf1a4a940")
+	aesKeyExpected := mustHexDecode("325776659014953e53ff99f71e51b630a56c0f82886c88beb65295cac13bcb41")
+	cipherTextExpected := mustHexDecode("84c3ab0b14ac99ce18574207f9e87bf5bde6d7f9a7e7ba0c2e6211")
 
 	alicePub := alicePriv.PubKey()
 	bobPub := bobPriv.PubKey()
@@ -286,7 +286,7 @@ func TestGenerateTranscriptHash(t *testing.T) {
 	}
 
 	// Known hash for these keys (Keccak256)
-	expectedHash := mustHexDecode("879b0d62da2ce9ba60803165ca683f77ff3245828ea733fe681f53e07dfd8b9d")
+	expectedHash := mustHexDecode("1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4")
 	if !bytes.Equal(hash1, expectedHash) {
 		t.Errorf("generateTranscriptHash mismatch: got %x, want %x", hash1, expectedHash)
 	}

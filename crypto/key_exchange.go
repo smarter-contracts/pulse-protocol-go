@@ -174,8 +174,8 @@ func generateTranscriptHash(key1 string, key2 string) []byte {
 	keys := [2]string{key1, key2}
 	slices.Sort(keys[:])
 
-	recipientString := fmt.Sprintf("|pulse|group|v1|%s|%s|%s", keys[0], keys[1], ECDHCipherSuite)
+	transcriptString := fmt.Sprintf("|pulse|group|v1|%s|%s|%s|", keys[0], keys[1], ECDHCipherSuite)
 	hash := sha3.NewLegacyKeccak256()
-	hash.Write([]byte(recipientString))
+	hash.Write([]byte(transcriptString))
 	return hash.Sum(nil)
 }
