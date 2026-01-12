@@ -43,13 +43,13 @@ func helperContractAddress() *string {
 		b[i] = byte(i + 1)
 	}
 	// Manually format to avoid bringing in hex for a tiny helper
-	hex := func(x byte) string {
+	hexConvert := func(x byte) string {
 		const hexdigits = "0123456789abcdef"
 		return string([]byte{hexdigits[x>>4], hexdigits[x&0x0f]})
 	}
 	s := "0x"
 	for i := 0; i < len(b); i++ {
-		s += hex(b[i])
+		s += hexConvert(b[i])
 	}
 	return &s
 }

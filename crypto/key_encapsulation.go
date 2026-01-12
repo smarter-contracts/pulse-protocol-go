@@ -293,18 +293,3 @@ func getAllRecipientIDHashFromFingerPrints(fingerPrints []string) []byte {
 	hash.Write(output.Bytes())
 	return hash.Sum(nil)
 }
-
-// buildContext creates a binary representation of the encryption context.
-//
-// Arguments:
-//   - chainId: The blockchain network identifier.
-//   - contractAddress: The Ethereum-style hex address of the contract.
-//
-// Returns:
-//   - A byte slice containing the concatenated chainId and contractAddress.
-func buildContext(chainId byte, contractAddress string) []byte {
-	contextBuffer := bytes.Buffer{}
-	contextBuffer.WriteByte(chainId)
-	contextBuffer.WriteString(contractAddress)
-	return contextBuffer.Bytes()
-}
