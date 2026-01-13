@@ -2,11 +2,103 @@ package symmetric
 
 import (
 	"bytes"
+	"encoding/hex"
 	"testing"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 )
+
+func mustHexDecode(h string) []byte {
+	b, err := hex.DecodeString(h)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func TestSymmetric_KnownValues(t *testing.T) {
+	tests := []struct {
+		name           string
+		plaintext      []byte
+		aesKey         []byte
+		nonce          []byte
+		purpose        PulseSymmetricPurpose
+		cipherSuite    string
+		recipientHash  []byte
+		contextHash    []byte
+		transcriptHash []byte
+		expectedAAD    string
+		expectedCipher []byte
+	}{
+		{
+			name:           "Key Exchange Known Values",
+			plaintext:      []byte("This is the consent record"),
+			aesKey:         mustHexDecode("cee5d3c958a8be9fdea4e4dca39cf4bf52ca824a1f71d026319e350a6b0ef67a"),
+			nonce:          mustHexDecode("3298b5b0da18ab57667cf999"),
+			purpose:        PulseSymmetricConsent,
+			cipherSuite:    "ecdh-secp256k1+hkdf-keccak256+aes-gcm-256",
+			recipientHash:  mustHexDecode(""),
+			contextHash:    mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
+			transcriptHash: mustHexDecode("1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4"),
+			expectedAAD:    "|pulse|consent|v1|ecdh-secp256k1+hkdf-keccak256+aes-gcm-256|rid=|ctx=7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3|th=1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4|nonce=3298b5b0da18ab57667cf999|",
+			expectedCipher: mustHexDecode("36dae43a0870c0f96bea88d074d8136e0cda62a5d5a67bc0bd8ccf2eee27618951ce1cb2391d2688da0a"),
+		},
+		{
+			name:           "Symmetric Known Values 1",
+			plaintext:      []byte("pulse test"),
+			aesKey:         mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
+			nonce:          mustHexDecode("000102030405060708090a0b"),
+			purpose:        PulseSymmetricConsent,
+			cipherSuite:    "aes-gcm-256",
+			recipientHash:  mustHexDecode("0102030405060708090a0b0c0d0e0f1011121314"),
+			contextHash:    mustHexDecode("212223"), // This isn't really a hash but we use it for testing
+			transcriptHash: mustHexDecode("313233"),
+			expectedAAD:    "|pulse|consent|v1|aes-gcm-256|rid=0102030405060708090a0b0c0d0e0f1011121314|ctx=212223|th=313233|nonce=000102030405060708090a0b|",
+			expectedCipher: mustHexDecode("3777ba68a0c5b67efe35cfa9a692dd1bd440590a55ab87a1ca4f"),
+		},
+		{
+			name:           "Symmetric Known Values 2 (KeyWrap)",
+			plaintext:      mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f11223344556677889900aabbccddeeff"), // AES Key + Nonce
+			aesKey:         mustHexDecode("4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60"),
+			nonce:          mustHexDecode("1112131415161718191a1b1c"),
+			purpose:        PulseSymmetricKeyWrap,
+			cipherSuite:    "kyber768+hkdf-keccak256+aes-gcm-256",
+			recipientHash:  mustHexDecode("70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde"),
+			contextHash:    mustHexDecode("6d7aace2b827d9377fc9bfb261f50b2ab4dbf041500a2ac837d8dcba19e54aea"),
+			transcriptHash: mustHexDecode("1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4"),
+			expectedAAD:    "|pulse|keywrap|v1|kyber768+hkdf-keccak256+aes-gcm-256|rid=70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde|ctx=6d7aace2b827d9377fc9bfb261f50b2ab4dbf041500a2ac837d8dcba19e54aea|th=1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4|nonce=1112131415161718191a1b1c|",
+			expectedCipher: mustHexDecode("f6058785d4fea6790470dfce54417e1cef02f62ef7351ee5fea187865ad407a864c428eb25e17f764f0be39541f2550a1fb69b7ccd6cee56bedf691d0cdc3ca8"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			aad := buildAAD(tt.purpose, tt.cipherSuite, tt.recipientHash, tt.nonce, tt.contextHash, tt.transcriptHash)
+			if string(aad) != tt.expectedAAD {
+				t.Errorf("AAD mismatch:\nGot:  %s\nWant: %s", string(aad), tt.expectedAAD)
+			}
+
+			ciphertext, err := PulseSeal(tt.plaintext, tt.aesKey, tt.nonce, tt.purpose, tt.cipherSuite, tt.recipientHash, tt.contextHash, tt.transcriptHash)
+			if err != nil {
+				t.Fatalf("PulseSeal failed: %v", err)
+			}
+
+			if !bytes.Equal(ciphertext, tt.expectedCipher) {
+				t.Errorf("Ciphertext mismatch:\nGot:  %x\nWant: %x", ciphertext, tt.expectedCipher)
+			}
+
+			decrypted, err := PulseOpen(ciphertext, tt.aesKey, tt.nonce, tt.purpose, tt.cipherSuite, tt.recipientHash, tt.contextHash, tt.transcriptHash)
+			if err != nil {
+				t.Fatalf("PulseOpen failed: %v", err)
+			}
+
+			if !bytes.Equal(decrypted, tt.plaintext) {
+				t.Errorf("Decrypted plaintext mismatch:\nGot:  %s\nWant: %s", string(decrypted), string(tt.plaintext))
+			}
+		})
+	}
+}
 
 /*
  * Test values for Symmetric encryption.

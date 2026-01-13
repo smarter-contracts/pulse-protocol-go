@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	cbor "github.com/fxamacker/cbor/v2"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
@@ -27,6 +28,15 @@ type PulseECEncryptionResult struct {
 	SealedData []byte   `json:"sealedData" cbor:"0,keyasint"` // Encrypted data
 	Key1       []byte   `json:"key1"       cbor:"1,keyasint"` // My public key, 33-byte compressed format
 	Key2       []byte   `json:"key2"       cbor:"2,keyasint"` // Public key of the other party, 33-byte compressed format
+}
+
+func (r *PulseECEncryptionResult) CBOR() ([]byte, error) {
+	encOpts := cbor.CanonicalEncOptions()
+	enc, err := encOpts.EncMode()
+	if err != nil {
+		return nil, err
+	}
+	return enc.Marshal(r)
 }
 
 var ECDHCipherSuite = "ecdh-secp256k1+hkdf-keccak256+aes-gcm-256"

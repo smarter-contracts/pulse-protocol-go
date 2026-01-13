@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -86,6 +87,7 @@ func mustHexDecode(h string) []byte {
 }
 
 func TestEncrypt_Values(t *testing.T) {
+	pt := []byte("This is the consent record")
 	alicePriv := mustPrivFromHex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
 	bobPriv := mustPrivFromHex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e20")
 
@@ -93,7 +95,12 @@ func TestEncrypt_Values(t *testing.T) {
 	bobPubExpected := mustHexDecode("03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc")
 	sharedSecretExpected := mustHexDecode("3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e")
 	aesKeyExpected := mustHexDecode("cee5d3c958a8be9fdea4e4dca39cf4bf52ca824a1f71d026319e350a6b0ef67a")
-	cipherTextExpected := mustHexDecode("79d1bec3da786ae5056bfad24154056cefb77350d36e22e3b28da9")
+	aesNonceExpected := mustHexDecode("3298b5b0da18ab57667cf999")
+	cipherTextExpected := mustHexDecode("36dae43a0870c0f96bea88d074d8136e0cda62a5d5a67bc0bd8ccf2eee27618951ce1cb2391d2688da0a")
+	chainId := int32(1)
+	consentNumber := int32(2)
+	expectedCBOR := "83582a36dae43a0870c0f96bea88d074d8136e0cda62a5d5a67bc0bd8ccf2eee27618951ce1cb2391d2688da0a5821036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2582103131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc"
+	expectedJSON := []byte("{\"sealedData\":\"NtrkOghwwPlr6ojQdNgTbgzaYqXVpnvAvYzPLu4nYYlRzhyyOR0miNoK\",\"key1\":\"A21sqsJIr5b2r6f5BPVQJToPPvP1qi/mg4qVshZpFGji\",\"key2\":\"AxMTQeshVN3tEuOOC84D+QaAL7EGkOwbKycwOkqfuoi8\"}")
 
 	alicePub := alicePriv.PubKey()
 	bobPub := bobPriv.PubKey()
@@ -134,15 +141,18 @@ func TestEncrypt_Values(t *testing.T) {
 		t.Fatalf("AES key mismatch: expected %x, got %x", aesKeyExpected, aesKey)
 	}
 
+	if !bytes.Equal(aesNonce, aesNonceExpected) {
+		t.Fatalf("Nonce mismatch: expected %x, got %x", aesNonceExpected, aesNonce)
+	}
+
 	if len(aesNonce) != symmetric.AESGCMNonceSize {
 		t.Fatalf("AES nonce size mismatch: expected %d, got %d", symmetric.AESGCMNonceSize, len(aesNonce))
 	}
 
 	// Finally, check the ciphertext post encryption
-	pt := []byte("hello pulse")
 	// addr already defined above
 
-	result, err := EncryptECDH(pt, addr, alicePriv, bobPub, symmetric.PulseSymmetricConsent, 0x01, 0)
+	result, err := EncryptECDH(pt, addr, alicePriv, bobPub, symmetric.PulseSymmetricConsent, chainId, consentNumber)
 	if err != nil {
 		t.Fatalf("EncryptECDH() failed: %v", err)
 	}
@@ -158,7 +168,23 @@ func TestEncrypt_Values(t *testing.T) {
 		t.Fatalf("result Key2 mismatch: got %x want %x", result.Key2, bobPub.SerializeCompressed())
 	}
 
-	decrypted, err := DecryptEC(result, addr, bobPriv, symmetric.PulseSymmetricConsent, 0x01, 0)
+	cbor, err := result.CBOR()
+	if err != nil {
+		t.Fatalf("failed to CBOR marshal result: %v", err)
+	}
+	if strings.Compare(textformat.FormatHex(cbor), expectedCBOR) != 0 {
+		t.Fatalf("output CBOR mismatch: got %s want %s", textformat.FormatHex(cbor), expectedCBOR)
+	}
+
+	jsonString, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("failed to JSON marshal result: %v", err)
+	}
+	if !bytes.Equal(jsonString, expectedJSON) {
+		t.Fatalf("output JSON mismatch: got %s want %s", jsonString, expectedJSON)
+	}
+
+	decrypted, err := DecryptEC(result, addr, bobPriv, symmetric.PulseSymmetricConsent, chainId, consentNumber)
 	if err != nil {
 		t.Fatalf("DecryptEC() failed: %v", err)
 	}

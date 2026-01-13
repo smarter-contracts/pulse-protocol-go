@@ -84,7 +84,7 @@ func buildAAD(purpose PulseSymmetricPurpose,
 	contextHash []byte,
 	transcriptHash []byte,
 ) []byte {
-	aad := fmt.Sprintf("pulse|%s|v1|%s|rid=%s|ctx=%s|th=%s|nonce=%s",
+	aad := fmt.Sprintf("|pulse|%s|v1|%s|rid=%s|ctx=%s|th=%s|nonce=%s|",
 		purpose.String(),
 		cipherSuite,
 		textformat.FormatHex(recipientHash),
