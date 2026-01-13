@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -91,8 +92,8 @@ func TestEncrypt_Values(t *testing.T) {
 	alicePubExpected := mustHexDecode("036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2")
 	bobPubExpected := mustHexDecode("03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc")
 	sharedSecretExpected := mustHexDecode("3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e")
-	aesKeyExpected := mustHexDecode("4187e1830b7df747a47b103bf9803fe927c47e20497feaab2710fcd697e1eb68")
-	cipherTextExpected := mustHexDecode("3beb883c86615d2faab488f6ff1b67842b1ad10760e0e9cd6ff9a8")
+	aesKeyExpected := mustHexDecode("cee5d3c958a8be9fdea4e4dca39cf4bf52ca824a1f71d026319e350a6b0ef67a")
+	cipherTextExpected := mustHexDecode("79d1bec3da786ae5056bfad24154056cefb77350d36e22e3b28da9")
 
 	alicePub := alicePriv.PubKey()
 	bobPub := bobPriv.PubKey()
@@ -120,7 +121,7 @@ func TestEncrypt_Values(t *testing.T) {
 	// Alice encrypts to Bob -- if the shared secrets are correct above, it'll work the other way around too.
 	// Check AES EncryptionKey generation, post HKDF
 	addr := helperContractAddress()
-	contextHash := context.ContextHash(0x01, *addr, 0)
+	contextHash := context.ContextHash(0x01, *addr, 2)
 	transcriptHash := generateTranscriptHash(textformat.FormatHex(alicePub.SerializeCompressed()),
 		textformat.FormatHex(bobPub.SerializeCompressed()))
 
@@ -277,7 +278,11 @@ func TestGenerateTranscriptHash(t *testing.T) {
 	key2 := "03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc"
 
 	// keys sorted: key2, key1
-	// recipientString := "|pulse|group|v1|03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc|036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2|"
+	recipientString := "|pulse|group|v1|03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc|036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2|ecdh-secp256k1+hkdf-keccak256+aes-gcm-256|"
+	tString := generateTranscriptString(key1, key2)
+	if strings.Compare(tString, recipientString) != 0 {
+		t.Errorf("generateTranscriptString is wrong: got %s, expected %s", tString, recipientString)
+	}
 
 	hash1 := generateTranscriptHash(key1, key2)
 	hash2 := generateTranscriptHash(key2, key1)

@@ -2,150 +2,101 @@ package hkdf
 
 import (
 	"bytes"
+	"encoding/hex"
 	"testing"
-
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 )
 
-func TestPulseHKDFKyber(t *testing.T) {
-	sharedSecret := make([]byte, 32)
-	transcript := []byte("test transcript")
-	recipientId := make([]byte, 20)
-	context := []byte("test context")
-
-	key, nonce, err := PulseHKDFKyber(sharedSecret, transcript, recipientId, context)
+func mustHexDecode(h string) []byte {
+	b, err := hex.DecodeString(h)
 	if err != nil {
-		t.Fatalf("PulseHKDFKyber failed: %v", err)
+		panic(err)
 	}
-
-	if len(key) != symmetric.AESGCMKeySize {
-		t.Errorf("Expected key length %d, got %d", symmetric.AESGCMKeySize, len(key))
-	}
-
-	if len(nonce) != symmetric.AESGCMNonceSize {
-		t.Errorf("Expected nonce length %d, got %d", symmetric.AESGCMNonceSize, len(nonce))
-	}
-
-	// Test consistency
-	key2, nonce2, _ := PulseHKDFKyber(sharedSecret, transcript, recipientId, context)
-	if !bytes.Equal(key, key2) {
-		t.Error("Deterministic output failed for key")
-	}
-	if !bytes.Equal(nonce, nonce2) {
-		t.Error("Deterministic output failed for nonce")
-	}
-
-	// Test difference with different shared secret
-	sharedSecret2 := make([]byte, 32)
-	sharedSecret2[0] = 1
-	key3, _, _ := PulseHKDFKyber(sharedSecret2, transcript, recipientId, context)
-	if bytes.Equal(key, key3) {
-		t.Error("Different shared secret produced same key")
-	}
+	return b
 }
 
-func TestPulseHKDFECDH(t *testing.T) {
-	sharedSecret := make([]byte, 32)
-	transcript := []byte("test transcript")
-	recipientId := make([]byte, 20)
-	context := []byte("test context")
-
-	key, nonce, err := PulseHKDFECDH(sharedSecret, transcript, recipientId, context)
-	if err != nil {
-		t.Fatalf("PulseHKDFECDH failed: %v", err)
+func TestPulseHKDF_KnownValues(t *testing.T) {
+	tests := []struct {
+		name         string
+		mode         string // "ECDH" or "Kyber"
+		sharedSecret []byte
+		transcript   []byte
+		recipientId  []byte
+		context      []byte
+		// Expected outputs
+		expectedSaltString      string
+		expectedSalt            []byte
+		expectedPrk             []byte
+		expectedInfoStringAES   string
+		expectedInfoStringNonce string
+		expectedAESKey          []byte
+		expectedAESNonce        []byte
+	}{
+		{
+			name:         "ECDH call",
+			mode:         "ECDH",
+			sharedSecret: mustHexDecode("3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e"),
+			transcript:   mustHexDecode("1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4"),
+			recipientId:  nil,
+			context:      mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
+			// Expected values
+			expectedSaltString:      "pulse|kdf|v1|salt|secp256k1|1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4|",
+			expectedSalt:            mustHexDecode("1ec80f02e80bc5f74a6b4975477a579545067042088d26149950b288562693af"),
+			expectedPrk:             mustHexDecode("f7c1f084075cb16f0a7fa816e6dabf354af548e802585216bd7b3c3d7b5b5f69"),
+			expectedInfoStringAES:   "|pulse|kdf|v1|aead:channel:key|ecdh-secp256k1+hkdf-keccak256|rid=|ctx=4cdac3f08f1d9b30e13c4bee9d3fbbaccb1717f4467778c0c0dfbe8b41f46862|",
+			expectedInfoStringNonce: "|pulse|kdf|v1|aead:channel:nonce|ecdh-secp256k1+hkdf-keccak256|rid=|ctx=4cdac3f08f1d9b30e13c4bee9d3fbbaccb1717f4467778c0c0dfbe8b41f46862|",
+			expectedAESKey:          mustHexDecode("cee5d3c958a8be9fdea4e4dca39cf4bf52ca824a1f71d026319e350a6b0ef67a"),
+			expectedAESNonce:        mustHexDecode("3298b5b0da18ab57667cf999"),
+		},
 	}
 
-	if len(key) != symmetric.AESGCMKeySize {
-		t.Errorf("Expected key length %d, got %d", symmetric.AESGCMKeySize, len(key))
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 1. Test Salt String and Salt Value
+			parentAlgo, purpose, suite := getSettings(tt.mode)
 
-	if len(nonce) != symmetric.AESGCMNonceSize {
-		t.Errorf("Expected nonce length %d, got %d", symmetric.AESGCMNonceSize, len(nonce))
-	}
+			saltString := createSaltString(parentAlgo, tt.transcript)
+			if saltString != tt.expectedSaltString {
+				t.Errorf("saltString mismatch: got %q, want %q", saltString, tt.expectedSaltString)
+			}
+			salt := createSalt(parentAlgo, tt.transcript)
+			if !bytes.Equal(salt, tt.expectedSalt) {
+				t.Errorf("salt mismatch: got %x, want %x", salt, tt.expectedSalt)
+			}
 
-	// Test consistency
-	key2, nonce2, _ := PulseHKDFECDH(sharedSecret, transcript, recipientId, context)
-	if !bytes.Equal(key, key2) {
-		t.Error("Deterministic output failed for key")
-	}
-	if !bytes.Equal(nonce, nonce2) {
-		t.Error("Deterministic output failed for nonce")
-	}
-}
+			infoKey := createInfo(purpose, false, suite, tt.recipientId, tt.context)
+			if string(infoKey) != tt.expectedInfoStringAES {
+				t.Errorf("infoKeyString mismatch: got %q, want %q", string(infoKey), tt.expectedInfoStringAES)
+			}
 
-func TestPulseHKDFDifferentiation(t *testing.T) {
-	sharedSecret := make([]byte, 32)
-	transcript := []byte("test transcript")
-	recipientId := make([]byte, 20)
-	context := []byte("test context")
+			infoNonce := createInfo(purpose, true, suite, tt.recipientId, tt.context)
+			if string(infoNonce) != tt.expectedInfoStringNonce {
+				t.Errorf("infoNonceString mismatch: got %q, want %q", string(infoNonce), tt.expectedInfoStringNonce)
+			}
 
-	keyKyber, _, _ := PulseHKDFKyber(sharedSecret, transcript, recipientId, context)
-	keyECDH, _, _ := PulseHKDFECDH(sharedSecret, transcript, recipientId, context)
+			// 3. Test PRK, AES Key and AES Nonce
+			prk := pulseExtract(tt.sharedSecret, parentAlgo, tt.transcript)
+			if !bytes.Equal(prk, tt.expectedPrk) {
+				t.Errorf("PRK mismatch: got %x, want %x", prk, tt.expectedPrk)
+			}
 
-	if bytes.Equal(keyKyber, keyECDH) {
-		t.Error("PulseHKDFKyber and PulseHKDFECDH produced the same key for same inputs")
-	}
-}
+			var key, nonce []byte
+			var err error
+			if tt.mode == "ECDH" {
+				key, nonce, err = PulseHKDFECDH(tt.sharedSecret, tt.transcript, tt.recipientId, tt.context)
+			} else {
+				key, nonce, err = PulseHKDFKyber(tt.sharedSecret, tt.transcript, tt.recipientId, tt.context)
+			}
 
-func TestPulseHKDFNilInputs(t *testing.T) {
-	// HKDF should handle nil inputs (treat as empty) without crashing
-	key, nonce, err := PulseHKDFKyber(nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("PulseHKDFKyber failed with nil inputs: %v", err)
-	}
-	if len(key) != symmetric.AESGCMKeySize || len(nonce) != symmetric.AESGCMNonceSize {
-		t.Error("Invalid output lengths for nil inputs")
-	}
-}
+			if err != nil {
+				t.Fatalf("HKDF failed: %v", err)
+			}
 
-func TestCreateSalt(t *testing.T) {
-	algo := "kyber768"
-	transcript := []byte("transcript")
-
-	salt1 := createSalt(algo, transcript)
-	salt2 := createSalt(algo, transcript)
-
-	if !bytes.Equal(salt1, salt2) {
-		t.Error("createSalt is not deterministic")
-	}
-
-	salt3 := createSalt("secp256k1", transcript)
-	if bytes.Equal(salt1, salt3) {
-		t.Error("createSalt should differ with different algorithms")
-	}
-
-	salt4 := createSalt(algo, []byte("different transcript"))
-	if bytes.Equal(salt1, salt4) {
-		t.Error("createSalt should differ with different transcripts")
-	}
-}
-
-func TestCreateInfo(t *testing.T) {
-	purpose := "keywrap-aes"
-	suite := "kyber768+hkdf-keccak256"
-	recipientId := []byte{0x01, 0x02}
-	context := []byte("context")
-
-	infoKey := createInfo(purpose, false, suite, recipientId, context)
-	infoNonce := createInfo(purpose, true, suite, recipientId, context)
-
-	if bytes.Equal(infoKey, infoNonce) {
-		t.Error("createInfo should differ between key and nonce")
-	}
-
-	if !bytes.Contains(infoKey, []byte("key")) {
-		t.Error("infoKey should contain 'key'")
-	}
-
-	if !bytes.Contains(infoNonce, []byte("nonce")) {
-		t.Error("infoNonce should contain 'nonce'")
-	}
-
-	if !bytes.Contains(infoKey, []byte(purpose)) {
-		t.Error("info should contain purpose")
-	}
-
-	if !bytes.Contains(infoKey, []byte(suite)) {
-		t.Error("info should contain suite")
+			if !bytes.Equal(key, tt.expectedAESKey) {
+				t.Errorf("AES key mismatch: got %x, want %x", key, tt.expectedAESKey)
+			}
+			if !bytes.Equal(nonce, tt.expectedAESNonce) {
+				t.Errorf("AES nonce mismatch: got %x, want %x", nonce, tt.expectedAESNonce)
+			}
+		})
 	}
 }

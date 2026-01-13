@@ -362,7 +362,7 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 		t.Errorf("EncapsulatedKeyKey mismatch: got %x, want %s", result.Keys[0].EncapsulatedKeyKey, expectedEncapsulatedKey)
 	}
 
-	expectedEncapsulatedDataKey := "da31544a31b2a05597ae575831bfa5e33b737b53a39b5d57121b965360b30c0d28776b10ae9151df9e3d8462993dec856ffa186d6734651eb0b601b0"
+	expectedEncapsulatedDataKey := "327df03f3fe702f1d283cb54ebc5c7aa5bfdc881f120d0074dd09d3add2dc87c915f0b92159e166463f3bb743c4b5541d6429fac6070852ddd122fc7"
 	if hex.EncodeToString(result.Keys[0].EncapsulatedDataKey) != expectedEncapsulatedDataKey {
 		t.Errorf("EncapsulatedDataKey mismatch: got %x, want %s", result.Keys[0].EncapsulatedDataKey, expectedEncapsulatedDataKey)
 	}

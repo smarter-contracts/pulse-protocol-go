@@ -33,13 +33,12 @@ import (
 //   - recipientID
 //   - ctkHash
 //
-// The algorithm output is a 32-byte AES-256 key.
 // PulseHKDFKyber derives a 32-byte AES-256 key and a 12-byte nonce from a Kyber shared secret.
 // It uses the RFC 5869 HKDF algorithm with Keccak-256 as the underlying hash function.
 //
 // Arguments:
 //   - sharedSecret: The raw shared secret derived from Kyber decapsulation.
-//   - transcriptHash: A hash representing the exchange transcript for domain separation.
+//   - transcript: A byte slice representing the exchange transcript for domain separation.
 //   - recipientId: The identifier (fingerprint) of the recipient.
 //   - context: The binary context (chainId, contract address, etc.) for the encryption.
 //
@@ -48,15 +47,15 @@ import (
 //   - A 12-byte AES nonce.
 //   - An error if the derivation fails.
 func PulseHKDFKyber(sharedSecret []byte,
-	transcriptHash []byte,
+	transcript []byte,
 	recipientId []byte,
 	context []byte,
 ) ([]byte, []byte, error) {
-	parentAlgo := "kyber768"
-	purpose := "keywrap-aes"
-	suite := "kyber768+hkdf-keccak256"
+	parentAlgo, purpose, suite := getSettings("Kyber")
 
-	return pulseHKDFImp(sharedSecret, parentAlgo, transcriptHash, purpose, suite, recipientId, context)
+	// fmt.Printf("DEBUG: PulseHKDFKyber sharedSecret=%x, transcript=%x, recipientId=%x, context=%x\n", sharedSecret, transcript, recipientId, context)
+
+	return pulseHKDFImp(sharedSecret, parentAlgo, transcript, purpose, suite, recipientId, context)
 }
 
 // PulseHKDFECDH derives a 32-byte AES-256 key and a 12-byte nonce from an ECDH shared secret.
@@ -64,7 +63,7 @@ func PulseHKDFKyber(sharedSecret []byte,
 //
 // Arguments:
 //   - sharedSecret: The raw shared secret derived from ECDH (X-coordinate).
-//   - transcriptHash: A hash representing the exchange transcript for domain separation.
+//   - transcript: A byte slice representing the exchange transcript for domain separation.
 //   - recipientId: The identifier of the recipient (not used for ECDH salt but used in Info).
 //   - context: The binary context for the encryption.
 //
@@ -73,15 +72,19 @@ func PulseHKDFKyber(sharedSecret []byte,
 //   - A 12-byte AES nonce.
 //   - An error if the derivation fails.
 func PulseHKDFECDH(sharedSecret []byte,
-	transcriptHash []byte,
+	transcript []byte,
 	recipientId []byte,
 	context []byte,
 ) ([]byte, []byte, error) {
-	parentAlgo := "secp256k1"
-	purpose := "aead:channel:"
-	suite := "ecdh-secp256k1+hkdf-keccak256"
+	parentAlgo, purpose, suite := getSettings("ECDH")
+	return pulseHKDFImp(sharedSecret, parentAlgo, transcript, purpose, suite, recipientId, context)
+}
 
-	return pulseHKDFImp(sharedSecret, parentAlgo, transcriptHash, purpose, suite, recipientId, context)
+func getSettings(mode string) (string, string, string) {
+	if mode == "Kyber" {
+		return "kyber768", "keywrap-aes", "kyber768+hkdf-keccak256"
+	}
+	return "secp256k1", "aead:channel:", "ecdh-secp256k1+hkdf-keccak256"
 }
 
 // pulseHKDFImp is the internal implementation of the Pulse HKDF flow.
@@ -90,7 +93,7 @@ func PulseHKDFECDH(sharedSecret []byte,
 // Arguments:
 //   - sharedSecret: The input keying material.
 //   - parentAlgo: String identifying the exchange algorithm ("kyber768" or "secp256k1").
-//   - transcriptHash: Hash of the exchange transcript.
+//   - transcript: Byte slice of the exchange transcript.
 //   - purpose: String identifying the purpose of the key (e.g., "keywrap-aes").
 //   - suite: String identifying the full cryptographic suite.
 //   - recipientId: Binary identifier for the recipient.
@@ -100,13 +103,11 @@ func PulseHKDFECDH(sharedSecret []byte,
 //   - Derived AES key and nonce.
 func pulseHKDFImp(sharedSecret []byte,
 	parentAlgo string,
-	transcriptHash []byte,
+	transcript []byte,
 	purpose string,
 	suite string,
 	recipientId []byte,
 	context []byte) ([]byte, []byte, error) {
-
-	salt := createSalt(parentAlgo, transcriptHash)
 
 	keyInfo := createInfo(purpose, false, suite, recipientId, context)
 	nonceInfo := createInfo(purpose, true, suite, recipientId, context)
@@ -114,8 +115,9 @@ func pulseHKDFImp(sharedSecret []byte,
 	aesKey := make([]byte, symmetric.AESGCMKeySize)
 	aesNonce := make([]byte, symmetric.AESGCMNonceSize)
 
-	prk := hkdf.Extract(sha3.NewLegacyKeccak256, sharedSecret, salt)
+	prk := pulseExtract(sharedSecret, parentAlgo, transcript)
 	defer wipe.SliceWipe(prk)
+
 	keyReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, keyInfo)
 	nonceReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, nonceInfo)
 	if _, err := keyReader.Read(aesKey); err != nil {
@@ -128,21 +130,29 @@ func pulseHKDFImp(sharedSecret []byte,
 	return aesKey, aesNonce, nil
 }
 
+func pulseExtract(sharedSecret []byte, parentAlgo string, transcript []byte) []byte {
+	salt := createSalt(parentAlgo, transcript)
+	return hkdf.Extract(sha3.NewLegacyKeccak256, sharedSecret, salt)
+}
+
 // createSalt constructs the salt for the HKDF Extract step.
 // The salt is a Keccak-256 hash of a formatted string including the algorithm and transcript.
 //
 // Arguments:
 //   - exchangeAlgo: The algorithm name.
-//   - transcriptHash: The hash of the transcript.
+//   - transcript: The transcript bytes.
 //
 // Returns:
 //   - A 32-byte salt.
 func createSalt(
 	exchangeAlgo string,
-	transcriptHash []byte,
+	transcript []byte,
 ) []byte {
-	saltString := fmt.Sprintf("pulse|kdf|v1|salt|%s|%s", exchangeAlgo, textformat.FormatHex(transcriptHash))
-	return hash.PulseHashString(saltString)
+	return hash.PulseHashString(createSaltString(exchangeAlgo, transcript))
+}
+
+func createSaltString(exchangeAlgo string, transcript []byte) string {
+	return fmt.Sprintf("pulse|kdf|v1|salt|%s|%s|", exchangeAlgo, textformat.FormatHex(transcript))
 }
 
 // createInfo constructs the info parameter for the HKDF Expand step.
@@ -169,8 +179,9 @@ func createInfo(purpose string,
 	}
 	contextHash := hash.PulseHashBytes(context)
 	output := bytes.Buffer{}
-	output.WriteString(fmt.Sprintf("pulse|kdf|v1|%s%s|%s|rid=%s|ctx=", purpose, keyOrNonce, suite, textformat.FormatHex(recipientID)))
+	output.WriteString(fmt.Sprintf("|pulse|kdf|v1|%s%s|%s|rid=%s|ctx=", purpose, keyOrNonce, suite, textformat.FormatHex(recipientID)))
 	output.WriteString(textformat.FormatHex(contextHash))
+	output.WriteByte('|')
 
 	return output.Bytes()
 }

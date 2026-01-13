@@ -159,7 +159,15 @@ func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey, transcriptHash [
 		return nil, nil, errors.New("must provide both private and public keys to derive a shared secret")
 	}
 	sharedSecret := secp.GenerateSharedSecret(me, other)
-	return hkdf.PulseHKDFECDH(sharedSecret, transcriptHash, nil, contextHash)
+	key, nonce, err := hkdf.PulseHKDFECDH(sharedSecret, transcriptHash, nil, contextHash)
+	return key, nonce, err
+}
+
+func generateTranscriptString(key1 string, key2 string) string {
+	keys := [2]string{key1, key2}
+	slices.Sort(keys[:])
+
+	return fmt.Sprintf("|pulse|group|v1|%s|%s|%s|", keys[0], keys[1], ECDHCipherSuite)
 }
 
 // generateTranscriptHash creates a deterministic Keccak-256 hash of the involved public keys.
@@ -172,9 +180,6 @@ func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey, transcriptHash [
 // Returns:
 //   - A 32-byte Keccak-256 hash of the sorted public keys and protocol identifier.
 func generateTranscriptHash(key1 string, key2 string) []byte {
-	keys := [2]string{key1, key2}
-	slices.Sort(keys[:])
-
-	transcriptString := fmt.Sprintf("|pulse|group|v1|%s|%s|%s|", keys[0], keys[1], ECDHCipherSuite)
+	transcriptString := generateTranscriptString(key1, key2)
 	return hash.PulseHashString(transcriptString)
 }

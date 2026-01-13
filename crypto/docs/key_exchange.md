@@ -188,3 +188,47 @@ aad := SPRINTF("pulse|%s|v1|ecdh-secp256k1+hkdf-keccak256+aes-gcm-256|rid=|ctx=%
 plaintext := AES_OPEN(encryptedData.SealedData, aesKey, aesNonce, aad)
 
 ```
+## Known Values for Testing
+
+We provide a single set of known values for testing both Encryption and Decryption, as many of the values between
+the two algorithms are the same. 
+
+Binary values are presented in hexadecimal format, so they can be easily viewed here and pasted into test code.
+
+Strings are written inside double quotes: "string value"
+
+### External Input Values
+
+| Name               | Comment                                                                    | Value                                                            |
+|--------------------|----------------------------------------------------------------------------|------------------------------------------------------------------|
+| PrivateKey (Alice) | Private key for first participant                                          | 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 
+| PrivateKey (Bob)   | Private key for second participant                                         | 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e20 
+| ChainId            | Chain number                                                               | 1 (0x00000001)                                                   |
+| SmartContractAddress | Address of the smart contract, as a string                                 | "0x0102030405060708091011121314"                                  |
+| ConsentNumber       | Unique number (for these participants) assigned to the consent transaction | 2                                                                |
+| Purpose             | Purpose of the consent transaction                                         | 1 (consent)                                                      |
+| Plaintext           | Consent record to be encrypted                                             | "This is the consent record"                                     |
+
+### Derived Values
+
+| Name                    | Calculation                                               | Value                                                                                                                                                                                                     |
+|-------------------------|-----------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| publicKeyAlice          | PUBKEY(PrivateKeyAlice)                                   | 036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2                                                                                                                                        |
+| publicKeyBob            | PUBKEY(PrivateKeyBob)                                     | 03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc                                                                                                                                        |
+| contextString           | SPRINTF(contextFormat, values... )                        | "\|pulse\|ctx\|v1\|chain=1\|contract=0x0102030405060708090a0b0c0d0e0f1011121314\|consentNumber=2"                                                                                                         |   
+| contextHash             | H(contextString)                                          | 7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3                                                                                                                                          |
+| keys                    | [ publicKeyAlice, publicKeyBob ] (order not important)    | [ "036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e", "03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc" ]                                                             |                                                         |
+| transcriptString        | SPRINTF(transcriptFormat, keys, suite )                   | "\|pulse\|group\|v1\|03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc\|036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2\|ecdh-secp256k1+hkdf-keccak256+aes-gcm-256\|" |
+| transcriptHash          | H(transcriptString)                                       | 1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4                                                                                                                                          |
+| sharedSecret            | ECDH(alicePrivate,BobPublic) OR ECDH(bobPrivate, AlicePublic) | 3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e                                                                                                                                          |
+| saltString              | SPRINTF(saltformat, args..)                               | "pulse\|kdf\|v1\|salt\|secp256k1\|1e3896ba915877689883ed502ee8d3a2629bdf8ddbc03d1a441cbbe7af335fa4\|"                                                                                                     |
+| salt                    | H(saltString)                                             | 1ec80f02e80bc5f74a6b4975477a579545067042088d26149950b288562693af                                                                                                                                          |
+| prk                     | EXPAND(sharedSecret,salt)                                 | f7c1f084075cb16f0a7fa816e6dabf354af548e802585216bd7b3c3d7b5b5f69                                                                                                                                          |
+| infoKeyString           | SPRINTF(infoKeyFormat,args...)                            | "\|pulse\|kdf\|v1\|aead:channel:key\|ecdh-secp256k1+hkdf-keccak256\|rid=\|ctx=4cdac3f08f1d9b30e13c4bee9d3fbbaccb1717f4467778c0c0dfbe8b41f46862\|"                                                         |
+| infoNonceString         | SPRINTF(infoKeyFormat,args...)                            | "\|pulse\|kdf\|v1\|aead:channel:nonce\|ecdh-secp256k1+hkdf-keccak256\|rid=\|ctx=4cdac3f08f1d9b30e13c4bee9d3fbbaccb1717f4467778c0c0dfbe8b41f46862\|"                                                       |             
+| aesKey                  | EXPAND(prk,infoKeyString,32)                              | cee5d3c958a8be9fdea4e4dca39cf4bf52ca824a1f71d026319e350a6b0ef67a                                                                                                                                                                                                          |
+| aesNonce                | EXPAND(prk,infoNonceString,12)                            | 3298b5b0da18ab57667cf999                                                                                                                                                                                                          |
+| aad                     | SPRINTF(aadFormat, args...)                               |                                                                                                                                                                                                           |
+| encryptedData           | AES_SEAL(Plaintext,aesKey,aesNonce,aad)                   |                                                                                                                                                                                                           |
+| encrpytionResult (CBOR) |                                                           |                                                                                                                                                                                                           |
+| encrpytionResult (JSON) |                                                           |                                                                                                                                                                                                           |
