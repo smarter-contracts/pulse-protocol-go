@@ -42,6 +42,13 @@ type PulsePQEncryptionResult struct {
 var PQDataCipherSuite = "rng+aes-gcm-256"
 var PQKeyCipherSuite = "kyber768+hkdf-keccak256+aes-gcm-256"
 
+func packKey(key, nonce []byte) []byte {
+	packed := make([]byte, symmetric.AESGCMKeySize+symmetric.AESGCMNonceSize)
+	copy(packed[:symmetric.AESGCMKeySize], key)
+	copy(packed[symmetric.AESGCMKeySize:], nonce)
+	return packed
+}
+
 // EncryptPQ performs post-quantum hybrid encryption for multiple recipients.
 // It generates a random AES-256 key to seal the plaintext, then encapsulates that AES key
 // for each recipient using Kyber768 (ML-KEM).
@@ -80,10 +87,8 @@ func EncryptPQ(entropy io.Reader,
 	defer wipe.SliceWipe(nonce)
 
 	// Pack Key/Nonce together for encrypting to other parties
-	dataAESKey := make([]byte, symmetric.AESGCMKeySize+symmetric.AESGCMNonceSize)
+	dataAESKey := packKey(aesKey, nonce)
 	defer wipe.SliceWipe(dataAESKey)
-	copy(dataAESKey[:symmetric.AESGCMKeySize], aesKey)
-	copy(dataAESKey[symmetric.AESGCMKeySize:], nonce)
 
 	result.SealedData = cipherText
 
@@ -257,24 +262,49 @@ func getPubKeyFingerprint(pk *kyberKEM.PublicKey) [32]byte {
 // Returns:
 //   - A byte slice containing the collective recipient identifier hash.
 func getAllRecipientIDHashFromKeys(keys []*kyberKEM.PublicKey) []byte {
+	return hash.PulseHashBytes(getAllRecipientIDStringFromKeys(keys))
+}
+
+// getAllRecipientIDHashFromKeys computes a single hash representing all recipients.
+// It first generates fingerprints for each public key, then sorts and hashes them.
+//
+// Arguments:
+//   - keys: A slice of Kyber public keys.
+//
+// Returns:
+//   - A byte slice containing the collective recipient identifier hash.
+func getAllRecipientIDHashFromFingerPrints(fingerPrints []string) []byte {
+	return hash.PulseHashBytes(getAllRecipientIDStringFromFingerPrints(fingerPrints))
+}
+
+// getAllRecipientIDStringFromKeys computes a single string representing all recipients.
+// It first generates fingerprints for each public key, then sorts and incorporates them
+// into the final string
+//
+// Arguments:
+//   - keys: A slice of Kyber public keys.
+//
+// Returns:
+//   - A byte slice containing recipient String
+func getAllRecipientIDStringFromKeys(keys []*kyberKEM.PublicKey) []byte {
 	var fingerPrints []string
 	for _, pk := range keys {
 		fingerPrint := getPubKeyFingerprint(pk)
 		fingerPrints = append(fingerPrints, textformat.FormatHex(fingerPrint[:]))
 	}
 
-	return getAllRecipientIDHashFromFingerPrints(fingerPrints)
+	return getAllRecipientIDStringFromFingerPrints(fingerPrints)
 }
 
-// getAllRecipientIDHashFromFingerPrints computes a deterministic hash for a group of recipients.
-// Fingerprints are sorted alphabetically before hashing to ensure consistent results regardless of input order.
+// getAllRecipientIDHashFromFingerPrints computes a deterministic string for a group of recipients.
+// Fingerprints are sorted alphabetically before appending to the string to ensure consistent results regardless of input order.
 //
 // Arguments:
 //   - fingerPrints: A slice of hex-encoded public key fingerprints.
 //
 // Returns:
-//   - A 32-byte Keccak-256 hash of the sorted fingerprints and group identifier.
-func getAllRecipientIDHashFromFingerPrints(fingerPrints []string) []byte {
+//   - A byte slice representing the collective recipient identifier string.
+func getAllRecipientIDStringFromFingerPrints(fingerPrints []string) []byte {
 	slices.Sort(fingerPrints)
 	output := bytes.Buffer{}
 	output.WriteString("|pulse|group|v1|")
@@ -282,6 +312,5 @@ func getAllRecipientIDHashFromFingerPrints(fingerPrints []string) []byte {
 		output.WriteString(fp)
 		output.WriteString("|")
 	}
-
-	return hash.PulseHashBytes(output.Bytes())
+	return output.Bytes()
 }
