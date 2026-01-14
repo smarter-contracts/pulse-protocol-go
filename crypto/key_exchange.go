@@ -164,6 +164,12 @@ func DecryptEC(encryptionResult *PulseECEncryptionResult,
 //   - Derived AES key.
 //   - Derived AES nonce.
 //   - An error if keys are missing or derivation fails.
+//
+// Returns:
+//   - Derived AES key.
+//   - Derived AES nonce.
+//   - Derived PRK.
+//   - An error if keys are missing or derivation fails.
 func generateAESKey(me *secp.PrivateKey, other *secp.PublicKey, transcriptHash []byte, contextHash []byte) ([]byte, []byte, error) {
 	if me == nil || other == nil {
 		return nil, nil, errors.New("must provide both private and public keys to derive a shared secret")

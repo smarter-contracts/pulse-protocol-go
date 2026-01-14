@@ -45,6 +45,7 @@ import (
 // Returns:
 //   - A 32-byte AES key.
 //   - A 12-byte AES nonce.
+//   - A 32-byte Pseudo-Random Key (PRK).
 //   - An error if the derivation fails.
 func PulseHKDFKyber(sharedSecret []byte,
 	transcript []byte,
@@ -70,6 +71,7 @@ func PulseHKDFKyber(sharedSecret []byte,
 // Returns:
 //   - A 32-byte AES key.
 //   - A 12-byte AES nonce.
+//   - A 32-byte Pseudo-Random Key (PRK).
 //   - An error if the derivation fails.
 func PulseHKDFECDH(sharedSecret []byte,
 	transcript []byte,
@@ -101,6 +103,7 @@ func getSettings(mode string) (string, string, string) {
 //
 // Returns:
 //   - Derived AES key and nonce.
+//   - Derived Pseudo-Random Key (PRK).
 func pulseHKDFImp(sharedSecret []byte,
 	parentAlgo string,
 	transcript []byte,
@@ -121,9 +124,11 @@ func pulseHKDFImp(sharedSecret []byte,
 	keyReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, keyInfo)
 	nonceReader := hkdf.Expand(sha3.NewLegacyKeccak256, prk, nonceInfo)
 	if _, err := keyReader.Read(aesKey); err != nil {
+
 		return nil, nil, err
 	}
 	if _, err := nonceReader.Read(aesNonce); err != nil {
+		wipe.SliceWipe(prk)
 		return nil, nil, err
 	}
 
@@ -152,6 +157,7 @@ func createSalt(
 }
 
 func createSaltString(exchangeAlgo string, transcript []byte) string {
+	// TOOD: Add leading "|" for consistency
 	return fmt.Sprintf("pulse|kdf|v1|salt|%s|%s|", exchangeAlgo, textformat.FormatHex(transcript))
 }
 

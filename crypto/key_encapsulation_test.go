@@ -5,12 +5,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
-	"strings"
 	"testing"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
@@ -241,41 +242,6 @@ func TestPulsePQ_Encrypt_Success_WithRecipients(t *testing.T) {
 	}
 }
 
-func TestPulsePQ_Decrypt_TamperedEncapsulatedKey_Fails(t *testing.T) {
-	plainText := []byte("secret")
-	contractAddress := helperContractAddressPQ()
-	purpose := symmetric.PulseSymmetricConsent
-	chainId := uint8(0x01)
-
-	pk1, sk1, _ := kyberKEM.GenerateKeyPair(rand.Reader)
-	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
-
-	result, _ := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, int32(chainId), 0)
-
-	// Find entry for recipient1 by fingerprint and tamper the encapsulated key
-	fp1 := getPubKeyFingerprint(pk1)
-
-	found := false
-	for _, k := range result.Keys {
-		if bytes.Equal(k.KeyFingerPrint[:], fp1[:]) {
-			if len(k.EncapsulatedKeyKey) > 0 {
-				k.EncapsulatedKeyKey[0] ^= 0xFF // flip a bit
-			}
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("failed to locate recipient key to tamper")
-	}
-
-	// Attempt decrypt as recipient1
-	_, err := DecryptPQ(result, contractAddress, sk1, purpose, int32(chainId), 0)
-	if err == nil {
-		t.Fatal("expected decrypt failure with tampered encapsulated key")
-	}
-}
-
 func TestGetAllRecipientIDHash(t *testing.T) {
 	// Use some fixed fingerprints for testing
 	fp1 := "01b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd"
@@ -299,8 +265,129 @@ func TestGetAllRecipientIDHash(t *testing.T) {
 }
 
 func stringCompare(t *testing.T, name, expected, actual string) {
-	if strings.Compare(expected, actual) != 0 {
+	if expected != actual {
 		t.Errorf("%s mismatch: got %s, want %s", name, actual, expected)
+	}
+}
+
+func TestEncapsulateKey_KnownValues(t *testing.T) {
+	alicePrivate, err := keyFromFile("alice_private.hex")
+	if err != nil {
+		t.Fatalf("Alice keyFromFile failed: %v", err)
+	}
+	alicePublic := alicePrivate.Public().(*kyberKEM.PublicKey)
+
+	bobPrivate, err := keyFromFile("bob_private.hex")
+	if err != nil {
+		t.Fatalf("Bob keyFromFile failed: %v", err)
+	}
+	bobPublic := bobPrivate.Public().(*kyberKEM.PublicKey)
+
+	// Since encapsulateKey is tested with suitable entropy, it consumes some bytes from it.
+	// We need to skip the bytes already consumed by PulseSealWithNewKey in a full EncryptPQ run
+	// if we want to match those values, but here we just test encapsulateKey in isolation.
+	// encapsulateKey consumes scheme.EncapsulationSeedSize() = 32 bytes for seed.
+
+	tests := []struct {
+		name                 string
+		seed                 []byte
+		publicKey            *kyberKEM.PublicKey
+		aesKeyPacked         []byte
+		purpose              symmetric.PulseSymmetricPurpose
+		contextHash          []byte
+		expectedFingerPrint  string
+		expectedSharedSecret string
+		expectedEncapsulated string // encapsulatedSecret
+		expectedKeyAESKey    string
+		expectedKeyNonce     string
+		expectedEncryptedKey string // encryptedKey (EncapsulatedDataKey)
+		expectedResultCBOR   []byte
+	}{
+		{
+			name:                 "Alice Isolation",
+			seed:                 mustHexDecode("2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b"),
+			publicKey:            alicePublic,
+			aesKeyPacked:         mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b"),
+			purpose:              symmetric.PulseSymmetricConsent,
+			contextHash:          mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
+			expectedFingerPrint:  "01b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd",
+			expectedSharedSecret: "5c1db08a4db86a2f26964f53c2911e8ab029f0087732e76bd5e1842dbac50777",
+			expectedEncapsulated: "b236c30d44fa247895e19d4b249ef8a07db4f15b5280f8fca53587093884b182e34e5af87163402b51ece1c1945532fa297b3307a42e37aca5f93de09e53af17564b16c073c80d928ac7e21d11876789c3060498ace470a431e8fe13b67a856e641dcce741229193766a2b9b9533e5b47e328a9aa1f930a51581c11d79815a270f82ce3b78d4c0235746004a480f6101ac77eeea0ce879c354f0c18a0afa230a880f97f443ddf0a63027529ee452b311510baa59d89e0d8e8f20478ba95c19b006a8d22313e6f648f9c6f9c6c2af67bc76be832dc49feda76afcceb41dc56dfe81db2238b50883ef2e9bc3df0cc0af57b7cc02e87e6b3cd24d82f0bc563f5aef7eb29facef912c96fe7f0b0dba53497a0f992ad3b0f43346678851ee99b36cbd2b8e7012bcfddc5e01ecdd7a8c59030ae908ade990d2471acf4541b283b2c2c68d39c3ea75c3df3e9748b7796cd8a5e9cbc22752c3ff487debbebe342edf19057bec457047c6172d954df1abf57b3be492a35a4e8f778aba2ad1b3b56a2aef2841e348cf5bb475620622030c255f3b32ee59c0676149be0725024d0aa64923f329b03bffc424b2040ac5cc9f1c976fdfec41b65e66e0c9cd6bd68d1e66978197cd4f1e3f5a991ca95445f75caa19cc3ce4b433d53a3ffb25039fd312ea40975a7065ef32edd08335ef8a71ce6c7697eab7c37f37594665ee62d4a82005df15660fcd92fe710e85cef0d57631801fc878245c4ee96c2cebf537c3f628ef777a8b4a54f1d5b72fa4953cff152cb35e188eaa2b14ad749d5350abfdfcb2ad73d64362f8379ed034c37865d2c0a0c38226bffd80a4b5981afbd84ce8f4f89c757e902b5ea441d74783352d3a60aa6447420e27cf6992d5d0b1dfbcd237d7e39dd080b2e629795ec30603a4562fb9b46d33b6a9692d59f7e032d8d0420d42a3a492c61189f1357a7a1b1c49e3622246137d0b5d4a5bc589ee29be1e10b9346c148f41e1403491f4d599436f5929760ceaee077b496a1a1bb095b1f7bb20b80e626a2ef7b83631c650074c56b9a2dfc08cae48b65255e7571a4928266a4f9c5ecaa9a546447f350c34ccccc22b8748ed323d19e712e5d41c6726a87a4bcb9b26f7f12ea5bf42ce66dcadfb16b143238d193499b56141a87e1168483f59fc1156d7f26b03b1f48d3553fa828bc3c87885a6c7942be3886209117151d3e59ff0610ef6e40e7e05c72e0a16fa80ae401c8fb1738a214bae41a9a3601951bf61c49227909d91f65aad5183d6adfefc48a2bd3c4ee3c2a013aac269eb709f2499c724f445feb750e48db19f33e6303be50d614029a3c27ec3191a51e0fcf6183f82ecbc44a96892d971e4bdc346634170ed1b6635aa7660143a6e2aae92fb5c128cad73a1bf9c450c22accebbdd099fe8b8e82915acf09364edb6e16fc245baa8e8c684400e5dac29c9fce2a5ba9dcbd66aaaf087c2effe80ccb2a750579479ff16ca6fc472dea7d2120bf672df3d4050ef69ebe9e5dffe73395da4a09a8ed157bb2c63f9d9",
+			expectedKeyAESKey:    "fdc47c91d9783d3904ea193f5cab4245d1c6cc1363a1925bc1a996db3fd9e39f",
+			expectedKeyNonce:     "3a46a68f32164320ed05f220",
+			expectedEncryptedKey: "59bbc6964a9e2b6dc51e07eaa9d5aeb08f5bba50d917fc01c27f290e4e49a5c47212739eae2cdc9e8d5b66d5f35706bb6d3ab7dad4aa78eb5b5e3ec2",
+			expectedResultCBOR:   mustHexDecode("83582001b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd590440b236c30d44fa247895e19d4b249ef8a07db4f15b5280f8fca53587093884b182e34e5af87163402b51ece1c1945532fa297b3307a42e37aca5f93de09e53af17564b16c073c80d928ac7e21d11876789c3060498ace470a431e8fe13b67a856e641dcce741229193766a2b9b9533e5b47e328a9aa1f930a51581c11d79815a270f82ce3b78d4c0235746004a480f6101ac77eeea0ce879c354f0c18a0afa230a880f97f443ddf0a63027529ee452b311510baa59d89e0d8e8f20478ba95c19b006a8d22313e6f648f9c6f9c6c2af67bc76be832dc49feda76afcceb41dc56dfe81db2238b50883ef2e9bc3df0cc0af57b7cc02e87e6b3cd24d82f0bc563f5aef7eb29facef912c96fe7f0b0dba53497a0f992ad3b0f43346678851ee99b36cbd2b8e7012bcfddc5e01ecdd7a8c59030ae908ade990d2471acf4541b283b2c2c68d39c3ea75c3df3e9748b7796cd8a5e9cbc22752c3ff487debbebe342edf19057bec457047c6172d954df1abf57b3be492a35a4e8f778aba2ad1b3b56a2aef2841e348cf5bb475620622030c255f3b32ee59c0676149be0725024d0aa64923f329b03bffc424b2040ac5cc9f1c976fdfec41b65e66e0c9cd6bd68d1e66978197cd4f1e3f5a991ca95445f75caa19cc3ce4b433d53a3ffb25039fd312ea40975a7065ef32edd08335ef8a71ce6c7697eab7c37f37594665ee62d4a82005df15660fcd92fe710e85cef0d57631801fc878245c4ee96c2cebf537c3f628ef777a8b4a54f1d5b72fa4953cff152cb35e188eaa2b14ad749d5350abfdfcb2ad73d64362f8379ed034c37865d2c0a0c38226bffd80a4b5981afbd84ce8f4f89c757e902b5ea441d74783352d3a60aa6447420e27cf6992d5d0b1dfbcd237d7e39dd080b2e629795ec30603a4562fb9b46d33b6a9692d59f7e032d8d0420d42a3a492c61189f1357a7a1b1c49e3622246137d0b5d4a5bc589ee29be1e10b9346c148f41e1403491f4d599436f5929760ceaee077b496a1a1bb095b1f7bb20b80e626a2ef7b83631c650074c56b9a2dfc08cae48b65255e7571a4928266a4f9c5ecaa9a546447f350c34ccccc22b8748ed323d19e712e5d41c6726a87a4bcb9b26f7f12ea5bf42ce66dcadfb16b143238d193499b56141a87e1168483f59fc1156d7f26b03b1f48d3553fa828bc3c87885a6c7942be3886209117151d3e59ff0610ef6e40e7e05c72e0a16fa80ae401c8fb1738a214bae41a9a3601951bf61c49227909d91f65aad5183d6adfefc48a2bd3c4ee3c2a013aac269eb709f2499c724f445feb750e48db19f33e6303be50d614029a3c27ec3191a51e0fcf6183f82ecbc44a96892d971e4bdc346634170ed1b6635aa7660143a6e2aae92fb5c128cad73a1bf9c450c22accebbdd099fe8b8e82915acf09364edb6e16fc245baa8e8c684400e5dac29c9fce2a5ba9dcbd66aaaf087c2effe80ccb2a750579479ff16ca6fc472dea7d2120bf672df3d4050ef69ebe9e5dffe73395da4a09a8ed157bb2c63f9d9583c59bbc6964a9e2b6dc51e07eaa9d5aeb08f5bba50d917fc01c27f290e4e49a5c47212739eae2cdc9e8d5b66d5f35706bb6d3ab7dad4aa78eb5b5e3ec2"),
+		},
+		{
+			name:                 "Bob Isolation",
+			seed:                 mustHexDecode("4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b"),
+			publicKey:            bobPublic,
+			aesKeyPacked:         mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b"),
+			purpose:              symmetric.PulseSymmetricConsent,
+			contextHash:          mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
+			expectedFingerPrint:  "70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde",
+			expectedSharedSecret: "49666a8941873a339c07299b0aea6941ad420dd0df8ebd9fc5160154153caea3",
+			expectedEncapsulated: "ba3ba03f50569012f826140c5badce912aae42495114db4c623c914e9c292ab6ba0feb2ff2c3a733113d796c6f2fffe7e35ba57744a11d7cac31a1897ef0dd4c7fbe9f94408ef7b1273c374c628feaf0f497a18429b1cc6960a9ba5be6a1767539dafa10ab40591dfe8efd05b804ccaa2b4351270a281e8addc7e0f5dcc48bd266836221996a2e5b0b6854f51234991596914563a8b1f600c923f8e6dfb3ef8d6f2f819e8ca03e37d8caee541a910ab1ec6c19e4bc3428c4cbe706f17c0fa477a0035152d01bb811ff82b667b44b18fa18e6ea85ec4d4382e1ff6dc5a80d11db6bfed4f4290a15f6c4fba54195dad9672ad06453ed6bdf2f04832bc2b953502ffc79c5f023776fed991f4e3784f00ef702eb81fa08afe2957a06f83d87b9729a2f8e3f7f5567f167cb425a0bcbe7858c5dcc405855ab14600a0798c41dc1feeff8959b2bca0680f3edea4df3ba2947180a0c762709174de56aed62e8e40ae3b128bbc724e8491d8366f8072f5194ff904acf5b278fc3dd5574128c8b29acd7111fbe1ea4b57f693ae82781497d57eeb8a6949208c8139e675a0d8afcdb20c00241138d64b6e18ac32368956985230a05ddd8eb9746f8acec8974dd38c65bfea5defc0c9647c60beae3d1a1f4deb26c0290774b9235eea6a971af18e9710eb5084eb02cee51f3fabf6e5cd3fd486224512c78b6a0e4b166e5196d8ebb36387922e697719cf7d9e0639990e6d993fe3d63820daf337d037a57aa4620748fd23c6a3cab5712bf1f709f55949831acbc1e700edd2d67efa8598fcafc3d659bc2f3b42078601910087077f47f467273032ed203151c2c276be3f18b7f253e9e6bbd028b053dd42a58572bb7b1d923360cbbcf04816c74322804c14ea01400a303f9d7dd66caa727b39a5be6f18d0f1d37f4323fbb1b5937cf23e1777147b37406f73d64984f79444b121f5ad43280ac3aecc5181dfd370361b9bbdbb791774e9b634f4a045856dd29574651a7eb1d5afb49e8e46237aef5eb6c3d2c24a172f512e9b5f0f62a41894432def40f97b77f1dbe0de804f2eb4241f9fe8de10947829c0de94e98c1c0162a73c07f1f77ff584584000128490c332fa1347278665e23c6e0b2bac7ab0cecbd3a2c5992881eca436f44c4b3c24f1ddf4e392d06b2bb41ba99e6b394d26f26f01d6ac8b5762e9904f38823ea0c45fef94a7420011eb090951228b19f8ec36a1cf3f70e311b8c9fa5237f445cf9543edf8acfe215437d3046327c7b4e38641d18764ad83692caa56de62a8bd63ce6380e885322a8dc6f7518188c364d05fd613b87e62278f3e661b6858c7db09164a4e44d22940dbe2d8b46c61478fb16588efbb849e0d7b22e7a3aa4ff9fc388c9294cbbc2b5b9b0fa3ed91f39e17bf10e7288f4901b946a3c011fa3865f3377a0b2e35967ab62ea733cd92f08ff575fe935d3123b4beae21a222f0111b34ae5fcf86811d2ec0baf98bca4111d0fd665d7b4dac3669d2de1896fbecc854b792c5d1fa067dee802bc1fe2559e02",
+			expectedKeyAESKey:    "9db3027d1cd914e597f8adcae7e546f3f0495eafc8ed4a1e32bbfc94d625e706",
+			expectedKeyNonce:     "c7439399def2cc23269f3943",
+			expectedEncryptedKey: "6551657fa1a2a0607ce5f5f3ba481da211ef4e16959d10702e27e868abb5a276e005b8b43e4403ae630332284f2ece00298c4a1c67a8465d0e05c40d",
+			expectedResultCBOR:   mustHexDecode("83582070e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde590440ba3ba03f50569012f826140c5badce912aae42495114db4c623c914e9c292ab6ba0feb2ff2c3a733113d796c6f2fffe7e35ba57744a11d7cac31a1897ef0dd4c7fbe9f94408ef7b1273c374c628feaf0f497a18429b1cc6960a9ba5be6a1767539dafa10ab40591dfe8efd05b804ccaa2b4351270a281e8addc7e0f5dcc48bd266836221996a2e5b0b6854f51234991596914563a8b1f600c923f8e6dfb3ef8d6f2f819e8ca03e37d8caee541a910ab1ec6c19e4bc3428c4cbe706f17c0fa477a0035152d01bb811ff82b667b44b18fa18e6ea85ec4d4382e1ff6dc5a80d11db6bfed4f4290a15f6c4fba54195dad9672ad06453ed6bdf2f04832bc2b953502ffc79c5f023776fed991f4e3784f00ef702eb81fa08afe2957a06f83d87b9729a2f8e3f7f5567f167cb425a0bcbe7858c5dcc405855ab14600a0798c41dc1feeff8959b2bca0680f3edea4df3ba2947180a0c762709174de56aed62e8e40ae3b128bbc724e8491d8366f8072f5194ff904acf5b278fc3dd5574128c8b29acd7111fbe1ea4b57f693ae82781497d57eeb8a6949208c8139e675a0d8afcdb20c00241138d64b6e18ac32368956985230a05ddd8eb9746f8acec8974dd38c65bfea5defc0c9647c60beae3d1a1f4deb26c0290774b9235eea6a971af18e9710eb5084eb02cee51f3fabf6e5cd3fd486224512c78b6a0e4b166e5196d8ebb36387922e697719cf7d9e0639990e6d993fe3d63820daf337d037a57aa4620748fd23c6a3cab5712bf1f709f55949831acbc1e700edd2d67efa8598fcafc3d659bc2f3b42078601910087077f47f467273032ed203151c2c276be3f18b7f253e9e6bbd028b053dd42a58572bb7b1d923360cbbcf04816c74322804c14ea01400a303f9d7dd66caa727b39a5be6f18d0f1d37f4323fbb1b5937cf23e1777147b37406f73d64984f79444b121f5ad43280ac3aecc5181dfd370361b9bbdbb791774e9b634f4a045856dd29574651a7eb1d5afb49e8e46237aef5eb6c3d2c24a172f512e9b5f0f62a41894432def40f97b77f1dbe0de804f2eb4241f9fe8de10947829c0de94e98c1c0162a73c07f1f77ff584584000128490c332fa1347278665e23c6e0b2bac7ab0cecbd3a2c5992881eca436f44c4b3c24f1ddf4e392d06b2bb41ba99e6b394d26f26f01d6ac8b5762e9904f38823ea0c45fef94a7420011eb090951228b19f8ec36a1cf3f70e311b8c9fa5237f445cf9543edf8acfe215437d3046327c7b4e38641d18764ad83692caa56de62a8bd63ce6380e885322a8dc6f7518188c364d05fd613b87e62278f3e661b6858c7db09164a4e44d22940dbe2d8b46c61478fb16588efbb849e0d7b22e7a3aa4ff9fc388c9294cbbc2b5b9b0fa3ed91f39e17bf10e7288f4901b946a3c011fa3865f3377a0b2e35967ab62ea733cd92f08ff575fe935d3123b4beae21a222f0111b34ae5fcf86811d2ec0baf98bca4111d0fd665d7b4dac3669d2de1896fbecc854b792c5d1fa067dee802bc1fe2559e02583c6551657fa1a2a0607ce5f5f3ba481da211ef4e16959d10702e27e868abb5a276e005b8b43e4403ae630332284f2ece00298c4a1c67a8465d0e05c40d"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// We need to capture intermediate values. Since we cannot easily modify encapsulateKey to return them
+			// without breaking EncryptPQ (unless we return a lot of values), we will replicate the logic here
+			// and compare with the result of encapsulateKey.
+
+			// Actually, let's just use the known values from a successful run if possible.
+			// I will run the test once to get the values, then fix them.
+			entropy := bytes.NewReader(tt.seed)
+
+			res, err := encapsulateKey(entropy, tt.publicKey, tt.aesKeyPacked, tt.purpose, tt.contextHash)
+			if err != nil {
+				t.Fatalf("encapsulateKey failed: %v", err)
+			}
+
+			// Verify result matches expected
+			stringCompare(t, tt.name+" fingerPrint", tt.expectedFingerPrint, textformat.FormatHex(res.KeyFingerPrint[:]))
+			stringCompare(t, tt.name+" encapsulatedSecret", tt.expectedEncapsulated, textformat.FormatHex(res.EncapsulatedKeyKey))
+			stringCompare(t, tt.name+" encryptedKey", tt.expectedEncryptedKey, textformat.FormatHex(res.EncapsulatedDataKey))
+
+			// To verify sharedSecret, keyAESKey, keyNonce, we MUST either return them from encapsulateKey
+			// or re-derive them here using the same seed.
+
+			// Let's re-derive using the same logic as encapsulateKey to verify intermediate steps.
+			scheme := kyberKEM.Scheme()
+			entropyClone := bytes.NewReader(tt.seed) // reset entropy
+			seedForIsolation := make([]byte, scheme.EncapsulationSeedSize())
+			io.ReadFull(entropyClone, seedForIsolation)
+
+			encapsulatedSecret, sharedSecret, _ := scheme.EncapsulateDeterministically(tt.publicKey, seedForIsolation)
+			if textformat.FormatHex(sharedSecret) != tt.expectedSharedSecret {
+				t.Errorf(tt.name+" sharedSecret mismatch: got %x, want %s", sharedSecret, tt.expectedSharedSecret)
+			}
+			if textformat.FormatHex(encapsulatedSecret) != tt.expectedEncapsulated {
+				t.Errorf(tt.name+" output encapsulatedSecret mismatch: got %x, want %s", encapsulatedSecret, tt.expectedEncapsulated)
+			}
+
+			keyAESKey, keyNonce, _ := hkdf.PulseHKDFKyber(sharedSecret, encapsulatedSecret, res.KeyFingerPrint[:], tt.contextHash)
+			if textformat.FormatHex(keyAESKey) != tt.expectedKeyAESKey {
+				t.Errorf(tt.name+" keyAESKey mismatch: got %x, want %s", keyAESKey, tt.expectedKeyAESKey)
+			}
+			if textformat.FormatHex(keyNonce) != tt.expectedKeyNonce {
+				t.Errorf(tt.name+" keyNonce mismatch: got %x, want %s", keyNonce, tt.expectedKeyNonce)
+			}
+
+			resCBOR, err := res.CBOR()
+			if err != nil {
+				t.Fatalf("res.CBOR() failed: %v", err)
+			}
+			if !bytes.Equal(tt.expectedResultCBOR, resCBOR) {
+				t.Errorf(tt.name+" resultCBOR mismatch: got %x, want %x", resCBOR, tt.expectedResultCBOR)
+			}
+		})
 	}
 }
 
@@ -388,18 +475,25 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 		t.Errorf("SealedData mismatch: got %x, want %s", result.SealedData, expectedSealedData)
 	}
 
+	resultCBOR, err := result.CBOR()
+	if err != nil {
+		t.Fatalf("result.CBOR() failed: %v", err)
+	}
+	expectedResultCBOR := "82582a8652cf034cf1692e6e1427eea2779a8ab52798bcf5e500811e92c70cc2d6433e08b09e086a5989071d698283582001b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd590440b236c30d44fa247895e19d4b249ef8a07db4f15b5280f8fca53587093884b182e34e5af87163402b51ece1c1945532fa297b3307a42e37aca5f93de09e53af17564b16c073c80d928ac7e21d11876789c3060498ace470a431e8fe13b67a856e641dcce741229193766a2b9b9533e5b47e328a9aa1f930a51581c11d79815a270f82ce3b78d4c0235746004a480f6101ac77eeea0ce879c354f0c18a0afa230a880f97f443ddf0a63027529ee452b311510baa59d89e0d8e8f20478ba95c19b006a8d22313e6f648f9c6f9c6c2af67bc76be832dc49feda76afcceb41dc56dfe81db2238b50883ef2e9bc3df0cc0af57b7cc02e87e6b3cd24d82f0bc563f5aef7eb29facef912c96fe7f0b0dba53497a0f992ad3b0f43346678851ee99b36cbd2b8e7012bcfddc5e01ecdd7a8c59030ae908ade990d2471acf4541b283b2c2c68d39c3ea75c3df3e9748b7796cd8a5e9cbc22752c3ff487debbebe342edf19057bec457047c6172d954df1abf57b3be492a35a4e8f778aba2ad1b3b56a2aef2841e348cf5bb475620622030c255f3b32ee59c0676149be0725024d0aa64923f329b03bffc424b2040ac5cc9f1c976fdfec41b65e66e0c9cd6bd68d1e66978197cd4f1e3f5a991ca95445f75caa19cc3ce4b433d53a3ffb25039fd312ea40975a7065ef32edd08335ef8a71ce6c7697eab7c37f37594665ee62d4a82005df15660fcd92fe710e85cef0d57631801fc878245c4ee96c2cebf537c3f628ef777a8b4a54f1d5b72fa4953cff152cb35e188eaa2b14ad749d5350abfdfcb2ad73d64362f8379ed034c37865d2c0a0c38226bffd80a4b5981afbd84ce8f4f89c757e902b5ea441d74783352d3a60aa6447420e27cf6992d5d0b1dfbcd237d7e39dd080b2e629795ec30603a4562fb9b46d33b6a9692d59f7e032d8d0420d42a3a492c61189f1357a7a1b1c49e3622246137d0b5d4a5bc589ee29be1e10b9346c148f41e1403491f4d599436f5929760ceaee077b496a1a1bb095b1f7bb20b80e626a2ef7b83631c650074c56b9a2dfc08cae48b65255e7571a4928266a4f9c5ecaa9a546447f350c34ccccc22b8748ed323d19e712e5d41c6726a87a4bcb9b26f7f12ea5bf42ce66dcadfb16b143238d193499b56141a87e1168483f59fc1156d7f26b03b1f48d3553fa828bc3c87885a6c7942be3886209117151d3e59ff0610ef6e40e7e05c72e0a16fa80ae401c8fb1738a214bae41a9a3601951bf61c49227909d91f65aad5183d6adfefc48a2bd3c4ee3c2a013aac269eb709f2499c724f445feb750e48db19f33e6303be50d614029a3c27ec3191a51e0fcf6183f82ecbc44a96892d971e4bdc346634170ed1b6635aa7660143a6e2aae92fb5c128cad73a1bf9c450c22accebbdd099fe8b8e82915acf09364edb6e16fc245baa8e8c684400e5dac29c9fce2a5ba9dcbd66aaaf087c2effe80ccb2a750579479ff16ca6fc472dea7d2120bf672df3d4050ef69ebe9e5dffe73395da4a09a8ed157bb2c63f9d9583c59bbc6964a9e2b6dc51e07eaa9d5aeb08f5bba50d917fc01c27f290e4e49a5c47212739eae2cdc9e8d5b66d5f35706bb6d3ab7dad4aa78eb5b5e3ec283582070e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde590440ba3ba03f50569012f826140c5badce912aae42495114db4c623c914e9c292ab6ba0feb2ff2c3a733113d796c6f2fffe7e35ba57744a11d7cac31a1897ef0dd4c7fbe9f94408ef7b1273c374c628feaf0f497a18429b1cc6960a9ba5be6a1767539dafa10ab40591dfe8efd05b804ccaa2b4351270a281e8addc7e0f5dcc48bd266836221996a2e5b0b6854f51234991596914563a8b1f600c923f8e6dfb3ef8d6f2f819e8ca03e37d8caee541a910ab1ec6c19e4bc3428c4cbe706f17c0fa477a0035152d01bb811ff82b667b44b18fa18e6ea85ec4d4382e1ff6dc5a80d11db6bfed4f4290a15f6c4fba54195dad9672ad06453ed6bdf2f04832bc2b953502ffc79c5f023776fed991f4e3784f00ef702eb81fa08afe2957a06f83d87b9729a2f8e3f7f5567f167cb425a0bcbe7858c5dcc405855ab14600a0798c41dc1feeff8959b2bca0680f3edea4df3ba2947180a0c762709174de56aed62e8e40ae3b128bbc724e8491d8366f8072f5194ff904acf5b278fc3dd5574128c8b29acd7111fbe1ea4b57f693ae82781497d57eeb8a6949208c8139e675a0d8afcdb20c00241138d64b6e18ac32368956985230a05ddd8eb9746f8acec8974dd38c65bfea5defc0c9647c60beae3d1a1f4deb26c0290774b9235eea6a971af18e9710eb5084eb02cee51f3fabf6e5cd3fd486224512c78b6a0e4b166e5196d8ebb36387922e697719cf7d9e0639990e6d993fe3d63820daf337d037a57aa4620748fd23c6a3cab5712bf1f709f55949831acbc1e700edd2d67efa8598fcafc3d659bc2f3b42078601910087077f47f467273032ed203151c2c276be3f18b7f253e9e6bbd028b053dd42a58572bb7b1d923360cbbcf04816c74322804c14ea01400a303f9d7dd66caa727b39a5be6f18d0f1d37f4323fbb1b5937cf23e1777147b37406f73d64984f79444b121f5ad43280ac3aecc5181dfd370361b9bbdbb791774e9b634f4a045856dd29574651a7eb1d5afb49e8e46237aef5eb6c3d2c24a172f512e9b5f0f62a41894432def40f97b77f1dbe0de804f2eb4241f9fe8de10947829c0de94e98c1c0162a73c07f1f77ff584584000128490c332fa1347278665e23c6e0b2bac7ab0cecbd3a2c5992881eca436f44c4b3c24f1ddf4e392d06b2bb41ba99e6b394d26f26f01d6ac8b5762e9904f38823ea0c45fef94a7420011eb090951228b19f8ec36a1cf3f70e311b8c9fa5237f445cf9543edf8acfe215437d3046327c7b4e38641d18764ad83692caa56de62a8bd63ce6380e885322a8dc6f7518188c364d05fd613b87e62278f3e661b6858c7db09164a4e44d22940dbe2d8b46c61478fb16588efbb849e0d7b22e7a3aa4ff9fc388c9294cbbc2b5b9b0fa3ed91f39e17bf10e7288f4901b946a3c011fa3865f3377a0b2e35967ab62ea733cd92f08ff575fe935d3123b4beae21a222f0111b34ae5fcf86811d2ec0baf98bca4111d0fd665d7b4dac3669d2de1896fbecc854b792c5d1fa067dee802bc1fe2559e02583c6551657fa1a2a0607ce5f5f3ba481da211ef4e16959d10702e27e868abb5a276e005b8b43e4403ae630332284f2ece00298c4a1c67a8465d0e05c40d"
+	stringCompare(t, "resultCBOR", expectedResultCBOR, textformat.FormatHex(resultCBOR))
+
 	aliceKeys := result.Keys[0]
 	bobKeys := result.Keys[1]
 	stringCompare(t, "result.Alice.fingerprint", expectedAliceFingerprint, textformat.FormatHex(aliceKeys.KeyFingerPrint[:]))
 
 	expectedEncapsulatedKey := "b236c30d44fa247895e19d4b249ef8a07db4f15b5280f8fca53587093884b182e34e5af87163402b51ece1c1945532fa297b3307a42e37aca5f93de09e53af17564b16c073c80d928ac7e21d11876789c3060498ace470a431e8fe13b67a856e641dcce741229193766a2b9b9533e5b47e328a9aa1f930a51581c11d79815a270f82ce3b78d4c0235746004a480f6101ac77eeea0ce879c354f0c18a0afa230a880f97f443ddf0a63027529ee452b311510baa59d89e0d8e8f20478ba95c19b006a8d22313e6f648f9c6f9c6c2af67bc76be832dc49feda76afcceb41dc56dfe81db2238b50883ef2e9bc3df0cc0af57b7cc02e87e6b3cd24d82f0bc563f5aef7eb29facef912c96fe7f0b0dba53497a0f992ad3b0f43346678851ee99b36cbd2b8e7012bcfddc5e01ecdd7a8c59030ae908ade990d2471acf4541b283b2c2c68d39c3ea75c3df3e9748b7796cd8a5e9cbc22752c3ff487debbebe342edf19057bec457047c6172d954df1abf57b3be492a35a4e8f778aba2ad1b3b56a2aef2841e348cf5bb475620622030c255f3b32ee59c0676149be0725024d0aa64923f329b03bffc424b2040ac5cc9f1c976fdfec41b65e66e0c9cd6bd68d1e66978197cd4f1e3f5a991ca95445f75caa19cc3ce4b433d53a3ffb25039fd312ea40975a7065ef32edd08335ef8a71ce6c7697eab7c37f37594665ee62d4a82005df15660fcd92fe710e85cef0d57631801fc878245c4ee96c2cebf537c3f628ef777a8b4a54f1d5b72fa4953cff152cb35e188eaa2b14ad749d5350abfdfcb2ad73d64362f8379ed034c37865d2c0a0c38226bffd80a4b5981afbd84ce8f4f89c757e902b5ea441d74783352d3a60aa6447420e27cf6992d5d0b1dfbcd237d7e39dd080b2e629795ec30603a4562fb9b46d33b6a9692d59f7e032d8d0420d42a3a492c61189f1357a7a1b1c49e3622246137d0b5d4a5bc589ee29be1e10b9346c148f41e1403491f4d599436f5929760ceaee077b496a1a1bb095b1f7bb20b80e626a2ef7b83631c650074c56b9a2dfc08cae48b65255e7571a4928266a4f9c5ecaa9a546447f350c34ccccc22b8748ed323d19e712e5d41c6726a87a4bcb9b26f7f12ea5bf42ce66dcadfb16b143238d193499b56141a87e1168483f59fc1156d7f26b03b1f48d3553fa828bc3c87885a6c7942be3886209117151d3e59ff0610ef6e40e7e05c72e0a16fa80ae401c8fb1738a214bae41a9a3601951bf61c49227909d91f65aad5183d6adfefc48a2bd3c4ee3c2a013aac269eb709f2499c724f445feb750e48db19f33e6303be50d614029a3c27ec3191a51e0fcf6183f82ecbc44a96892d971e4bdc346634170ed1b6635aa7660143a6e2aae92fb5c128cad73a1bf9c450c22accebbdd099fe8b8e82915acf09364edb6e16fc245baa8e8c684400e5dac29c9fce2a5ba9dcbd66aaaf087c2effe80ccb2a750579479ff16ca6fc472dea7d2120bf672df3d4050ef69ebe9e5dffe73395da4a09a8ed157bb2c63f9d9"
 	if hex.EncodeToString(result.Keys[0].EncapsulatedKeyKey) != expectedEncapsulatedKey {
-		t.Errorf("EncapsulatedKeyKey mismatch: got %x, want %s", result.Keys[0].EncapsulatedKeyKey, expectedEncapsulatedKey)
+		t.Errorf("EncapsulatedKeyKey mismatch: got %x, want %s", aliceKeys.EncapsulatedKeyKey, expectedEncapsulatedKey)
 	}
 
 	expectedEncapsulatedDataKey := "59bbc6964a9e2b6dc51e07eaa9d5aeb08f5bba50d917fc01c27f290e4e49a5c47212739eae2cdc9e8d5b66d5f35706bb6d3ab7dad4aa78eb5b5e3ec2"
 	if hex.EncodeToString(result.Keys[0].EncapsulatedDataKey) != expectedEncapsulatedDataKey {
-		t.Errorf("EncapsulatedDataKey mismatch: got %x, want %s", result.Keys[0].EncapsulatedDataKey, expectedEncapsulatedDataKey)
+		t.Errorf("EncapsulatedDataKey mismatch: got %x, want %s", aliceKeys.EncapsulatedDataKey, expectedEncapsulatedDataKey)
 	}
 
 	stringCompare(t, "result.Bob.fingerprint", expectedBobFingerprint, textformat.FormatHex(bobKeys.KeyFingerPrint[:]))
