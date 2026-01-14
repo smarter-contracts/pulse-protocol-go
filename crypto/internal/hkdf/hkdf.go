@@ -158,7 +158,7 @@ func createSalt(
 
 func createSaltString(exchangeAlgo string, transcript []byte) string {
 	// TOOD: Add leading "|" for consistency
-	return fmt.Sprintf("pulse|kdf|v1|salt|%s|%s|", exchangeAlgo, textformat.FormatHex(transcript))
+	return fmt.Sprintf("|pulse|kdf|v1|salt|%s|%s|", exchangeAlgo, textformat.FormatHex(transcript))
 }
 
 // createInfo constructs the info parameter for the HKDF Expand step.

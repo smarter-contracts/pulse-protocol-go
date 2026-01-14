@@ -94,13 +94,13 @@ func TestEncrypt_Values(t *testing.T) {
 	alicePubExpected := mustHexDecode("036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2")
 	bobPubExpected := mustHexDecode("03131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc")
 	sharedSecretExpected := mustHexDecode("3872a1eb53189a568a797a14a2765e22811f2bd293bef8ecea81a17dab95998e")
-	aesKeyExpected := mustHexDecode("cee5d3c958a8be9fdea4e4dca39cf4bf52ca824a1f71d026319e350a6b0ef67a")
-	aesNonceExpected := mustHexDecode("3298b5b0da18ab57667cf999")
-	cipherTextExpected := mustHexDecode("36dae43a0870c0f96bea88d074d8136e0cda62a5d5a67bc0bd8ccf2eee27618951ce1cb2391d2688da0a")
+	aesKeyExpected := mustHexDecode("e52121ff74c5fc185d5aa165c47283889378492f64a53fbf5d53f3e5dc5e4e82")
+	aesNonceExpected := mustHexDecode("9b6585bef61692965127d170")
+	cipherTextExpected := mustHexDecode("8f8852ab16bb09596b9d8ce94a7482ac715dacd711537878a48a6d7628287baa3423a0535346593375ee")
 	chainId := int32(1)
 	consentNumber := int32(2)
-	expectedCBOR := "83582a36dae43a0870c0f96bea88d074d8136e0cda62a5d5a67bc0bd8ccf2eee27618951ce1cb2391d2688da0a5821036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2582103131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc"
-	expectedJSON := []byte("{\"sealedData\":\"NtrkOghwwPlr6ojQdNgTbgzaYqXVpnvAvYzPLu4nYYlRzhyyOR0miNoK\",\"key1\":\"A21sqsJIr5b2r6f5BPVQJToPPvP1qi/mg4qVshZpFGji\",\"key2\":\"AxMTQeshVN3tEuOOC84D+QaAL7EGkOwbKycwOkqfuoi8\"}")
+	expectedCBOR := "83582a8f8852ab16bb09596b9d8ce94a7482ac715dacd711537878a48a6d7628287baa3423a0535346593375ee5821036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2582103131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc"
+	expectedJSON := []byte("{\"sealedData\":\"j4hSqxa7CVlrnYzpSnSCrHFdrNcRU3h4pIptdigoe6o0I6BTU0ZZM3Xu\",\"key1\":\"A21sqsJIr5b2r6f5BPVQJToPPvP1qi/mg4qVshZpFGji\",\"key2\":\"AxMTQeshVN3tEuOOC84D+QaAL7EGkOwbKycwOkqfuoi8\"}")
 
 	alicePub := alicePriv.PubKey()
 	bobPub := bobPriv.PubKey()
