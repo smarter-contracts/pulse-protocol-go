@@ -16,9 +16,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
 )
 
-//TODO: Update Known values post HKDF completion
 //TODO: Packing encryption result into single CBOR/byte array
-//TODO: Split Encrypt/Decrypt into smaller functions
 //TODO: Review test pack coverage
 
 // PulsePQEncryptionKey is a struct for holding the encapsulated key for a

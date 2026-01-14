@@ -16,7 +16,6 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
 )
 
-//TODO: Update known values testpack
 //TODO: Review test pack coverage
 
 // PulseECEncryptionResult is a struct for holding the result of an encryption
