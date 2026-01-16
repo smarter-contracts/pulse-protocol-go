@@ -62,7 +62,7 @@ func TestPulseSigning_PackingValues(t *testing.T) {
 	}
 
 	packedMessage := packMessage(contractAddress, KnownCid)
-	msg := buildConsentMessage(KnownCid, *helperContractAddressSign())
+	msg := buildMessage(*helperContractAddressSign(), KnownCid)
 
 	expectedPackedMessage := mustHexDecode("0102030405060708090a0b0c0d0e0f10111213146261667972656968643734346b703375613673766b3574336368776c7169636e7a616732327a6d636f6872776f7776797161776a716f6772363569")
 	if !bytes.Equal(packedMessage, expectedPackedMessage) {
@@ -157,7 +157,7 @@ func TestSignConsent_Table(t *testing.T) {
 			}
 
 			// 2. Check Packed Message Hash (PulseHash)
-			packedHash := buildConsentMessage(tt.cid, tt.contractAddress)
+			packedHash := buildMessage(tt.contractAddress, tt.cid)
 			if hex.EncodeToString(packedHash) != tt.expectedPackedHash {
 				t.Errorf("packed hash mismatch\ngot:  %x\nwant: %s", packedHash, tt.expectedPackedHash)
 			}
@@ -178,7 +178,7 @@ func TestSignConsent_Table(t *testing.T) {
 			}
 
 			// 5. Check Recovery of signature
-			recoveredAddress, err := ConsentAddress(sig, tt.contractAddress, tt.cid)
+			recoveredAddress, err := GetConsentAddress(sig, tt.contractAddress, tt.cid)
 			if err != nil {
 				t.Fatalf("ConsentAddress failed: %v", err)
 			}
@@ -274,7 +274,7 @@ func TestSignRevoke_Table(t *testing.T) {
 			}
 
 			// 2. Check Packed Message Hash (PulseHash)
-			packedHash := buildRevokeMessage(tt.cid, tt.rcid, tt.contractAddress)
+			packedHash := buildMessage(tt.contractAddress, tt.cid, tt.rcid)
 			if hex.EncodeToString(packedHash) != tt.expectedPackedHash {
 				t.Errorf("packed hash mismatch\ngot:  %x\nwant: %s", packedHash, tt.expectedPackedHash)
 			}
@@ -295,7 +295,7 @@ func TestSignRevoke_Table(t *testing.T) {
 			}
 
 			// 5. Check Recovery of signature
-			recoveredAddress, err := RevokeAddress(sig, tt.contractAddress, tt.cid, tt.rcid)
+			recoveredAddress, err := GetRevokeAddress(sig, tt.contractAddress, tt.cid, tt.rcid)
 			if err != nil {
 				t.Fatalf("ConsentAddress failed: %v", err)
 			}
@@ -391,7 +391,7 @@ func TestSignUpdate_Table(t *testing.T) {
 			}
 
 			// 2. Check Packed Message Hash (PulseHash)
-			packedHash := buildUpdateMessage(tt.cid, tt.newCid, tt.contractAddress)
+			packedHash := buildMessage(tt.contractAddress, tt.cid, tt.newCid)
 			if hex.EncodeToString(packedHash) != tt.expectedPackedHash {
 				t.Errorf("packed hash mismatch\ngot:  %x\nwant: %s", packedHash, tt.expectedPackedHash)
 			}
@@ -412,7 +412,7 @@ func TestSignUpdate_Table(t *testing.T) {
 			}
 
 			// 5. Check Recovery of signature
-			recoveredAddress, err := UpdateAddress(sig, tt.contractAddress, tt.cid, tt.newCid)
+			recoveredAddress, err := GetUpdateAddress(sig, tt.contractAddress, tt.cid, tt.newCid)
 			if err != nil {
 				t.Fatalf("ConsentAddress failed: %v", err)
 			}
