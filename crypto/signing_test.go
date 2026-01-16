@@ -2,9 +2,14 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"encoding/hex"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 )
 
 /* Test pack for the signing code. This consists of a set of known value tests which can be copied to other
@@ -50,29 +55,370 @@ func helperContractAddressSign() *string {
 }
 
 func TestPulseSigning_PackingValues(t *testing.T) {
-	s := NewPulseSigning().
-		SetContractAddress(helperContractAddressSign()).
-		SetConsentCid(KnownCid)
+	contractAddress := parseContractAddress(*helperContractAddressSign())
 
-	if err := s.parseContractAddress(); err != nil {
-		t.Fatalf("parseContractAddress: %v", err)
-	}
-	if !bytes.Equal(s.contractAddress[:], helperContractAddressBytes()[:]) {
+	if !bytes.Equal(contractAddress[:], helperContractAddressBytes()[:]) {
 		t.Fatalf("contract address mismatch")
 	}
 
-	if err := s.buildConsentMessage(); err != nil {
-		t.Fatalf("buildConsentMessage: %v", err)
-	}
+	packedMessage := packMessage(contractAddress, KnownCid)
+	msg := buildConsentMessage(KnownCid, *helperContractAddressSign())
 
 	expectedPackedMessage := mustHexDecode("0102030405060708090a0b0c0d0e0f10111213146261667972656968643734346b703375613673766b3574336368776c7169636e7a616732327a6d636f6872776f7776797161776a716f6772363569")
-	if !bytes.Equal(s.packed, expectedPackedMessage) {
-		t.Fatalf("packed message mismatch expected: %x got: %x", expectedPackedMessage, s.packed)
+	if !bytes.Equal(packedMessage, expectedPackedMessage) {
+		t.Fatalf("packed message mismatch expected: %x got: %x", expectedPackedMessage, packedMessage)
 	}
 
 	expectedConsentMessage := mustHexDecode("48bf046023b71d67f433eb418347863959a5f02716b7c9dcb2b471c9d42b721d")
-	if !bytes.Equal(s.message, expectedConsentMessage) {
-		t.Fatalf("consent message mismatch expected: %x got: %x", expectedConsentMessage, s.message)
+	if !bytes.Equal(msg, expectedConsentMessage) {
+		t.Fatalf("consent message mismatch expected: %x got: %x", expectedConsentMessage, msg)
 	}
 
+}
+
+func TestSignConsent_Table(t *testing.T) {
+	tests := []struct {
+		name                string
+		privateKeyHex       string
+		publicKeyHex        string
+		addressHex          string
+		contractAddress     string
+		cid                 string
+		expectedPacked      string
+		expectedPackedHash  string
+		expectedSigningHash string
+		expectedSignature   string
+	}{
+		{
+			name:                "send_test_consent EC grantee",
+			privateKeyHex:       "89b58da1002bdd02ea9972c3c64c050f9a5236e430e030c18406035ca2be1856",
+			publicKeyHex:        "04badd8074a5f44f7311552f5709e49c438d5940f7d8bb8be578c187caf40ff669e8b2d2ec4d2459c928c586dd3f62dc3b441431235eb06b646a359731032c9cb6",
+			addressHex:          "fc3a23dade5b5a5c6b1790f9ac4256aed8ee8993",
+			contractAddress:     "0x9b980288ae5F7a1aca113faec133e765879a5fab",
+			cid:                 "bafyreialkztkqka6ki4arwlrryrhpamzaa3otihmegainx4puyyiq7yspm",
+			expectedPacked:      "9b980288ae5f7a1aca113faec133e765879a5fab62616679726569616c6b7a746b716b61366b69346172776c727279726870616d7a6161336f7469686d656761696e7834707579796971377973706d",
+			expectedPackedHash:  "e70594616cdcabad2c33930134d92dd152d138de679cb4f21fcadf0db30d07b2",
+			expectedSigningHash: "a30638332e2051a57faa61224ef3920ed2cdb216c4c7b3b38b02a05a391c6140",
+			expectedSignature:   "b60d499d54b1a73eb9bb69c7289d5dcdd32e9893bc7e4f72df32fa75f395a1800cfa4eb49bf3a87bad7fc69b476ef5d5bea56883d2b9d0348963fcad34e5542e1b",
+		},
+		{
+			name:                "send_test_consent EC grantor",
+			privateKeyHex:       "da4782769625a2cfe4c5ab998f71e19892d0769ed42c0551b2efab5eceae884c",
+			publicKeyHex:        "04cadc6350aae69f23b9807a3462e72602914cebdd39dfa1b22d585730ca69c617d0c6e3644605da370694bb30172a9838fd1cb6c2e4d446021cc9bfaf982e7f11",
+			addressHex:          "33a1debbe882df214f96a2b92b4062ee8fbb9c2f",
+			contractAddress:     "0x9b980288ae5F7a1aca113faec133e765879a5fab",
+			cid:                 "bafyreialkztkqka6ki4arwlrryrhpamzaa3otihmegainx4puyyiq7yspm",
+			expectedPacked:      "9b980288ae5f7a1aca113faec133e765879a5fab62616679726569616c6b7a746b716b61366b69346172776c727279726870616d7a6161336f7469686d656761696e7834707579796971377973706d",
+			expectedPackedHash:  "e70594616cdcabad2c33930134d92dd152d138de679cb4f21fcadf0db30d07b2",
+			expectedSigningHash: "a30638332e2051a57faa61224ef3920ed2cdb216c4c7b3b38b02a05a391c6140",
+			expectedSignature:   "83dc442a0a67d27cccf8c57357f06b35b6f5b33082a81616fa0b0c4d144d572a0ca95431fe5262a41c83a04473b13c0cd5611bf6b5f1b560283ebceb88a295ff1b",
+		},
+		{
+			name:                "Known Values Test",
+			privateKeyHex:       "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+			publicKeyHex:        "046d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2487e6222a6664e079c8edf7518defd562dbeda1e7593dfd7f0be285880a24dab",
+			addressHex:          "ede35562d3555e61120a151b3c8e8e91d83a378a",
+			contractAddress:     "0x0102030405060708090a0b0c0d0e0f1011121314",
+			cid:                 KnownCid,
+			expectedPacked:      "0102030405060708090a0b0c0d0e0f10111213146261667972656968643734346b703375613673766b3574336368776c7169636e7a616732327a6d636f6872776f7776797161776a716f6772363569",
+			expectedPackedHash:  "48bf046023b71d67f433eb418347863959a5f02716b7c9dcb2b471c9d42b721d",
+			expectedSigningHash: "64920461bf4a9d15b68cf83b139ea4b941544ca9e4e52f4cf529f9b499abb967",
+			expectedSignature:   "83507ee48e57e629554080fb8c812119938c7e852451d54cd1dacf6688d10ab3672b5602ca24af6597da87c397b52769b5ba8ce30dae866f44c09fbaf4a951c91b",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, err := crypto.HexToECDSA(tt.privateKeyHex)
+			if err != nil {
+				t.Fatalf("failed to parse private key: %v", err)
+			}
+
+			publicKey := key.Public()
+			publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+			if !ok {
+				t.Fatalf("failed to cast public key to ECDSA")
+			}
+			pubBytes := crypto.FromECDSAPub(publicKeyECDSA)
+			if hex.EncodeToString(pubBytes) != tt.publicKeyHex {
+				t.Errorf("public key mismatch\ngot:  %x\nwant: %s", pubBytes, tt.publicKeyHex)
+			}
+
+			address := crypto.PubkeyToAddress(*publicKeyECDSA)
+			if textformat.FormatHex(address[:]) != tt.addressHex {
+				t.Errorf("address mismatch\ngot:  %s\nwant: %s", textformat.FormatHex(address[:]), tt.addressHex)
+			}
+
+			// 1. Check Packed Message
+			addr := parseContractAddress(tt.contractAddress)
+			packed := packMessage(addr, tt.cid)
+			if hex.EncodeToString(packed) != tt.expectedPacked {
+				t.Errorf("packed message mismatch\ngot:  %x\nwant: %s", packed, tt.expectedPacked)
+			}
+
+			// 2. Check Packed Message Hash (PulseHash)
+			packedHash := buildConsentMessage(tt.cid, tt.contractAddress)
+			if hex.EncodeToString(packedHash) != tt.expectedPackedHash {
+				t.Errorf("packed hash mismatch\ngot:  %x\nwant: %s", packedHash, tt.expectedPackedHash)
+			}
+
+			// 3. Check Signing Hash (Ethereum TextHash)
+			signingHash := accounts.TextHash(packedHash)
+			if hex.EncodeToString(signingHash) != tt.expectedSigningHash {
+				t.Errorf("signing hash mismatch\ngot:  %x\nwant: %s", signingHash, tt.expectedSigningHash)
+			}
+
+			// 4. Check Signature Bytes
+			sig, err := SignConsent(key, tt.contractAddress, tt.cid)
+			if err != nil {
+				t.Fatalf("SignConsent failed: %v", err)
+			}
+			if hex.EncodeToString(sig) != tt.expectedSignature {
+				t.Errorf("signature mismatch\ngot:  %x\nwant: %s", sig, tt.expectedSignature)
+			}
+
+			// 5. Check Recovery of signature
+			recoveredAddress, err := ConsentAddress(sig, tt.contractAddress, tt.cid)
+			if err != nil {
+				t.Fatalf("ConsentAddress failed: %v", err)
+			}
+			if textformat.FormatHex(recoveredAddress[:]) != tt.addressHex {
+				t.Errorf("address mismatch\ngot:  %s\nwant: %s", textformat.FormatHex(address[:]), tt.addressHex)
+			}
+		})
+	}
+}
+
+func TestSignRevoke_Table(t *testing.T) {
+	tests := []struct {
+		name                string
+		privateKeyHex       string
+		publicKeyHex        string
+		addressHex          string
+		contractAddress     string
+		cid                 string
+		rcid                string
+		expectedPacked      string
+		expectedPackedHash  string
+		expectedSigningHash string
+		expectedSignature   string
+	}{
+		{
+			name:                "send_test_revoke EC grantee",
+			privateKeyHex:       "89b58da1002bdd02ea9972c3c64c050f9a5236e430e030c18406035ca2be1856",
+			publicKeyHex:        "04badd8074a5f44f7311552f5709e49c438d5940f7d8bb8be578c187caf40ff669e8b2d2ec4d2459c928c586dd3f62dc3b441431235eb06b646a359731032c9cb6",
+			addressHex:          "fc3a23dade5b5a5c6b1790f9ac4256aed8ee8993",
+			contractAddress:     "0x9b980288ae5F7a1aca113faec133e765879a5fab",
+			cid:                 "bafyreialkztkqka6ki4arwlrryrhpamzaa3otihmegainx4puyyiq7yspm",
+			rcid:                "bafyreidxxmeu4hn46zhbwclzwykj7vdbixj5boduhql7ihm4i2djqt4dmq",
+			expectedPacked:      "9b980288ae5f7a1aca113faec133e765879a5fab62616679726569616c6b7a746b716b61366b69346172776c727279726870616d7a6161336f7469686d656761696e7834707579796971377973706d626166797265696478786d657534686e34367a686277636c7a77796b6a3776646269786a35626f647568716c3769686d346932646a717434646d71",
+			expectedPackedHash:  "cc506c53243fe75efed2a8407f9507d9741435ce35ba038c8dc7fcf7ded772d2",
+			expectedSigningHash: "268c86604e8c4b1925b4ab12fc9c6ac5d0a974c0e8b70466678319a69ab76b88",
+			expectedSignature:   "380309be5b333ee98a842eba5243d6ea12df1460242b945852b80066dd14f3b06dadac3afe2acdfcc5762ef8fa6eff0df71cbc17eee4e83ed8911e8a577162721b",
+		},
+		{
+			name:                "send_test_revoke EC grantor",
+			privateKeyHex:       "da4782769625a2cfe4c5ab998f71e19892d0769ed42c0551b2efab5eceae884c",
+			publicKeyHex:        "04cadc6350aae69f23b9807a3462e72602914cebdd39dfa1b22d585730ca69c617d0c6e3644605da370694bb30172a9838fd1cb6c2e4d446021cc9bfaf982e7f11",
+			addressHex:          "33a1debbe882df214f96a2b92b4062ee8fbb9c2f",
+			contractAddress:     "0x9b980288ae5F7a1aca113faec133e765879a5fab",
+			cid:                 "bafyreialkztkqka6ki4arwlrryrhpamzaa3otihmegainx4puyyiq7yspm",
+			rcid:                "bafyreidxxmeu4hn46zhbwclzwykj7vdbixj5boduhql7ihm4i2djqt4dmq",
+			expectedPacked:      "9b980288ae5f7a1aca113faec133e765879a5fab62616679726569616c6b7a746b716b61366b69346172776c727279726870616d7a6161336f7469686d656761696e7834707579796971377973706d626166797265696478786d657534686e34367a686277636c7a77796b6a3776646269786a35626f647568716c3769686d346932646a717434646d71",
+			expectedPackedHash:  "cc506c53243fe75efed2a8407f9507d9741435ce35ba038c8dc7fcf7ded772d2",
+			expectedSigningHash: "268c86604e8c4b1925b4ab12fc9c6ac5d0a974c0e8b70466678319a69ab76b88",
+			expectedSignature:   "07c1b03984ca30b557638a808768de4a992fc0a82290d2d8a9af8130ae3e4ec1365d0952bea16f671a71a8b8b0ff9c65370761a44b1a53518d66ac78e493e4d61c",
+		},
+		{
+			name:                "Known Values Test",
+			privateKeyHex:       "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+			publicKeyHex:        "046d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2487e6222a6664e079c8edf7518defd562dbeda1e7593dfd7f0be285880a24dab",
+			addressHex:          "ede35562d3555e61120a151b3c8e8e91d83a378a",
+			contractAddress:     "0x0102030405060708090a0b0c0d0e0f1011121314",
+			cid:                 KnownCid,
+			rcid:                "bafyreidxxmeu4hn46zhbwclzwykj7vdbixj5boduhql7ihm4i2djqt4dmq",
+			expectedPacked:      "0102030405060708090a0b0c0d0e0f10111213146261667972656968643734346b703375613673766b3574336368776c7169636e7a616732327a6d636f6872776f7776797161776a716f6772363569626166797265696478786d657534686e34367a686277636c7a77796b6a3776646269786a35626f647568716c3769686d346932646a717434646d71",
+			expectedPackedHash:  "26f90118453374476e6d1c9462e6dbc16e17fa88974ef780c385a3e66847757d",
+			expectedSigningHash: "01eae01192709113c2bebbf955e237757a8d2a9e6e30f147bcf61f44abced572",
+			expectedSignature:   "eb2ccdade157f21e4a790f0acaa1aa1f74222754e88004bbc94f8829a7b039cb04270295d7cf72a52d2003830e09cac7a14f03b301834937e92ff8f600c0171d1b",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, err := crypto.HexToECDSA(tt.privateKeyHex)
+			if err != nil {
+				t.Fatalf("failed to parse private key: %v", err)
+			}
+
+			publicKey := key.Public()
+			publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+			if !ok {
+				t.Fatalf("failed to cast public key to ECDSA")
+			}
+			pubBytes := crypto.FromECDSAPub(publicKeyECDSA)
+			if hex.EncodeToString(pubBytes) != tt.publicKeyHex {
+				t.Errorf("public key mismatch\ngot:  %x\nwant: %s", pubBytes, tt.publicKeyHex)
+			}
+
+			address := crypto.PubkeyToAddress(*publicKeyECDSA)
+			if textformat.FormatHex(address[:]) != tt.addressHex {
+				t.Errorf("address mismatch\ngot:  %s\nwant: %s", textformat.FormatHex(address[:]), tt.addressHex)
+			}
+
+			// 1. Check Packed Message
+			addr := parseContractAddress(tt.contractAddress)
+			packed := packMessage(addr, tt.cid, tt.rcid)
+			if hex.EncodeToString(packed) != tt.expectedPacked {
+				t.Errorf("packed message mismatch\ngot:  %x\nwant: %s", packed, tt.expectedPacked)
+			}
+
+			// 2. Check Packed Message Hash (PulseHash)
+			packedHash := buildRevokeMessage(tt.cid, tt.rcid, tt.contractAddress)
+			if hex.EncodeToString(packedHash) != tt.expectedPackedHash {
+				t.Errorf("packed hash mismatch\ngot:  %x\nwant: %s", packedHash, tt.expectedPackedHash)
+			}
+
+			// 3. Check Signing Hash (Ethereum TextHash)
+			signingHash := accounts.TextHash(packedHash)
+			if hex.EncodeToString(signingHash) != tt.expectedSigningHash {
+				t.Errorf("signing hash mismatch\ngot:  %x\nwant: %s", signingHash, tt.expectedSigningHash)
+			}
+
+			// 4. Check Signature Bytes
+			sig, err := SignRevoke(key, tt.contractAddress, tt.cid, tt.rcid)
+			if err != nil {
+				t.Fatalf("SignConsent failed: %v", err)
+			}
+			if hex.EncodeToString(sig) != tt.expectedSignature {
+				t.Errorf("signature mismatch\ngot:  %x\nwant: %s", sig, tt.expectedSignature)
+			}
+
+			// 5. Check Recovery of signature
+			recoveredAddress, err := RevokeAddress(sig, tt.contractAddress, tt.cid, tt.rcid)
+			if err != nil {
+				t.Fatalf("ConsentAddress failed: %v", err)
+			}
+			if textformat.FormatHex(recoveredAddress[:]) != tt.addressHex {
+				t.Errorf("address mismatch\ngot:  %s\nwant: %s", textformat.FormatHex(address[:]), tt.addressHex)
+			}
+		})
+	}
+}
+
+func TestSignUpdate_Table(t *testing.T) {
+	tests := []struct {
+		name                string
+		privateKeyHex       string
+		publicKeyHex        string
+		addressHex          string
+		contractAddress     string
+		cid                 string
+		newCid              string
+		expectedPacked      string
+		expectedPackedHash  string
+		expectedSigningHash string
+		expectedSignature   string
+	}{
+		{
+			name:                "send_test_revoke EC grantee",
+			privateKeyHex:       "89b58da1002bdd02ea9972c3c64c050f9a5236e430e030c18406035ca2be1856",
+			publicKeyHex:        "04badd8074a5f44f7311552f5709e49c438d5940f7d8bb8be578c187caf40ff669e8b2d2ec4d2459c928c586dd3f62dc3b441431235eb06b646a359731032c9cb6",
+			addressHex:          "fc3a23dade5b5a5c6b1790f9ac4256aed8ee8993",
+			contractAddress:     "0x9b980288ae5F7a1aca113faec133e765879a5fab",
+			cid:                 "bafyreialkztkqka6ki4arwlrryrhpamzaa3otihmegainx4puyyiq7yspm",
+			newCid:              "bafyreifstfribprjfru4wdidm4nh4qetpftezzxqnz2kls67jgwwhlxcve",
+			expectedPacked:      "9b980288ae5f7a1aca113faec133e765879a5fab62616679726569616c6b7a746b716b61366b69346172776c727279726870616d7a6161336f7469686d656761696e7834707579796971377973706d626166797265696673746672696270726a66727534776469646d346e6834716574706674657a7a78716e7a326b6c7336376a677777686c78637665",
+			expectedPackedHash:  "b4457c87c7b32e312e3b80c63bd9874100f092529548469eae2ac1e525dc7add",
+			expectedSigningHash: "ab250d898ca036dec9a1bb67881c3ee660185ba5c73c6dd669cf590aac50b511",
+			expectedSignature:   "75c4002da7ee7c0b284163c55894fff6822855637bed817907a5c8768f95a5500d56a012ec09d6454c28ee80e5f5d3fc207df5cb1685c0ffc0caf0ba16f999d91b",
+		},
+		{
+			name:                "send_test_revoke EC grantor",
+			privateKeyHex:       "da4782769625a2cfe4c5ab998f71e19892d0769ed42c0551b2efab5eceae884c",
+			publicKeyHex:        "04cadc6350aae69f23b9807a3462e72602914cebdd39dfa1b22d585730ca69c617d0c6e3644605da370694bb30172a9838fd1cb6c2e4d446021cc9bfaf982e7f11",
+			addressHex:          "33a1debbe882df214f96a2b92b4062ee8fbb9c2f",
+			contractAddress:     "0x9b980288ae5F7a1aca113faec133e765879a5fab",
+			cid:                 "bafyreialkztkqka6ki4arwlrryrhpamzaa3otihmegainx4puyyiq7yspm",
+			newCid:              "bafyreifstfribprjfru4wdidm4nh4qetpftezzxqnz2kls67jgwwhlxcve",
+			expectedPacked:      "9b980288ae5f7a1aca113faec133e765879a5fab62616679726569616c6b7a746b716b61366b69346172776c727279726870616d7a6161336f7469686d656761696e7834707579796971377973706d626166797265696673746672696270726a66727534776469646d346e6834716574706674657a7a78716e7a326b6c7336376a677777686c78637665",
+			expectedPackedHash:  "b4457c87c7b32e312e3b80c63bd9874100f092529548469eae2ac1e525dc7add",
+			expectedSigningHash: "ab250d898ca036dec9a1bb67881c3ee660185ba5c73c6dd669cf590aac50b511",
+			expectedSignature:   "0137c16dc62294067053dfd8f1832c30af22aaf3ae7e0a066eb0921586dc126e3cd5fad4dd40c46cb0e8f9fe6d9210f48195be37eb28d27d80d1a76739ab476f1b",
+		},
+		{
+			name:                "Known Values Test",
+			privateKeyHex:       "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+			publicKeyHex:        "046d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2487e6222a6664e079c8edf7518defd562dbeda1e7593dfd7f0be285880a24dab",
+			addressHex:          "ede35562d3555e61120a151b3c8e8e91d83a378a",
+			contractAddress:     "0x0102030405060708090a0b0c0d0e0f1011121314",
+			cid:                 KnownCid,
+			newCid:              "bafyreifstfribprjfru4wdidm4nh4qetpftezzxqnz2kls67jgwwhlxcve",
+			expectedPacked:      "0102030405060708090a0b0c0d0e0f10111213146261667972656968643734346b703375613673766b3574336368776c7169636e7a616732327a6d636f6872776f7776797161776a716f6772363569626166797265696673746672696270726a66727534776469646d346e6834716574706674657a7a78716e7a326b6c7336376a677777686c78637665",
+			expectedPackedHash:  "1f6d6bba9f7239efca073cf8c0cd315c03ad84c0b810b8e47a6d54d253c57960",
+			expectedSigningHash: "2a158900275922fd25424739133ef356e199e88a4f3167834ea3fa28bbba0d2a",
+			expectedSignature:   "6d4c469c1b501b9de027242a67265541aded71de66f54a931420dfede2860f11107b8454af2b2abd920de973fe943f8c896b3effd39f78e1c59da425031ebbd91c",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, err := crypto.HexToECDSA(tt.privateKeyHex)
+			if err != nil {
+				t.Fatalf("failed to parse private key: %v", err)
+			}
+
+			publicKey := key.Public()
+			publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+			if !ok {
+				t.Fatalf("failed to cast public key to ECDSA")
+			}
+			pubBytes := crypto.FromECDSAPub(publicKeyECDSA)
+			if hex.EncodeToString(pubBytes) != tt.publicKeyHex {
+				t.Errorf("public key mismatch\ngot:  %x\nwant: %s", pubBytes, tt.publicKeyHex)
+			}
+
+			address := crypto.PubkeyToAddress(*publicKeyECDSA)
+			if textformat.FormatHex(address[:]) != tt.addressHex {
+				t.Errorf("address mismatch\ngot:  %s\nwant: %s", textformat.FormatHex(address[:]), tt.addressHex)
+			}
+
+			// 1. Check Packed Message
+			addr := parseContractAddress(tt.contractAddress)
+			packed := packMessage(addr, tt.cid, tt.newCid)
+			if hex.EncodeToString(packed) != tt.expectedPacked {
+				t.Errorf("packed message mismatch\ngot:  %x\nwant: %s", packed, tt.expectedPacked)
+			}
+
+			// 2. Check Packed Message Hash (PulseHash)
+			packedHash := buildUpdateMessage(tt.cid, tt.newCid, tt.contractAddress)
+			if hex.EncodeToString(packedHash) != tt.expectedPackedHash {
+				t.Errorf("packed hash mismatch\ngot:  %x\nwant: %s", packedHash, tt.expectedPackedHash)
+			}
+
+			// 3. Check Signing Hash (Ethereum TextHash)
+			signingHash := accounts.TextHash(packedHash)
+			if hex.EncodeToString(signingHash) != tt.expectedSigningHash {
+				t.Errorf("signing hash mismatch\ngot:  %x\nwant: %s", signingHash, tt.expectedSigningHash)
+			}
+
+			// 4. Check Signature Bytes
+			sig, err := SignUpdate(key, tt.contractAddress, tt.cid, tt.newCid)
+			if err != nil {
+				t.Fatalf("SignConsent failed: %v", err)
+			}
+			if hex.EncodeToString(sig) != tt.expectedSignature {
+				t.Errorf("signature mismatch\ngot:  %x\nwant: %s", sig, tt.expectedSignature)
+			}
+
+			// 5. Check Recovery of signature
+			recoveredAddress, err := UpdateAddress(sig, tt.contractAddress, tt.cid, tt.newCid)
+			if err != nil {
+				t.Fatalf("ConsentAddress failed: %v", err)
+			}
+			if textformat.FormatHex(recoveredAddress[:]) != tt.addressHex {
+				t.Errorf("address mismatch\ngot:  %s\nwant: %s", textformat.FormatHex(address[:]), tt.addressHex)
+			}
+		})
+	}
 }
