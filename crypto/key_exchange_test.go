@@ -284,8 +284,8 @@ func TestPulseECEncryption_Decrypt_Errors(t *testing.T) {
 	// Decrypt with wrong private key
 	wrongPriv, _ := secp.GeneratePrivateKey()
 	_, err = DecryptEC(res, addr, wrongPriv, symmetric.PulseSymmetricConsent, 0x01, 0)
-	if err == nil || err.Error() != "No matching public key found in encryption result" {
-		t.Fatalf("expected 'No matching public key found in encryption result', got %v", err)
+	if err == nil || err.Error() != "no matching public key found in encryption result" {
+		t.Fatalf("expected 'no matching public key found in encryption result', got %v", err)
 	}
 
 	// Tamper ciphertext

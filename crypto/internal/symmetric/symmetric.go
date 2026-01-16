@@ -22,8 +22,6 @@ import (
 //
 // This file contains the common functions for both purposes.
 
-//TODO: Update known values
-
 const (
 	AESGCMKeySize    = 32 // AES-256
 	AESGCMNonceSize  = 12 // GCM standard nonce size

@@ -7,7 +7,7 @@ import (
 	"slices"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
-	cbor "github.com/fxamacker/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
@@ -15,8 +15,6 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
 )
-
-//TODO: Review test pack coverage
 
 // PulseECEncryptionResult is a struct for holding the result of an encryption
 // operation. It contains the sealed data, the two public keys involved in the
@@ -40,7 +38,7 @@ func (r *PulseECEncryptionResult) CBOR() ([]byte, error) {
 
 var ECDHCipherSuite = "ecdh-secp256k1+hkdf-keccak256+aes-gcm-256"
 
-// EncryptECDH performs a hybrid encryption using Elliptic Curve Diffie-Hellman (ECDH).
+// EncryptECDH performs hybrid encryption using Elliptic Curve Diffie-Hellman (ECDH).
 // It derives a shared secret using SECP256K1, generates an AES-256 key via HKDF,
 // and seals the plaintext using AES-GCM.
 //
@@ -90,7 +88,7 @@ func EncryptECDH(plaintext []byte,
 
 }
 
-// DecryptEC decrypts a message that was encrypted using ECDH.
+// DecryptEC decrypts a message encrypted using ECDH.
 // It identifies the other party's public key from the result, derives the shared secret,
 // and opens the AES-GCM ciphertext.
 //
@@ -119,17 +117,17 @@ func DecryptEC(encryptionResult *PulseECEncryptionResult,
 	if bytes.Equal(encryptionResult.Key1, myPublicKey) {
 		opk, err := secp.ParsePubKey(encryptionResult.Key2)
 		if err != nil {
-			return nil, errors.New("Failed to parse other public key: " + err.Error())
+			return nil, errors.New("failed to parse other public key: " + err.Error())
 		}
 		otherPublicKey = opk
 	} else if bytes.Equal(encryptionResult.Key2, myPublicKey) {
 		opk, err := secp.ParsePubKey(encryptionResult.Key1)
 		if err != nil {
-			return nil, errors.New("Failed to parse other public key: " + err.Error())
+			return nil, errors.New("failed to parse other public key: " + err.Error())
 		}
 		otherPublicKey = opk
 	} else {
-		return nil, errors.New("No matching public key found in encryption result")
+		return nil, errors.New("no matching public key found in encryption result")
 	}
 
 	// Get the AES key and nonce from the ECDH exchange
@@ -138,13 +136,13 @@ func DecryptEC(encryptionResult *PulseECEncryptionResult,
 	contextHash := context.ContextHash(chainId, *contractAddress, consentNumber)
 	aesKey, nonce, err := generateAESKey(myPrivateKey, otherPublicKey, transcriptHash, contextHash)
 	if err != nil {
-		return nil, errors.New("Failed to generate aes key: " + err.Error())
+		return nil, errors.New("failed to generate aes key: " + err.Error())
 	}
 
 	// Decrypt the ciphertext
 	plaintext, err := symmetric.PulseOpen(encryptionResult.SealedData, aesKey, nonce, purpose, ECDHCipherSuite, nil, contextHash, transcriptHash)
 	if err != nil {
-		return nil, errors.New("Failed to open Ciphertext: " + err.Error())
+		return nil, errors.New("failed to open Ciphertext: " + err.Error())
 	}
 
 	return plaintext, nil
