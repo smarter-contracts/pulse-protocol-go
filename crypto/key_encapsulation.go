@@ -7,55 +7,20 @@ import (
 	"slices"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
-	"github.com/fxamacker/cbor/v2"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
+	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
-//TODO: Packing encryption result into single CBOR/byte array
 //TODO: Review test pack coverage
 
-// PulsePQEncryptionKey is a struct for holding the encapsulated key for a
-// recipient. It combines the encrypted AES key with an fingerprint of the public MLKEMS key used to encrypt it.
-type PulsePQEncryptionKey struct {
-	_                   struct{} `json:"-"               cbor:",toarray"`       // Enable CBOR array encoding for this type.
-	KeyFingerPrint      [32]byte `json:"keyFingerPrint"  cbor:"0,keyasint"`     // Hash of public key
-	EncapsulatedKeyKey  []byte   `json:"encapsulatedKeyKey" cbor:"1,keyasint"`  // Encapsulated/Encrypted AES EncryptionKey
-	EncapsulatedDataKey []byte   `json:"encapsulatedDataKey" cbor:"2,keyasint"` // Encapsulated/Encrypted AES Ciphertext
-}
-
-func (r *PulsePQEncryptionKey) CBOR() ([]byte, error) {
-	encOpts := cbor.CanonicalEncOptions()
-	enc, err := encOpts.EncMode()
-	if err != nil {
-		return nil, err
-	}
-	return enc.Marshal(r)
-}
-
-// PulsePQEncryptionResult is a struct for holding the result of an encryption
-// operation. It contains the sealed data and the public keys for recipients,
-// for embedding in a consent record (Notary) or a Consent/Revoke/Update
-// request.
-type PulsePQEncryptionResult struct {
-	_          struct{}                `json:"-"          cbor:",toarray"`   // Enable CBOR array encoding for this type.
-	SealedData []byte                  `json:"sealedData" cbor:"0,keyasint"` // Encrypted data
-	Keys       []*PulsePQEncryptionKey `json:"keys"       cbor:"1,keyasint"` // Public keys of parties that may be able to decrypt the data
-}
-
-func (r *PulsePQEncryptionResult) CBOR() ([]byte, error) {
-	encOpts := cbor.CanonicalEncOptions()
-	enc, err := encOpts.EncMode()
-	if err != nil {
-		return nil, err
-	}
-	return enc.Marshal(r)
-}
+type PulsePQEncryptionKey = types.PulsePQEncryptionKey
+type PulsePQEncryptionResult = types.PulsePQEncryptionResult
 
 var PQDataCipherSuite = "rng+aes-gcm-256"
 var PQKeyCipherSuite = "kyber768+hkdf-keccak256+aes-gcm-256"
@@ -87,7 +52,7 @@ func EncryptPQ(entropy io.Reader,
 	plaintext []byte,
 	contractAddress *string,
 	publicKeys []*kyberKEM.PublicKey,
-	purpose types.PulsePurpose,
+	purpose purposes.PulsePurpose,
 	chainId uint32,
 	consentNumber uint32,
 ) (*PulsePQEncryptionResult, error) {
@@ -137,7 +102,7 @@ func EncryptPQ(entropy io.Reader,
 // Returns:
 //   - A PulsePQEncryptionKey containing the encapsulated and encrypted key material.
 //   - An error if encapsulation or encryption fails.
-func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose types.PulsePurpose, contextHash []byte) (*PulsePQEncryptionKey, error) {
+func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose purposes.PulsePurpose, contextHash []byte) (*PulsePQEncryptionKey, error) {
 	scheme := kyberKEM.Scheme()
 	fingerPrint := getPubKeyFingerprint(kemPK)
 
@@ -199,7 +164,7 @@ func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []b
 func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 	contractAddress *string,
 	myPrivateKey *kyberKEM.PrivateKey,
-	purpose types.PulsePurpose,
+	purpose purposes.PulsePurpose,
 	chainId uint32,
 	consentNumber uint32,
 ) ([]byte, error) {

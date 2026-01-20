@@ -1,4 +1,4 @@
-package types
+package purposes
 
 import "fmt"
 
@@ -24,7 +24,7 @@ const (
 func (p PulsePurpose) String() string {
 	switch p {
 	case PulsePurposeSignTx:
-		return "sign-tx"
+		return "signtx"
 	case PulsePurposeEncryptConsentNotaryBlock:
 		return "encrypt-consent-notary-block"
 	case PulsePurposeEncryptConsentStructure:

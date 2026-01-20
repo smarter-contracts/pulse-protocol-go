@@ -7,35 +7,17 @@ import (
 	"slices"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
-	"github.com/fxamacker/cbor/v2"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
+	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
-// PulseECEncryptionResult is a struct for holding the result of an encryption
-// operation. It contains the sealed data, the two public keys involved in the
-// exchange, for embedding in a consent record (Notary) or a Consent/Revoke/Update
-// request.
-type PulseECEncryptionResult struct {
-	_          struct{} `json:"-"          cbor:",toarray"`   // Enable CBOR array encoding for this type.
-	SealedData []byte   `json:"sealedData" cbor:"0,keyasint"` // Encrypted data
-	Key1       []byte   `json:"key1"       cbor:"1,keyasint"` // My public key, 33-byte compressed format
-	Key2       []byte   `json:"key2"       cbor:"2,keyasint"` // Public key of the other party, 33-byte compressed format
-}
-
-func (r *PulseECEncryptionResult) CBOR() ([]byte, error) {
-	encOpts := cbor.CanonicalEncOptions()
-	enc, err := encOpts.EncMode()
-	if err != nil {
-		return nil, err
-	}
-	return enc.Marshal(r)
-}
+type PulseECEncryptionResult = types.PulseECEncryptionResult
 
 var ECDHCipherSuite = "ecdh-secp256k1+hkdf-keccak256+aes-gcm-256"
 
@@ -59,7 +41,7 @@ func EncryptECDH(plaintext []byte,
 	contractAddress *string,
 	myPrivateKey *secp.PrivateKey,
 	otherPublicKey *secp.PublicKey,
-	purpose types.PulsePurpose,
+	purpose purposes.PulsePurpose,
 	chainId uint32,
 	consentNumber uint32,
 ) (*PulseECEncryptionResult, error) {
@@ -107,7 +89,7 @@ func EncryptECDH(plaintext []byte,
 func DecryptEC(encryptionResult *PulseECEncryptionResult,
 	contractAddress *string,
 	myPrivateKey *secp.PrivateKey,
-	purpose types.PulsePurpose,
+	purpose purposes.PulsePurpose,
 	chainId uint32,
 	consentNumber uint32,
 ) ([]byte, error) {

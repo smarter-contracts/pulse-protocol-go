@@ -10,7 +10,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 )
 
 // This file contains cryptographic functions for symmetric encryption used in the Pulse Protocol.
@@ -51,7 +51,7 @@ var (
 //
 // Returns:
 //   - A byte slice containing the formatted AAD string.
-func buildAAD(purpose types.PulsePurpose,
+func buildAAD(purpose purposes.PulsePurpose,
 	cipherSuite string,
 	recipientHash []byte,
 	nonce []byte,
@@ -88,7 +88,7 @@ func buildAAD(purpose types.PulsePurpose,
 func PulseSealWithNewKey(
 	entropy io.Reader,
 	plaintext []byte,
-	purpose types.PulsePurpose,
+	purpose purposes.PulsePurpose,
 	cipherSuite string,
 	recipientHash []byte,
 	contextHash []byte,
@@ -129,7 +129,7 @@ func PulseSeal(
 	plaintext []byte,
 	aesKey []byte,
 	nonce []byte,
-	purpose types.PulsePurpose,
+	purpose purposes.PulsePurpose,
 	cipherSuite string,
 	recipientHash []byte,
 	contextHash []byte,
@@ -170,7 +170,7 @@ func PulseOpen(
 	ciphertext []byte,
 	aesKey []byte,
 	nonce []byte,
-	purpose types.PulsePurpose,
+	purpose purposes.PulsePurpose,
 	cipherSuite string,
 	recipient []byte,
 	contextHash []byte,

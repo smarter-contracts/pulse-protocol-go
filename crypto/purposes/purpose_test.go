@@ -1,4 +1,4 @@
-package types
+package purposes
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ func TestPulsePurpose_String(t *testing.T) {
 		purpose PulsePurpose
 		want    string
 	}{
-		{PulsePurposeSignTx, "sign-tx"},
+		{PulsePurposeSignTx, "signtx"},
 		{PulsePurposeEncryptConsentNotaryBlock, "encrypt-consent-notary-block"},
 		{PulsePurposeEncryptConsentStructure, "consent"},
 		{PulsePurposeEncryptRevokeNotaryBlock, "encrypt-revoke-notary-block"},

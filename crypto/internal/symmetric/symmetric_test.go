@@ -7,7 +7,7 @@ import (
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 )
 
 func mustHexDecode(h string) []byte {
@@ -24,7 +24,7 @@ func TestSymmetric_KnownValues(t *testing.T) {
 		plaintext      []byte
 		aesKey         []byte
 		nonce          []byte
-		purpose        types.PulsePurpose
+		purpose        purposes.PulsePurpose
 		cipherSuite    string
 		recipientHash  []byte
 		contextHash    []byte
@@ -37,7 +37,7 @@ func TestSymmetric_KnownValues(t *testing.T) {
 			plaintext:      []byte("This is the consent record"),
 			aesKey:         mustHexDecode("e52121ff74c5fc185d5aa165c47283889378492f64a53fbf5d53f3e5dc5e4e82"),
 			nonce:          mustHexDecode("9b6585bef61692965127d170"),
-			purpose:        types.PulsePurposeEncryptConsentStructure,
+			purpose:        purposes.PulsePurposeEncryptConsentStructure,
 			cipherSuite:    "ecdh-secp256k1+hkdf-keccak256+aes-gcm-256",
 			recipientHash:  mustHexDecode(""),
 			contextHash:    mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
@@ -50,7 +50,7 @@ func TestSymmetric_KnownValues(t *testing.T) {
 			plaintext:      []byte("This is the consent record"),
 			aesKey:         mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
 			nonce:          mustHexDecode("202122232425262728292a2b"),
-			purpose:        types.PulsePurposeEncryptConsentStructure,
+			purpose:        purposes.PulsePurposeEncryptConsentStructure,
 			cipherSuite:    "rng+aes-gcm-256",
 			recipientHash:  mustHexDecode("9674817700045e99280b08deebeb495374fd63823ed53130b16e84c3fc558922"),
 			contextHash:    mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
@@ -63,7 +63,7 @@ func TestSymmetric_KnownValues(t *testing.T) {
 			plaintext:      mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b"),
 			aesKey:         mustHexDecode("8c00e2528428927b81befef1022cf7de7aae639b8f714a90c1c6106237000822"),
 			nonce:          mustHexDecode("504f2d28709e2db670a59cc4"),
-			purpose:        types.PulsePurposeEncryptConsentStructure,
+			purpose:        purposes.PulsePurposeEncryptConsentStructure,
 			cipherSuite:    "kyber768+hkdf-keccak256+aes-gcm-256",
 			recipientHash:  mustHexDecode("01b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd"),
 			contextHash:    mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
@@ -76,7 +76,7 @@ func TestSymmetric_KnownValues(t *testing.T) {
 			plaintext:      mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b"),
 			aesKey:         mustHexDecode("ec144bc3e77f9d68782131775750e9e53d76ccc8186e1846a146d5e37c48f3ca"),
 			nonce:          mustHexDecode("2e00a1a119f54375f5a75416"),
-			purpose:        types.PulsePurposeEncryptConsentStructure,
+			purpose:        purposes.PulsePurposeEncryptConsentStructure,
 			cipherSuite:    "kyber768+hkdf-keccak256+aes-gcm-256",
 			recipientHash:  mustHexDecode("70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde"),
 			contextHash:    mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
@@ -89,7 +89,7 @@ func TestSymmetric_KnownValues(t *testing.T) {
 			plaintext:      []byte("pulse test"),
 			aesKey:         mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
 			nonce:          mustHexDecode("000102030405060708090a0b"),
-			purpose:        types.PulsePurposeEncryptConsentStructure,
+			purpose:        purposes.PulsePurposeEncryptConsentStructure,
 			cipherSuite:    "aes-gcm-256",
 			recipientHash:  mustHexDecode("0102030405060708090a0b0c0d0e0f1011121314"),
 			contextHash:    mustHexDecode("212223"), // This isn't really a hash but we use it for testing
@@ -102,7 +102,7 @@ func TestSymmetric_KnownValues(t *testing.T) {
 			plaintext:      mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f11223344556677889900aabbccddeeff"), // AES Key + Nonce
 			aesKey:         mustHexDecode("4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60"),
 			nonce:          mustHexDecode("1112131415161718191a1b1c"),
-			purpose:        types.PulseSymmetricKeyWrap,
+			purpose:        purposes.PulseSymmetricKeyWrap,
 			cipherSuite:    "kyber768+hkdf-keccak256+aes-gcm-256",
 			recipientHash:  mustHexDecode("70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde"),
 			contextHash:    mustHexDecode("6d7aace2b827d9377fc9bfb261f50b2ab4dbf041500a2ac837d8dcba19e54aea"),
@@ -180,7 +180,7 @@ func TestPulseSeal_PulseOpen_RoundTrip(t *testing.T) {
 	key := getTestKey()
 	nonce := getTestNonce()
 	recipient := getTestRecipient()
-	purpose := types.PulsePurposeEncryptConsentStructure
+	purpose := purposes.PulsePurposeEncryptConsentStructure
 	context := []byte("context")
 	suite := "test-suite"
 	transcript := []byte("test transcript")
@@ -203,7 +203,7 @@ func TestPulseSeal_PulseOpen_RoundTrip(t *testing.T) {
 func TestPulseSealWithNewKey_RoundTrip(t *testing.T) {
 	plaintext := []byte("pulse test with new key")
 	recipient := getTestRecipient()
-	purpose := types.PulseSymmetricUpdate
+	purpose := purposes.PulseSymmetricUpdate
 	context := []byte("another context")
 	suite := "test-suite"
 
@@ -237,12 +237,12 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	key := getTestKey()
 	nonce := getTestNonce()
 	recipient := getTestRecipient()
-	purpose := types.PulsePurposeEncryptConsentStructure
+	myPurpose := purposes.PulsePurposeEncryptConsentStructure
 	context := []byte("context")
 	suite := "test-suite"
 	transcript := []byte("transcript")
 
-	ciphertext, err := PulseSeal(plaintext, key, nonce, purpose, suite, recipient, context, transcript)
+	ciphertext, err := PulseSeal(plaintext, key, nonce, myPurpose, suite, recipient, context, transcript)
 	if err != nil {
 		t.Fatalf("PulseSeal failed: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	wrongKey := make([]byte, AESGCMKeySize)
 	copy(wrongKey, key)
 	wrongKey[0] ^= 0xFF
-	_, err = PulseOpen(ciphertext, wrongKey, nonce, purpose, suite, recipient, context, transcript)
+	_, err = PulseOpen(ciphertext, wrongKey, nonce, myPurpose, suite, recipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong key")
 	}
@@ -260,13 +260,13 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	wrongNonce := make([]byte, AESGCMNonceSize)
 	copy(wrongNonce, nonce)
 	wrongNonce[0] ^= 0xFF
-	_, err = PulseOpen(ciphertext, key, wrongNonce, purpose, suite, recipient, context, transcript)
+	_, err = PulseOpen(ciphertext, key, wrongNonce, myPurpose, suite, recipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong nonce")
 	}
 
 	// Test with wrong purpose
-	_, err = PulseOpen(ciphertext, key, nonce, types.PulsePurposeEncryptRevokeStructure, suite, recipient, context, transcript)
+	_, err = PulseOpen(ciphertext, key, nonce, purposes.PulsePurposeEncryptRevokeStructure, suite, recipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong purpose")
 	}
@@ -275,13 +275,13 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	wrongRecipient := make([]byte, 20)
 	copy(wrongRecipient, recipient)
 	wrongRecipient[0] ^= 0xFF
-	_, err = PulseOpen(ciphertext, key, nonce, purpose, suite, wrongRecipient, context, transcript)
+	_, err = PulseOpen(ciphertext, key, nonce, myPurpose, suite, wrongRecipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong recipient")
 	}
 
 	// Test with wrong context
-	_, err = PulseOpen(ciphertext, key, nonce, purpose, suite, recipient, []byte("wrong context"), transcript)
+	_, err = PulseOpen(ciphertext, key, nonce, myPurpose, suite, recipient, []byte("wrong context"), transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with wrong context")
 	}
@@ -290,14 +290,14 @@ func TestPulseOpen_AuthenticationFailure(t *testing.T) {
 	corruptedCiphertext := make([]byte, len(ciphertext))
 	copy(corruptedCiphertext, ciphertext)
 	corruptedCiphertext[0] ^= 0xFF
-	_, err = PulseOpen(corruptedCiphertext, key, nonce, purpose, suite, recipient, context, transcript)
+	_, err = PulseOpen(corruptedCiphertext, key, nonce, myPurpose, suite, recipient, context, transcript)
 	if err == nil {
 		t.Error("PulseOpen should have failed with corrupted ciphertext")
 	}
 }
 
 func TestBuildAAD(t *testing.T) {
-	purpose := types.PulsePurposeEncryptConsentStructure
+	purpose := purposes.PulsePurposeEncryptConsentStructure
 	cipherSuite := "aes-gcm"
 	recipient := getTestRecipient()
 	nonce := getTestNonce()
@@ -335,13 +335,13 @@ func TestBuildAAD(t *testing.T) {
 
 func TestPulseSymmetricPurposes(t *testing.T) {
 	tests := []struct {
-		purpose types.PulsePurpose
+		purpose purposes.PulsePurpose
 		want    string
 	}{
-		{types.PulsePurposeEncryptConsentStructure, "consent"},
-		{types.PulsePurposeEncryptRevokeStructure, "revoke"},
-		{types.PulseSymmetricUpdate, "update"},
-		{types.PulseSymmetricKeyWrap, "keywrap"},
+		{purposes.PulsePurposeEncryptConsentStructure, "consent"},
+		{purposes.PulsePurposeEncryptRevokeStructure, "revoke"},
+		{purposes.PulseSymmetricUpdate, "update"},
+		{purposes.PulseSymmetricKeyWrap, "keywrap"},
 	}
 
 	recipient := getTestRecipient()
