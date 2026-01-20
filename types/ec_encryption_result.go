@@ -113,9 +113,11 @@ func (p *PulseECEncryptionResult) UnmarshalCBOR(node ipld.Node) error {
 }
 
 func (p *PulseECEncryptionResult) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p)
+	type Alias PulseECEncryptionResult
+	return json.Marshal((*Alias)(p))
 }
 
 func (p *PulseECEncryptionResult) UnmarshalJSON(bytes []byte) error {
-	return json.Unmarshal(bytes, p)
+	type Alias PulseECEncryptionResult
+	return json.Unmarshal(bytes, (*Alias)(p))
 }
