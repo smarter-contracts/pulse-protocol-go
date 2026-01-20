@@ -16,9 +16,9 @@ import (
 //
 // Returns:
 //   - A formatted context string.
-func ContextString(chainId int32,
+func ContextString(chainId uint32,
 	contractAddress string,
-	consentNumber int32,
+	consentNumber uint32,
 ) string {
 	return fmt.Sprintf("|pulse|ctx|v1|chain=%d|contract=%s|consentNumber=%d",
 		chainId, contractAddress, consentNumber)
@@ -34,9 +34,9 @@ func ContextString(chainId int32,
 //
 // Returns:
 //   - A 32-byte Keccak-256 hash of the context string.
-func ContextHash(chainId int32,
+func ContextHash(chainId uint32,
 	contractAddress string,
-	consentNumber int32,
+	consentNumber uint32,
 ) []byte {
 	return hash.PulseHashString(ContextString(chainId, contractAddress, consentNumber))
 }

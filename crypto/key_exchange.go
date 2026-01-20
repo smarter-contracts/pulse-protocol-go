@@ -14,6 +14,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
 )
 
 // PulseECEncryptionResult is a struct for holding the result of an encryption
@@ -58,9 +59,9 @@ func EncryptECDH(plaintext []byte,
 	contractAddress *string,
 	myPrivateKey *secp.PrivateKey,
 	otherPublicKey *secp.PublicKey,
-	purpose symmetric.PulseSymmetricPurpose,
-	chainId int32,
-	consentNumber int32,
+	purpose types.PulsePurpose,
+	chainId uint32,
+	consentNumber uint32,
 ) (*PulseECEncryptionResult, error) {
 	if myPrivateKey == nil || otherPublicKey == nil {
 		return nil, errors.New("must provide both private and public keys to encrypt")
@@ -106,9 +107,9 @@ func EncryptECDH(plaintext []byte,
 func DecryptEC(encryptionResult *PulseECEncryptionResult,
 	contractAddress *string,
 	myPrivateKey *secp.PrivateKey,
-	purpose symmetric.PulseSymmetricPurpose,
-	chainId int32,
-	consentNumber int32,
+	purpose types.PulsePurpose,
+	chainId uint32,
+	consentNumber uint32,
 ) ([]byte, error) {
 	myPublicKey := myPrivateKey.PubKey().SerializeCompressed()
 

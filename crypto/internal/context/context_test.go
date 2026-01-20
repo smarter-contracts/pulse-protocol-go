@@ -10,9 +10,9 @@ import (
 func TestContextString(t *testing.T) {
 	tests := []struct {
 		name            string
-		chainId         int32
+		chainId         uint32
 		contractAddress string
-		consentNumber   int32
+		consentNumber   uint32
 		want            string
 		hashOut         string
 	}{
@@ -40,14 +40,6 @@ func TestContextString(t *testing.T) {
 			want:            "|pulse|ctx|v1|chain=137|contract=0x742d35Cc6634C0532925a3b844Bc454e4438f44e|consentNumber=1234",
 			hashOut:         "7e9b68d32341c8a6b8149450d5dbdea7006ca44fb85b1612424b9f6901c33d50",
 		},
-		{
-			name:            "negative values (though unlikely)",
-			chainId:         -1,
-			contractAddress: "0x00",
-			consentNumber:   -5,
-			want:            "|pulse|ctx|v1|chain=-1|contract=0x00|consentNumber=-5",
-			hashOut:         "2115f114a0886a163d80ab479fa0121e8ad3485254cd7600a1001a5e5f739ead",
-		},
 	}
 
 	for _, tt := range tests {
@@ -66,9 +58,9 @@ func TestContextString(t *testing.T) {
 }
 
 func TestContextHash(t *testing.T) {
-	chainId := int32(1)
+	chainId := uint32(1)
 	contractAddress := "0x0102030405060708090a0b0c0d0e0f1011121314"
-	consentNumber := int32(0)
+	consentNumber := uint32(0)
 
 	// Known Keccak-256 hash for "|pulse|ctx|v1|chain=1|contract=0x0102030405060708090a0b0c0d0e0f1011121314|consentNumber=0"
 	// We can verify this against the value used in key_encapsulation_test.go if available,

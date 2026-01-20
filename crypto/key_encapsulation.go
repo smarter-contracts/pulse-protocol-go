@@ -14,6 +14,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
 )
 
 //TODO: Packing encryption result into single CBOR/byte array
@@ -86,9 +87,9 @@ func EncryptPQ(entropy io.Reader,
 	plaintext []byte,
 	contractAddress *string,
 	publicKeys []*kyberKEM.PublicKey,
-	purpose symmetric.PulseSymmetricPurpose,
-	chainId int32,
-	consentNumber int32,
+	purpose types.PulsePurpose,
+	chainId uint32,
+	consentNumber uint32,
 ) (*PulsePQEncryptionResult, error) {
 	var result PulsePQEncryptionResult
 
@@ -136,7 +137,7 @@ func EncryptPQ(entropy io.Reader,
 // Returns:
 //   - A PulsePQEncryptionKey containing the encapsulated and encrypted key material.
 //   - An error if encapsulation or encryption fails.
-func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose symmetric.PulseSymmetricPurpose, contextHash []byte) (*PulsePQEncryptionKey, error) {
+func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose types.PulsePurpose, contextHash []byte) (*PulsePQEncryptionKey, error) {
 	scheme := kyberKEM.Scheme()
 	fingerPrint := getPubKeyFingerprint(kemPK)
 
@@ -198,9 +199,9 @@ func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []b
 func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 	contractAddress *string,
 	myPrivateKey *kyberKEM.PrivateKey,
-	purpose symmetric.PulseSymmetricPurpose,
-	chainId int32,
-	consentNumber int32,
+	purpose types.PulsePurpose,
+	chainId uint32,
+	consentNumber uint32,
 ) ([]byte, error) {
 	contextHash := context.ContextHash(chainId, *contractAddress, consentNumber)
 

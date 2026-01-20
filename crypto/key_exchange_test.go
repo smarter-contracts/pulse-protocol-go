@@ -11,6 +11,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
 )
 
 /*
@@ -97,8 +98,8 @@ func TestEncrypt_Values(t *testing.T) {
 	aesKeyExpected := mustHexDecode("e52121ff74c5fc185d5aa165c47283889378492f64a53fbf5d53f3e5dc5e4e82")
 	aesNonceExpected := mustHexDecode("9b6585bef61692965127d170")
 	cipherTextExpected := mustHexDecode("8f8852ab16bb09596b9d8ce94a7482ac715dacd711537878a48a6d7628287baa3423a0535346593375ee")
-	chainId := int32(1)
-	consentNumber := int32(2)
+	chainId := uint32(1)
+	consentNumber := uint32(2)
 	expectedCBOR := "83582a8f8852ab16bb09596b9d8ce94a7482ac715dacd711537878a48a6d7628287baa3423a0535346593375ee5821036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2582103131341eb2154dded12e38e0bce03f906802fb10690ec1b2b27303a4a9fba88bc"
 	expectedJSON := []byte("{\"sealedData\":\"j4hSqxa7CVlrnYzpSnSCrHFdrNcRU3h4pIptdigoe6o0I6BTU0ZZM3Xu\",\"key1\":\"A21sqsJIr5b2r6f5BPVQJToPPvP1qi/mg4qVshZpFGji\",\"key2\":\"AxMTQeshVN3tEuOOC84D+QaAL7EGkOwbKycwOkqfuoi8\"}")
 
@@ -152,7 +153,7 @@ func TestEncrypt_Values(t *testing.T) {
 	// Finally, check the ciphertext post encryption
 	// addr already defined above
 
-	result, err := EncryptECDH(pt, addr, alicePriv, bobPub, symmetric.PulseSymmetricConsent, chainId, consentNumber)
+	result, err := EncryptECDH(pt, addr, alicePriv, bobPub, types.PulsePurposeEncryptConsentStructure, chainId, consentNumber)
 	if err != nil {
 		t.Fatalf("EncryptECDH() failed: %v", err)
 	}
@@ -184,7 +185,7 @@ func TestEncrypt_Values(t *testing.T) {
 		t.Fatalf("output JSON mismatch: got %s want %s", jsonString, expectedJSON)
 	}
 
-	decrypted, err := DecryptEC(result, addr, bobPriv, symmetric.PulseSymmetricConsent, chainId, consentNumber)
+	decrypted, err := DecryptEC(result, addr, bobPriv, types.PulsePurposeEncryptConsentStructure, chainId, consentNumber)
 	if err != nil {
 		t.Fatalf("DecryptEC() failed: %v", err)
 	}
@@ -200,7 +201,7 @@ func TestPulseECEncryption_RoundTrip_WithResult(t *testing.T) {
 	addr := helperContractAddress()
 
 	// Alice encrypts to Bob using ECDH(aPriv, bPub)
-	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, symmetric.PulseSymmetricConsent, 0x01, 0)
+	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err != nil {
 		t.Fatalf("EncryptECDH() failed: %v", err)
 	}
@@ -217,7 +218,7 @@ func TestPulseECEncryption_RoundTrip_WithResult(t *testing.T) {
 	}
 
 	// Bob decrypts using only the result
-	decrypted, err := DecryptEC(res, addr, bobPriv, symmetric.PulseSymmetricConsent, 0x01, 0)
+	decrypted, err := DecryptEC(res, addr, bobPriv, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err != nil {
 		t.Fatalf("DecryptEC() failed: %v", err)
 	}
@@ -232,7 +233,7 @@ func TestPulseECEncryption_UnpackResult_KeyOrderIrrelevant(t *testing.T) {
 	pt := []byte("order test")
 	addr := helperContractAddress()
 
-	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, symmetric.PulseSymmetricConsent, 0x01, 0)
+	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err != nil {
 		t.Fatalf("EncryptECDH() failed: %v", err)
 	}
@@ -240,7 +241,7 @@ func TestPulseECEncryption_UnpackResult_KeyOrderIrrelevant(t *testing.T) {
 	// Swap keys in the result to ensure unpacking still finds the other key
 	res.Key1, res.Key2 = res.Key2, res.Key1
 
-	decrypted, err := DecryptEC(res, addr, bobPriv, symmetric.PulseSymmetricConsent, 0x01, 0)
+	decrypted, err := DecryptEC(res, addr, bobPriv, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err != nil {
 		t.Fatalf("DecryptEC() failed with swapped keys: %v", err)
 	}
@@ -259,13 +260,13 @@ func TestPulseECEncryption_Encrypt_Errors(t *testing.T) {
 	pt := []byte("hello")
 
 	// Missing private key
-	_, err := EncryptECDH(pt, addr, nil, bobPub, symmetric.PulseSymmetricConsent, 0x01, 0)
+	_, err := EncryptECDH(pt, addr, nil, bobPub, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err == nil {
 		t.Fatal("expected error with nil private key")
 	}
 
 	// Missing other public key
-	_, err = EncryptECDH(pt, addr, alicePriv, nil, symmetric.PulseSymmetricConsent, 0x01, 0)
+	_, err = EncryptECDH(pt, addr, alicePriv, nil, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err == nil {
 		t.Fatal("expected error with nil public key")
 	}
@@ -276,14 +277,14 @@ func TestPulseECEncryption_Decrypt_Errors(t *testing.T) {
 	addr := helperContractAddress()
 	pt := []byte("secret")
 
-	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, symmetric.PulseSymmetricConsent, 0x01, 0)
+	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err != nil {
 		t.Fatalf("EncryptECDH() failed: %v", err)
 	}
 
 	// Decrypt with wrong private key
 	wrongPriv, _ := secp.GeneratePrivateKey()
-	_, err = DecryptEC(res, addr, wrongPriv, symmetric.PulseSymmetricConsent, 0x01, 0)
+	_, err = DecryptEC(res, addr, wrongPriv, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err == nil || err.Error() != "no matching public key found in encryption result" {
 		t.Fatalf("expected 'no matching public key found in encryption result', got %v", err)
 	}
@@ -293,7 +294,7 @@ func TestPulseECEncryption_Decrypt_Errors(t *testing.T) {
 	resTampered.SealedData = make([]byte, len(res.SealedData))
 	copy(resTampered.SealedData, res.SealedData)
 	resTampered.SealedData[0] ^= 0xff
-	_, err = DecryptEC(&resTampered, addr, bobPriv, symmetric.PulseSymmetricConsent, 0x01, 0)
+	_, err = DecryptEC(&resTampered, addr, bobPriv, types.PulsePurposeEncryptConsentStructure, 0x01, 0)
 	if err == nil {
 		t.Fatal("expected error with tampered ciphertext")
 	}

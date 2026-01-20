@@ -10,6 +10,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
 )
 
 // This file contains cryptographic functions for symmetric encryption used in the Pulse Protocol.
@@ -27,31 +28,6 @@ const (
 	AESGCMNonceSize  = 12 // GCM standard nonce size
 	EthAddressLength = 20
 )
-
-type PulseSymmetricPurpose byte
-
-const (
-	PulseNoSymmetricPurpose PulseSymmetricPurpose = iota
-	PulseSymmetricConsent
-	PulseSymmetricRevoke
-	PulseSymmetricUpdate
-	PulseSymmetricKeyWrap = 255
-)
-
-func (p PulseSymmetricPurpose) String() string {
-	switch p {
-	case PulseSymmetricConsent:
-		return "consent"
-	case PulseSymmetricRevoke:
-		return "revoke"
-	case PulseSymmetricUpdate:
-		return "update"
-	case PulseSymmetricKeyWrap:
-		return "keywrap"
-	default:
-		panic("unhandled default case")
-	}
-}
 
 var (
 	ErrBadContractAddress = errors.New("contract address must be 40 hex characters")
@@ -75,7 +51,7 @@ var (
 //
 // Returns:
 //   - A byte slice containing the formatted AAD string.
-func buildAAD(purpose PulseSymmetricPurpose,
+func buildAAD(purpose types.PulsePurpose,
 	cipherSuite string,
 	recipientHash []byte,
 	nonce []byte,
@@ -112,7 +88,7 @@ func buildAAD(purpose PulseSymmetricPurpose,
 func PulseSealWithNewKey(
 	entropy io.Reader,
 	plaintext []byte,
-	purpose PulseSymmetricPurpose,
+	purpose types.PulsePurpose,
 	cipherSuite string,
 	recipientHash []byte,
 	contextHash []byte,
@@ -153,7 +129,7 @@ func PulseSeal(
 	plaintext []byte,
 	aesKey []byte,
 	nonce []byte,
-	purpose PulseSymmetricPurpose,
+	purpose types.PulsePurpose,
 	cipherSuite string,
 	recipientHash []byte,
 	contextHash []byte,
@@ -194,7 +170,7 @@ func PulseOpen(
 	ciphertext []byte,
 	aesKey []byte,
 	nonce []byte,
-	purpose PulseSymmetricPurpose,
+	purpose types.PulsePurpose,
 	cipherSuite string,
 	recipient []byte,
 	contextHash []byte,

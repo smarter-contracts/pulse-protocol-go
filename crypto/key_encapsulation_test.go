@@ -15,6 +15,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/types"
 )
 
 /*
@@ -155,8 +156,8 @@ func unpackHexToPublicKey(hexString string, pk *kyberKEM.PublicKey) error {
 func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 	plainText := []byte("pulse text")
 	contractAddress := helperContractAddressPQ()
-	purpose := symmetric.PulseSymmetricConsent
-	chainId := uint8(0x01)
+	purpose := types.PulsePurposeEncryptConsentStructure
+	chainId := uint32(0x01)
 
 	alicePrivate, _ := keyFromFile("alice_private.hex")
 	_ = alicePrivate
@@ -164,13 +165,13 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 	bobPublic := bobPrivate.Public().(*kyberKEM.PublicKey)
 
 	// EncryptPQ for Bob
-	result, err := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, int32(chainId), 0)
+	result, err := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, chainId, 0)
 	if err != nil {
 		t.Fatalf("EncryptPQ: %v", err)
 	}
 
 	// DecryptPQ for Bob
-	decrypted, err := DecryptPQ(result, contractAddress, bobPrivate, purpose, int32(chainId), 0)
+	decrypted, err := DecryptPQ(result, contractAddress, bobPrivate, purpose, chainId, 0)
 	if err != nil {
 		t.Fatalf("DecryptPQ (Bob): %v", err)
 	}
@@ -182,16 +183,16 @@ func TestPulsePQ_EncryptDecrypt_Success(t *testing.T) {
 func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 	plainText := []byte("data")
 	contractAddress := helperContractAddressPQ()
-	purpose := symmetric.PulseSymmetricConsent
-	chainId := uint8(0x01)
+	purpose := types.PulsePurposeEncryptConsentStructure
+	chainId := uint32(0x01)
 	pk, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, _ := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk}, purpose, int32(chainId), 0)
+	result, _ := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk}, purpose, chainId, 0)
 
 	// Decrypt with wrong private key
 	pkWrong, wrongSK, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 	_ = pkWrong
-	_, err := DecryptPQ(result, contractAddress, wrongSK, purpose, int32(chainId), 0)
+	_, err := DecryptPQ(result, contractAddress, wrongSK, purpose, chainId, 0)
 	if err == nil || err.Error() != "no key found for this party" {
 		t.Fatalf("expected 'no key found for this party', got %v", err)
 	}
@@ -200,14 +201,14 @@ func TestPulsePQ_Decrypt_Errors(t *testing.T) {
 func TestPulsePQ_Encrypt_Success_WithRecipients(t *testing.T) {
 	plainText := []byte("top secret pq data")
 	contractAddress := helperContractAddressPQ()
-	purpose := symmetric.PulseSymmetricConsent
-	chainId := uint8(0x01)
+	purpose := types.PulsePurposeEncryptConsentStructure
+	chainId := uint32(0x01)
 
 	pk1, sk1, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 	_ = sk1
 	pk2, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
 
-	result, err := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, int32(chainId), 0)
+	result, err := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk1, pk2}, purpose, chainId, 0)
 	if err != nil {
 		t.Fatalf("EncryptPQ: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestEncapsulateKey_KnownValues(t *testing.T) {
 		seed                 []byte
 		publicKey            *kyberKEM.PublicKey
 		aesKeyPacked         []byte
-		purpose              symmetric.PulseSymmetricPurpose
+		purpose              types.PulsePurpose
 		contextHash          []byte
 		expectedFingerPrint  string
 		expectedSharedSecret string
@@ -308,7 +309,7 @@ func TestEncapsulateKey_KnownValues(t *testing.T) {
 			seed:                 mustHexDecode("2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b"),
 			publicKey:            alicePublic,
 			aesKeyPacked:         mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b"),
-			purpose:              symmetric.PulseSymmetricConsent,
+			purpose:              types.PulsePurposeEncryptConsentStructure,
 			contextHash:          mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
 			expectedFingerPrint:  "01b4f1d38c1f547fa0d533118f43a523ae60171156ad380f01a724511ebe78cd",
 			expectedSharedSecret: "5c1db08a4db86a2f26964f53c2911e8ab029f0087732e76bd5e1842dbac50777",
@@ -323,7 +324,7 @@ func TestEncapsulateKey_KnownValues(t *testing.T) {
 			seed:                 mustHexDecode("4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b"),
 			publicKey:            bobPublic,
 			aesKeyPacked:         mustHexDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b"),
-			purpose:              symmetric.PulseSymmetricConsent,
+			purpose:              types.PulsePurposeEncryptConsentStructure,
 			contextHash:          mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3"),
 			expectedFingerPrint:  "70e2c14612b36ffcf09fe5ca28564270a7513ff0c84ac000cbff35292b35fdde",
 			expectedSharedSecret: "49666a8941873a339c07299b0aea6941ad420dd0df8ebd9fc5160154153caea3",
@@ -401,9 +402,9 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 
 	plaintext := []byte("This is the consent record")
 	contractAddress := "0x0102030405060708090a0b0c0d0e0f1011121314"
-	purpose := symmetric.PulseSymmetricConsent
-	chainId := int32(1)
-	consentNumber := int32(2)
+	purpose := types.PulsePurposeEncryptConsentStructure
+	chainId := uint32(1)
+	consentNumber := uint32(2)
 
 	// Get Alice's key from file (deterministic)
 	alicePrivate, err := keyFromFile("alice_private.hex")
