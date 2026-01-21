@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ipld/go-ipld-prime"
 	"github.com/ipld/go-ipld-prime/codec/dagcbor"
 	"github.com/ipld/go-ipld-prime/node/basicnode"
+	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 )
 
 // PulseECEncryptionResult is a struct for holding the result of an encryption
@@ -54,39 +54,22 @@ func (result *PulseECEncryptionResult) MarshalCBOR() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func mustBytes(n ipld.Node, key string) ([]byte, error) {
-	v, err := n.LookupByString(key)
+func (p *PulseECEncryptionResult) UnmarshalCBOR(block []byte) error {
+	na := basicnode.Prototype.Any.NewBuilder()
+	err := dagcbor.Decode(na, bytes.NewReader(block))
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("decoding block to IPLD node: %w", err)
 	}
-	return v.AsBytes()
-}
+	node := na.Build()
 
-func mustString(n ipld.Node, key string) (string, error) {
-	v, err := n.LookupByString(key)
-	if err != nil {
-		return "", err
-	}
-	return v.AsString()
-}
-
-func mustInt(n ipld.Node, key string) (int64, error) {
-	v, err := n.LookupByString(key)
-	if err != nil {
-		return 0, err
-	}
-	return v.AsInt()
-}
-
-func (p *PulseECEncryptionResult) UnmarshalCBOR(node ipld.Node) error {
-	ty, err := mustString(node, "t")
+	ty, err := ipfs.MustString(node, "t")
 	if err != nil {
 		return fmt.Errorf("t: %w", err)
 	}
 	if ty != "ec" {
 		return fmt.Errorf("unexpected structure type: %q", ty)
 	}
-	ver, err := mustInt(node, "v")
+	ver, err := ipfs.MustInt(node, "v")
 	if err != nil {
 		return fmt.Errorf("v: %w", err)
 	}
@@ -94,15 +77,15 @@ func (p *PulseECEncryptionResult) UnmarshalCBOR(node ipld.Node) error {
 		return fmt.Errorf("unexpected ec structure version: %d", ver)
 	}
 
-	sd, err := mustBytes(node, "sd")
+	sd, err := ipfs.MustBytes(node, "sd")
 	if err != nil {
 		return fmt.Errorf("sd: %w", err)
 	}
-	k1, err := mustBytes(node, "k1")
+	k1, err := ipfs.MustBytes(node, "k1")
 	if err != nil {
 		return fmt.Errorf("k1: %w", err)
 	}
-	k2, err := mustBytes(node, "k2")
+	k2, err := ipfs.MustBytes(node, "k2")
 	if err != nil {
 		return fmt.Errorf("k2: %w", err)
 	}

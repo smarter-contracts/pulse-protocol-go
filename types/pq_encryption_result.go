@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ipld/go-ipld-prime"
 	"github.com/ipld/go-ipld-prime/codec/dagcbor"
 	"github.com/ipld/go-ipld-prime/node/basicnode"
+	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 )
 
 // PulsePQEncryptionKey is a struct for holding the encapsulated key for a
@@ -94,15 +94,22 @@ func (result *PulsePQEncryptionResult) MarshalCBOR() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (p *PulsePQEncryptionResult) UnmarshalCBOR(node ipld.Node) error {
-	ty, err := mustString(node, "t")
+func (p *PulsePQEncryptionResult) UnmarshalCBOR(block []byte) error {
+	na := basicnode.Prototype.Any.NewBuilder()
+	err := dagcbor.Decode(na, bytes.NewReader(block))
+	if err != nil {
+		return fmt.Errorf("decoding block to IPLD node: %w", err)
+	}
+	node := na.Build()
+
+	ty, err := ipfs.MustString(node, "t")
 	if err != nil {
 		return fmt.Errorf("t: %w", err)
 	}
 	if ty != "pq" {
 		return fmt.Errorf("unexpected structure type: %q", ty)
 	}
-	ver, err := mustInt(node, "v")
+	ver, err := ipfs.MustInt(node, "v")
 	if err != nil {
 		return fmt.Errorf("v: %w", err)
 	}
@@ -110,7 +117,7 @@ func (p *PulsePQEncryptionResult) UnmarshalCBOR(node ipld.Node) error {
 		return fmt.Errorf("unexpected ec structure version: %d", ver)
 	}
 
-	sd, err := mustBytes(node, "sd")
+	sd, err := ipfs.MustBytes(node, "sd")
 	if err != nil {
 		return fmt.Errorf("sd: %w", err)
 	}
@@ -129,7 +136,7 @@ func (p *PulsePQEncryptionResult) UnmarshalCBOR(node ipld.Node) error {
 			return err
 		}
 
-		fpBytes, err := mustBytes(kn, "fp")
+		fpBytes, err := ipfs.MustBytes(kn, "fp")
 		if err != nil {
 			return fmt.Errorf("fp: %w", err)
 		}
@@ -139,11 +146,11 @@ func (p *PulsePQEncryptionResult) UnmarshalCBOR(node ipld.Node) error {
 		var fp [32]byte
 		copy(fp[:], fpBytes)
 
-		ekk, err := mustBytes(kn, "ekk")
+		ekk, err := ipfs.MustBytes(kn, "ekk")
 		if err != nil {
 			return fmt.Errorf("ekk: %w", err)
 		}
-		edk, err := mustBytes(kn, "edk")
+		edk, err := ipfs.MustBytes(kn, "edk")
 		if err != nil {
 			return fmt.Errorf("edk: %w", err)
 		}

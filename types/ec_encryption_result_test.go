@@ -41,12 +41,13 @@ func TestPulseECEncryptionResult_CBOR(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, cborData)
 
-	nb := basicnode.Prototype.Any.NewBuilder()
-	err = dagcbor.Decode(nb, bytes.NewReader(cborData))
-	require.NoError(t, err)
-
+	/*
+		nb := basicnode.Prototype.Any.NewBuilder()
+		err = dagcbor.Decode(nb, bytes.NewReader(cborData))
+		require.NoError(t, err)
+	*/
 	res2 := &PulseECEncryptionResult{}
-	err = res2.UnmarshalCBOR(nb.Build())
+	err = res2.UnmarshalCBOR(cborData)
 	require.NoError(t, err)
 
 	assert.Equal(t, res.SealedData, res2.SealedData)
@@ -64,8 +65,12 @@ func TestPulseECEncryptionResult_UnmarshalCBOR_Errors(t *testing.T) {
 		_ = ma.AssembleValue().AssignInt(1)
 		_ = ma.Finish()
 
+		var buf bytes.Buffer
+		err := dagcbor.Encode(nb.Build(), &buf)
+		assert.NoError(t, err)
+
 		res := &PulseECEncryptionResult{}
-		err := res.UnmarshalCBOR(nb.Build())
+		err = res.UnmarshalCBOR(buf.Bytes())
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected structure type")
 	})
@@ -79,8 +84,12 @@ func TestPulseECEncryptionResult_UnmarshalCBOR_Errors(t *testing.T) {
 		_ = ma.AssembleValue().AssignInt(2) // wrong version
 		_ = ma.Finish()
 
+		var buf bytes.Buffer
+		err := dagcbor.Encode(nb.Build(), &buf)
+		assert.NoError(t, err)
+
 		res := &PulseECEncryptionResult{}
-		err := res.UnmarshalCBOR(nb.Build())
+		err = res.UnmarshalCBOR(buf.Bytes())
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected ec structure version")
 	})
@@ -94,8 +103,12 @@ func TestPulseECEncryptionResult_UnmarshalCBOR_Errors(t *testing.T) {
 		_ = ma.AssembleValue().AssignInt(1)
 		_ = ma.Finish()
 
+		var buf bytes.Buffer
+		err := dagcbor.Encode(nb.Build(), &buf)
+		assert.NoError(t, err)
+
 		res := &PulseECEncryptionResult{}
-		err := res.UnmarshalCBOR(nb.Build())
+		err = res.UnmarshalCBOR(buf.Bytes())
 		assert.Error(t, err)
 	})
 }

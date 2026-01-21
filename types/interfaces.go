@@ -1,10 +1,8 @@
 package types
 
-import "github.com/ipld/go-ipld-prime"
-
 type CBORSerializable interface {
 	MarshalCBOR() ([]byte, error)
-	UnmarshalCBOR(ipld.Node) error
+	UnmarshalCBOR([]byte) error
 }
 
 type JSONSerializable interface {
