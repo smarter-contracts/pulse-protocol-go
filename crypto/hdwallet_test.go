@@ -228,15 +228,56 @@ func TestDeriveOtherPartyGenerator_ReturnValue(t *testing.T) {
 	if gen == nil {
 		t.Fatal("returned key is nil")
 	}
-	// TODO: the doc comment says this function returns "the public key generator" that can be
-	// shared without exposing private key material, but the current implementation returns the
-	// private key at m/protocol'/otherParty'.  Once the design is confirmed, this should assert
-	// gen.IsPrivate == false and the implementation should call key.PublicKey() before returning.
-	//
-	// Additionally, DeriveOtherPartyGenerator currently adds bip32.FirstHardenedChild to
-	// otherParty (deriving m/protocol'/otherParty'+hardening), while deriveKeyFromMaster does
-	// NOT add hardening.  These two must be consistent for derivePublicKeyFromParent to agree
-	// with deriveKeyFromMaster.
+	// Must be a public (not private) key so it can safely be shared with counterparties
+	// to allow them to derive our public keys without access to private key material.
+	if gen.IsPrivate {
+		t.Error("DeriveOtherPartyGenerator must return a public key, got private key")
+	}
+}
+
+func TestDerivePublicKeyFromParent_ConsistencyWithPrivate(t *testing.T) {
+	/*
+	 * Derives the same key via two routes and confirms the results agree:
+	 *
+	 *   Route A (private path):
+	 *     deriveKeyFromMaster(masterKey, path(otherParty=2, chain=1, consent=62, purpose=1))
+	 *     → secp256k1 private key → .PubKey()
+	 *
+	 *   Route B (public path):
+	 *     DeriveOtherPartyGenerator(masterKey, 2)          → extended public key at m/protocol'/2
+	 *     derivePublicKeyFromParent(generator, 1, 62, 1)   → public key at m/protocol'/2/1/62/1
+	 *
+	 * Both routes must produce the same compressed public key.
+	 */
+	masterKey := mustNewMasterKey(t)
+	const otherParty, chain, consent = uint32(2), uint32(1), uint32(62)
+	p := purposes.PulsePurposeSignTx
+
+	// Route A
+	path, err := NewPulseHDPath(otherParty, chain, consent, p)
+	if err != nil {
+		t.Fatalf("NewPulseHDPath() failed: %v", err)
+	}
+	privKey, err := deriveKeyFromMaster(masterKey, path)
+	if err != nil {
+		t.Fatalf("deriveKeyFromMaster() failed: %v", err)
+	}
+	pubFromPriv := privKey.PubKey().SerializeCompressed()
+
+	// Route B
+	gen, err := DeriveOtherPartyGenerator(masterKey, otherParty)
+	if err != nil {
+		t.Fatalf("DeriveOtherPartyGenerator() failed: %v", err)
+	}
+	pubFromParent, err := derivePublicKeyFromParent(gen, chain, consent, p)
+	if err != nil {
+		t.Fatalf("derivePublicKeyFromParent() failed: %v", err)
+	}
+
+	if !bytes.Equal(pubFromPriv, pubFromParent.SerializeCompressed()) {
+		t.Errorf("public key mismatch between private and public derivation paths:\n  private route: %x\n  public route:  %x",
+			pubFromPriv, pubFromParent.SerializeCompressed())
+	}
 }
 
 // ── deriveKeyFromMaster errors ────────────────────────────────────────────────────────

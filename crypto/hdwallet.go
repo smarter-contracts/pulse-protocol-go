@@ -257,7 +257,7 @@ func DeriveOtherPartyGenerator(masterKey *bip32.Key, otherParty uint32) (*bip32.
 		return nil, errors.New("masterKey cannot be nil")
 	}
 	if otherParty >= 0x80000000 {
-		return nil, errors.New("otherParty must be less than 0x80000000 (hardening applied automatically)")
+		return nil, errors.New("otherParty must be a normal (non-hardened) key index")
 	}
 
 	// Derive: m/protocol'
@@ -267,10 +267,10 @@ func DeriveOtherPartyGenerator(masterKey *bip32.Key, otherParty uint32) (*bip32.
 	}
 
 	// Derive: m/protocol'/otherparty
-	key, err = key.NewChildKey(otherParty + bip32.FirstHardenedChild)
+	key, err = key.NewChildKey(otherParty)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive otherparty key: %w", err)
 	}
 
-	return key, nil
+	return key.PublicKey(), nil
 }
