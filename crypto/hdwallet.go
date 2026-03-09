@@ -205,9 +205,19 @@ func deriveKeyFromMaster(masterKey *bip32.Key, path *PulseHDPath) (*secp.Private
 	return privKey, nil
 }
 
-// DerivePublicKeyFromParent derives a public key from a parent key following the Pulse HD path
-// This will only work for the non-hardened portions of the path (chain/consent/purpose)
-// The protocol and otherparty levels must be derived from the private key first
+// DerivePublicKeyFromParent derives a public key from an extended public key returned
+// by DeriveOtherPartyGenerator.  It follows the non-hardened portion of the Pulse HD
+// path (chain/consent/purpose), allowing one party to compute the other party's
+// public key for a specific consent without access to private key material.
+//
+// Typical use: Alice calls DeriveOtherPartyGenerator on Bob's master key (or uses a
+// generator Bob has shared with her), then calls DerivePublicKeyFromParent to obtain
+// the public key she should encrypt to for a particular (chain, consent, purpose).
+func DerivePublicKeyFromParent(parentKey *bip32.Key, chain uint32, consent uint32, p purposes.PulsePurpose) (*secp.PublicKey, error) {
+	return derivePublicKeyFromParent(parentKey, chain, consent, p)
+}
+
+// derivePublicKeyFromParent is the unexported implementation.
 func derivePublicKeyFromParent(parentKey *bip32.Key, chain uint32, consent uint32, p purposes.PulsePurpose) (*secp.PublicKey, error) {
 	if parentKey == nil {
 		return nil, errors.New("parentKey cannot be nil")
