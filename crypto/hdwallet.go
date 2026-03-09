@@ -249,6 +249,111 @@ func derivePublicKeyFromParent(parentKey *bip32.Key, chain uint32, consent uint3
 	return pubKey, nil
 }
 
+// EncryptSignRevokeEC encrypts revoke data and produces a signed PulseRevokeRequestEC.
+// consentCid is the CID of the original consent's encrypted-data CBOR (stored in
+// PulseConsentRequestEC.EncryptedData after marshalling).
+func EncryptSignRevokeEC(masterKey *bip32.Key,
+	revokeData []byte,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	otherPubKey *secp.PublicKey,
+	contractAddress string,
+	chainId uint32,
+	consentCid string,
+) (*types.PulseRevokeRequestEC, error) {
+	encryptedRevokeData, err := encryptEC(masterKey, revokeData, otherPartyNo, consentNumber, otherPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
+	if err != nil {
+		return nil, errors.New("failed to encrypt revoke data: " + err.Error())
+	}
+
+	returnValue := &types.PulseRevokeRequestEC{
+		ConsentCid:    consentCid,
+		EncryptedData: *encryptedRevokeData,
+	}
+	return SignRevokeEC(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId)
+}
+
+// SignRevokeEC signs a PulseRevokeRequestEC and sets its Signature field.
+// The signature covers the contract address, the original consent CID, and the CID
+// of the revoke encrypted data — binding the revocation to both records.
+func SignRevokeEC(masterKey *bip32.Key,
+	request *types.PulseRevokeRequestEC,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+) (*types.PulseRevokeRequestEC, error) {
+	revokeCBOR, err := request.EncryptedData.MarshalCBOR()
+	if err != nil {
+		return nil, errors.New("failed to marshal revoke CBOR: " + err.Error())
+	}
+	revokeCid, err := ipfs.GetCid(revokeCBOR)
+	if err != nil {
+		return nil, errors.New("failed to get revoke cid: " + err.Error())
+	}
+
+	signingKeyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purposes.PulsePurposeSignTx)
+	if err != nil {
+		return nil, errors.New("failed to create HD path: " + err.Error())
+	}
+	signingKey, err := deriveKeyFromMaster(masterKey, signingKeyPath)
+	if err != nil {
+		return nil, errors.New("failed to derive signing key from master: " + err.Error())
+	}
+	signature, err := SignRevoke(signingKey.ToECDSA(), contractAddress, request.ConsentCid, revokeCid.String())
+	if err != nil {
+		return nil, errors.New("failed to sign revoke: " + err.Error())
+	}
+	request.Signature = signature
+
+	return request, nil
+}
+
+// DecryptConsentEC derives the consent encryption key from the HD wallet and decrypts
+// the consent payload.  The caller must have been one of the two parties to the
+// original encryption (Key1 or Key2 in the EncryptedData).
+func DecryptConsentEC(masterKey *bip32.Key,
+	request *types.PulseConsentRequestEC,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+) ([]byte, error) {
+	return decryptHDEC(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
+}
+
+// DecryptRevokeEC derives the revoke encryption key from the HD wallet and decrypts
+// the revoke payload.
+func DecryptRevokeEC(masterKey *bip32.Key,
+	request *types.PulseRevokeRequestEC,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+) ([]byte, error) {
+	return decryptHDEC(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
+}
+
+// decryptHDEC derives the encryption private key at the given purpose and decrypts.
+func decryptHDEC(masterKey *bip32.Key,
+	encryptedData *PulseECEncryptionResult,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+	purpose purposes.PulsePurpose,
+) ([]byte, error) {
+	keyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purpose)
+	if err != nil {
+		return nil, errors.New("failed to create HD path: " + err.Error())
+	}
+	privKey, err := deriveKeyFromMaster(masterKey, keyPath)
+	if err != nil {
+		return nil, errors.New("failed to derive encryption key from master: " + err.Error())
+	}
+	return DecryptEC(encryptedData, &contractAddress, privKey, purpose, chainId, consentNumber)
+}
+
 // DeriveOtherPartyGenerator derives the public key generator for a specific other party
 // This is the key at path m/protocol'/otherparty which can be used to derive
 // public keys for that party without knowing their private keys
