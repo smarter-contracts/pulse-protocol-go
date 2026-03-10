@@ -521,18 +521,17 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 	t.Logf("Recovered signing address: %s", hex.EncodeToString(recoveredAddr[:]))
 
 	// Step 5: A second party counter-signs (appends a second signature)
-	request, err = SignConsentEC(masterKey, request, otherParty, consent, contractAddr, chainId)
-	if err != nil {
-		t.Fatalf("second SignConsentEC() failed: %v", err)
+	if err = SignConsentRequest(masterKey, request, otherParty, consent, contractAddr, chainId); err != nil {
+		t.Fatalf("second SignConsentRequest() failed: %v", err)
 	}
 	if len(request.Signatures) != 2 {
 		t.Fatalf("expected 2 signatures after counter-sign, got %d", len(request.Signatures))
 	}
 }
 
-// ── SignConsentEC on pre-built request ────────────────────────────────────────────────
+// ── SignConsentRequest on pre-built request ───────────────────────────────────────────
 
-func TestSignConsentEC_OnExistingRequest(t *testing.T) {
+func TestSignConsentRequest_OnExistingRequest(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
@@ -540,7 +539,6 @@ func TestSignConsentEC_OnExistingRequest(t *testing.T) {
 	const otherParty, consent, chainId = uint32(5), uint32(100), uint32(137)
 
 	request := &types.PulseConsentRequestEC{}
-	var err error
 
 	// Build a request with only encrypted data (no signature yet)
 	result, err := EncryptConsentNotaryEC(masterKey, []byte("data"), otherParty, consent, bobPub, contractAddr, chainId)
@@ -549,10 +547,9 @@ func TestSignConsentEC_OnExistingRequest(t *testing.T) {
 	}
 	request.EncryptedData = *result
 
-	// Sign it
-	request, err = SignConsentEC(masterKey, request, otherParty, consent, contractAddr, chainId)
-	if err != nil {
-		t.Fatalf("SignConsentEC() failed: %v", err)
+	// Sign it — SignConsentRequest works for any consent type (EC or PQ)
+	if err = SignConsentRequest(masterKey, request, otherParty, consent, contractAddr, chainId); err != nil {
+		t.Fatalf("SignConsentRequest() failed: %v", err)
 	}
 	if len(request.Signatures) != 1 {
 		t.Fatalf("expected 1 signature, got %d", len(request.Signatures))

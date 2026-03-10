@@ -84,9 +84,9 @@ func TestEncryptSignRevokeEC_RoundTrip(t *testing.T) {
 	t.Logf("Recovered revoke signing address: %s", hex.EncodeToString(recoveredAddr[:]))
 }
 
-// ── SignRevokeEC on a pre-built request ───────────────────────────────────────
+// ── SignRevokeRequest on a pre-built request ──────────────────────────────────
 
-func TestSignRevokeEC_OnExistingRequest(t *testing.T) {
+func TestSignRevokeRequest_OnExistingRequest(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
@@ -104,13 +104,12 @@ func TestSignRevokeEC_OnExistingRequest(t *testing.T) {
 		EncryptedData: *result,
 	}
 
-	// Now sign it
-	request, err = SignRevokeEC(masterKey, request, otherParty, consent, contractAddr, chainId)
-	if err != nil {
-		t.Fatalf("SignRevokeEC() failed: %v", err)
+	// SignRevokeRequest works for any revoke type (EC or PQ)
+	if err = SignRevokeRequest(masterKey, request, otherParty, consent, contractAddr, chainId); err != nil {
+		t.Fatalf("SignRevokeRequest() failed: %v", err)
 	}
 	if len(request.Signature) == 0 {
-		t.Fatal("Signature is empty after SignRevokeEC")
+		t.Fatal("Signature is empty after SignRevokeRequest")
 	}
 }
 

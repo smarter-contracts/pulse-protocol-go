@@ -77,40 +77,45 @@ func EncryptSignConsentEC(masterKey *bip32.Key,
 	}
 
 	returnValue := &types.PulseConsentRequestEC{EncryptedData: *encryptedConsentData}
-	return SignConsentEC(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId)
+	if err := SignConsentRequest(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+		return nil, err
+	}
+	return returnValue, nil
 }
 
-func SignConsentEC(masterKey *bip32.Key,
-	request *types.PulseConsentRequestEC,
+// SignConsentRequest derives the HD signing key and appends a signature to any
+// consent request type (EC or PQ).  It replaces the former type-specific
+// SignConsentEC function.
+func SignConsentRequest(masterKey *bip32.Key,
+	request SignableConsent,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
-) (*types.PulseConsentRequestEC, error) {
-	signingCBOR, err := request.EncryptedData.MarshalCBOR()
+) error {
+	signingCBOR, err := request.EncryptedDataCBOR()
 	if err != nil {
-		return nil, errors.New("failed to marshal consent CBOR: " + err.Error())
+		return errors.New("failed to marshal consent CBOR: " + err.Error())
 	}
 	cid, err := ipfs.GetCid(signingCBOR)
 	if err != nil {
-		return nil, errors.New("failed to get cid: " + err.Error())
+		return errors.New("failed to get cid: " + err.Error())
 	}
 
 	signingKeyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purposes.PulsePurposeSignTx)
 	if err != nil {
-		return nil, errors.New("failed to create HD path: " + err.Error())
+		return errors.New("failed to create HD path: " + err.Error())
 	}
 	signingKey, err := deriveKeyFromMaster(masterKey, signingKeyPath)
 	if err != nil {
-		return nil, errors.New("failed to derive signing key from master: " + err.Error())
+		return errors.New("failed to derive signing key from master: " + err.Error())
 	}
 	signature, err := SignConsent(signingKey.ToECDSA(), contractAddress, cid.String())
 	if err != nil {
-		return nil, errors.New("failed to sign consent: " + err.Error())
+		return errors.New("failed to sign consent: " + err.Error())
 	}
-	request.Signatures = append(request.Signatures, signature)
-
-	return request, nil
+	request.AppendSignature(signature)
+	return nil
 }
 
 func EncryptConsentNotaryEC(
@@ -280,43 +285,46 @@ func EncryptSignRevokeEC(masterKey *bip32.Key,
 		ConsentCid:    consentCid,
 		EncryptedData: *encryptedRevokeData,
 	}
-	return SignRevokeEC(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId)
+	if err := SignRevokeRequest(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+		return nil, err
+	}
+	return returnValue, nil
 }
 
-// SignRevokeEC signs a PulseRevokeRequestEC and sets its Signature field.
-// The signature covers the contract address, the original consent CID, and the CID
-// of the revoke encrypted data — binding the revocation to both records.
-func SignRevokeEC(masterKey *bip32.Key,
-	request *types.PulseRevokeRequestEC,
+// SignRevokeRequest derives the HD signing key and sets the signature on any
+// revoke request type (EC or PQ).  The signature covers the contract address,
+// the original consent CID, and the CID of the revoke encrypted data —
+// binding the revocation cryptographically to both records.
+func SignRevokeRequest(masterKey *bip32.Key,
+	request SignableRevoke,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
-) (*types.PulseRevokeRequestEC, error) {
-	revokeCBOR, err := request.EncryptedData.MarshalCBOR()
+) error {
+	revokeCBOR, err := request.EncryptedDataCBOR()
 	if err != nil {
-		return nil, errors.New("failed to marshal revoke CBOR: " + err.Error())
+		return errors.New("failed to marshal revoke CBOR: " + err.Error())
 	}
 	revokeCid, err := ipfs.GetCid(revokeCBOR)
 	if err != nil {
-		return nil, errors.New("failed to get revoke cid: " + err.Error())
+		return errors.New("failed to get revoke cid: " + err.Error())
 	}
 
 	signingKeyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purposes.PulsePurposeSignTx)
 	if err != nil {
-		return nil, errors.New("failed to create HD path: " + err.Error())
+		return errors.New("failed to create HD path: " + err.Error())
 	}
 	signingKey, err := deriveKeyFromMaster(masterKey, signingKeyPath)
 	if err != nil {
-		return nil, errors.New("failed to derive signing key from master: " + err.Error())
+		return errors.New("failed to derive signing key from master: " + err.Error())
 	}
-	signature, err := SignRevoke(signingKey.ToECDSA(), contractAddress, request.ConsentCid, revokeCid.String())
+	signature, err := SignRevoke(signingKey.ToECDSA(), contractAddress, request.GetConsentCid(), revokeCid.String())
 	if err != nil {
-		return nil, errors.New("failed to sign revoke: " + err.Error())
+		return errors.New("failed to sign revoke: " + err.Error())
 	}
-	request.Signature = signature
-
-	return request, nil
+	request.AppendSignature(signature)
+	return nil
 }
 
 // DecryptConsentEC derives the consent encryption key from the HD wallet and decrypts

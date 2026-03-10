@@ -34,6 +34,16 @@ type PulseRevokeRequestEC struct {
 	Signature     []byte                  `json:"signature"`
 }
 
+// ── PulseConsentRequestEC — SignableConsent ───────────────────────────────────────────
+
+func (p *PulseConsentRequestEC) EncryptedDataCBOR() ([]byte, error) {
+	return p.EncryptedData.MarshalCBOR()
+}
+
+func (p *PulseConsentRequestEC) AppendSignature(sig []byte) {
+	p.Signatures = append(p.Signatures, sig)
+}
+
 // ── PulseConsentRequestEC — JSON ─────────────────────────────────────────────────────
 
 func (p *PulseConsentRequestEC) MarshalJSON() ([]byte, error) {
@@ -145,6 +155,20 @@ func (p *PulseConsentRequestEC) UnmarshalCBOR(block []byte) error {
 	p.Signatures = sigs
 
 	return nil
+}
+
+// ── PulseRevokeRequestEC — SignableRevoke ─────────────────────────────────────────────
+
+func (p *PulseRevokeRequestEC) EncryptedDataCBOR() ([]byte, error) {
+	return p.EncryptedData.MarshalCBOR()
+}
+
+func (p *PulseRevokeRequestEC) GetConsentCid() string {
+	return p.ConsentCid
+}
+
+func (p *PulseRevokeRequestEC) AppendSignature(sig []byte) {
+	p.Signature = sig
 }
 
 // ── PulseRevokeRequestEC — JSON ───────────────────────────────────────────────────────

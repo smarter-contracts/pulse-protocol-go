@@ -51,9 +51,8 @@ func TestConsentSigners_TwoSignatures(t *testing.T) {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
 	// Alice counter-signs (simulates a second party using the same key for simplicity)
-	request, err = SignConsentEC(masterKey, request, otherParty, consent, contractAddr, chainId)
-	if err != nil {
-		t.Fatalf("second SignConsentEC() failed: %v", err)
+	if err = SignConsentRequest(masterKey, request, otherParty, consent, contractAddr, chainId); err != nil {
+		t.Fatalf("second SignConsentRequest() failed: %v", err)
 	}
 
 	addrs, err := ConsentSigners(request, contractAddr)
@@ -191,9 +190,8 @@ func TestRevokeSignerWasConsentSigner_MultipleConsentSigners(t *testing.T) {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
 	// Add a second (counter-)signature
-	consentReq, err = SignConsentEC(masterKey, consentReq, otherParty, consent, contractAddr, chainId)
-	if err != nil {
-		t.Fatalf("second SignConsentEC() failed: %v", err)
+	if err = SignConsentRequest(masterKey, consentReq, otherParty, consent, contractAddr, chainId); err != nil {
+		t.Fatalf("second SignConsentRequest() failed: %v", err)
 	}
 	if len(consentReq.Signatures) != 2 {
 		t.Fatalf("expected 2 signatures, got %d", len(consentReq.Signatures))

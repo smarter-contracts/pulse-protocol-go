@@ -180,17 +180,18 @@ func main() {
 	// Note that Bob uses alicePartyNo (his view of Alice), while Alice used
 	// bobPartyNo (her view of Bob) — the otherPartyNo always refers to the
 	// other party from the signer's perspective.
+	//
+	// SignConsentRequest works for any consent request type (EC or PQ).
 	section("5. Bob counter-signs the consent record")
 
-	consentRequest, err = crypto.SignConsentEC(
+	must("Bob: SignConsentRequest", crypto.SignConsentRequest(
 		bobMasterKey,
 		consentRequest,
 		alicePartyNo,  // Bob's view: Alice is the other party
 		consentNumber,
 		contractAddress,
 		chainId,
-	)
-	must("Bob: SignConsentEC", err)
+	))
 	fmt.Printf("  Signatures after counter-sign: %d\n", len(consentRequest.Signatures))
 	fmt.Printf("  Bob's signature: %s\n",
 		hex.EncodeToString(consentRequest.Signatures[1]))
