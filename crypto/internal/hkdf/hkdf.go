@@ -73,6 +73,34 @@ func PulseHKDFKyber(sharedSecret []byte,
 //   - A 12-byte AES nonce.
 //   - A 32-byte Pseudo-Random Key (PRK).
 //   - An error if the derivation fails.
+// PulseHKDFPQSeed derives a fixed-length seed for ML-KEM key pair generation from
+// an HD wallet node key.  It uses HKDF-Extract with a domain-separation salt and
+// HKDF-Expand with a purpose-specific info string to produce `length` bytes of
+// deterministic key material.
+//
+// Arguments:
+//   - nodeKey: The raw private key bytes from the BIP-32 node (32 bytes).
+//   - infoSuffix: Domain-separation label, e.g. "|pulse|pq|consent|v1|".
+//   - length: Number of output bytes (64 for ML-KEM-768).
+//
+// Returns:
+//   - A byte slice of the requested length.
+//   - An error if derivation fails.
+func PulseHKDFPQSeed(nodeKey []byte, infoSuffix string, length int) ([]byte, error) {
+	// Extract step: use a fixed domain-separated salt
+	salt := hash.PulseHashString("|pulse|pq|v1|seed-salt|")
+	prk := hkdf.Extract(sha3.NewLegacyKeccak256, nodeKey, salt)
+
+	// Expand step: info includes the domain label
+	info := []byte(infoSuffix)
+	seed := make([]byte, length)
+	r := hkdf.Expand(sha3.NewLegacyKeccak256, prk, info)
+	if _, err := r.Read(seed); err != nil {
+		return nil, fmt.Errorf("HKDF expand for PQ seed: %w", err)
+	}
+	return seed, nil
+}
+
 func PulseHKDFECDH(sharedSecret []byte,
 	transcript []byte,
 	recipientId []byte,

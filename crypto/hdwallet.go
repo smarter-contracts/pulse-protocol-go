@@ -40,6 +40,8 @@ func NewPulseHDPath(otherParty uint32, chain uint32, consent uint32, p purposes.
 			p != purposes.PulseSymmetricConsent &&
 			p != purposes.PulseSymmetricRevoke &&
 			p != purposes.PulseSymmetricUpdate &&
+			p != purposes.PulsePurposePQDeriveConsent &&
+			p != purposes.PulsePurposePQDeriveRevoke &&
 			p != purposes.PulseSymmetricKeyWrap) {
 		return nil, fmt.Errorf("invalid purpose: %d", p)
 	}

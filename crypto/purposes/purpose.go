@@ -13,6 +13,11 @@ const (
 	PulsePurposeEncryptRevokeNotaryBlock  PulsePurpose = 0x4
 	PulsePurposeEncryptRevokeStructure    PulsePurpose = 0x5
 
+	// PQ (post-quantum) HD wallet purposes — used only for HKDF seed derivation,
+	// not for encryption purposes passed to EncryptPQ/DecryptPQ.
+	PulsePurposePQDeriveConsent PulsePurpose = 9
+	PulsePurposePQDeriveRevoke  PulsePurpose = 10
+
 	// Symmetric encryption purposes (originally from internal/symmetric)
 	PulseNoSymmetricPurpose PulsePurpose = 0
 	PulseSymmetricConsent   PulsePurpose = 6
@@ -33,6 +38,10 @@ func (p PulsePurpose) String() string {
 		return "encrypt-revoke-notary-block"
 	case PulsePurposeEncryptRevokeStructure:
 		return "revoke"
+	case PulsePurposePQDeriveConsent:
+		return "pq-derive-consent"
+	case PulsePurposePQDeriveRevoke:
+		return "pq-derive-revoke"
 	case PulseSymmetricConsent:
 		return "consent"
 	case PulseSymmetricRevoke:

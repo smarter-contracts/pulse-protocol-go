@@ -107,9 +107,12 @@ func TestNewPulseHDPath_Validation(t *testing.T) {
 		{"chain hardened (0x80000000)", 2, 0x80000000, 0, purposes.PulsePurposeSignTx, true},
 		// Invalid: consent with hardening bit set
 		{"consent hardened (0x80000000)", 2, 1, 0x80000000, purposes.PulsePurposeSignTx, true},
+		// Valid PQ derive purposes
+		{"valid purpose 9 (PQDeriveConsent)", 2, 1, 0, purposes.PulsePurposePQDeriveConsent, false},
+		{"valid purpose 10 (PQDeriveRevoke)", 2, 1, 0, purposes.PulsePurposePQDeriveRevoke, false},
 		// Invalid purposes
 		{"purpose 0 (NoSymmetricPurpose)", 2, 1, 0, purposes.PulseNoSymmetricPurpose, true},
-		{"purpose 9 (undefined)", 2, 1, 0, purposes.PulsePurpose(9), true},
+		{"purpose 11 (undefined)", 2, 1, 0, purposes.PulsePurpose(11), true},
 		{"purpose 254 (undefined)", 2, 1, 0, purposes.PulsePurpose(254), true},
 	}
 
