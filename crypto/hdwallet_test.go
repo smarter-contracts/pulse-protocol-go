@@ -434,12 +434,22 @@ func TestEncryptConsentNotaryEC_RoundTrip(t *testing.T) {
 		t.Fatal("SealedData is empty")
 	}
 
-	decrypted, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
+	// Alice (HD wallet holder) decrypts via DecryptConsentNotaryEC
+	gotAlice, err := DecryptConsentNotaryEC(masterKey, result, otherParty, consent, *addr, chainId)
+	if err != nil {
+		t.Fatalf("DecryptConsentNotaryEC() failed: %v", err)
+	}
+	if !bytes.Equal(plaintext, gotAlice) {
+		t.Errorf("Alice plaintext mismatch: got %q, want %q", gotAlice, plaintext)
+	}
+
+	// Bob decrypts directly with his private key
+	gotBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
 	if err != nil {
 		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
-	if !bytes.Equal(plaintext, decrypted) {
-		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, plaintext)
+	if !bytes.Equal(gotAlice, gotBob) {
+		t.Errorf("Alice and Bob decrypted different plaintexts: alice=%q bob=%q", gotAlice, gotBob)
 	}
 }
 
@@ -458,12 +468,22 @@ func TestEncryptRevokeNotaryEC_RoundTrip(t *testing.T) {
 		t.Fatal("SealedData is empty")
 	}
 
-	decrypted, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
+	// Alice (HD wallet holder) decrypts via DecryptRevokeNotaryEC
+	gotAlice, err := DecryptRevokeNotaryEC(masterKey, result, otherParty, consent, *addr, chainId)
+	if err != nil {
+		t.Fatalf("DecryptRevokeNotaryEC() failed: %v", err)
+	}
+	if !bytes.Equal(plaintext, gotAlice) {
+		t.Errorf("Alice plaintext mismatch: got %q, want %q", gotAlice, plaintext)
+	}
+
+	// Bob decrypts directly with his private key
+	gotBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
 	if err != nil {
 		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
-	if !bytes.Equal(plaintext, decrypted) {
-		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, plaintext)
+	if !bytes.Equal(gotAlice, gotBob) {
+		t.Errorf("Alice and Bob decrypted different plaintexts: alice=%q bob=%q", gotAlice, gotBob)
 	}
 }
 

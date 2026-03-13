@@ -745,12 +745,22 @@ func TestEncryptRevokeNotaryEC_RoundTripCoverage(t *testing.T) {
 		t.Fatalf("EncryptRevokeNotaryEC() failed: %v", err)
 	}
 
-	decrypted, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, 1, 62)
+	// HD wallet holder decrypts via DecryptRevokeNotaryEC
+	decrypted, err := DecryptRevokeNotaryEC(masterKey, result, 2, 62, *addr, 1)
 	if err != nil {
-		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
+		t.Fatalf("DecryptRevokeNotaryEC() failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, decrypted) {
 		t.Errorf("plaintext mismatch")
+	}
+
+	// Bob decrypts directly
+	decryptedBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, 1, 62)
+	if err != nil {
+		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
+	}
+	if !bytes.Equal(decrypted, decryptedBob) {
+		t.Errorf("HD and direct decrypt produced different results")
 	}
 }
 
