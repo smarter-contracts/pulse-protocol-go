@@ -22,12 +22,6 @@ func SignRevoke(key *ecdsa.PrivateKey, contractAddressString string, cid string,
 	return signRequest(key, contractAddressString, cid, rcid)
 }
 
-// SignUpdate signs an update request for a given CID and new CID using the provided private key.
-// It returns the EIP-191 formatted signature.
-func SignUpdate(key *ecdsa.PrivateKey, contractAddressString string, cid string, newCid string) ([]byte, error) {
-	return signRequest(key, contractAddressString, cid, newCid)
-}
-
 // signRequest is a helper function that hashes the provided CIDs and contract address,
 // and signs the resulting hash using the provided private key.
 func signRequest(key *ecdsa.PrivateKey, contractAddressString string, cids ...string) ([]byte, error) {
@@ -51,12 +45,6 @@ func GetConsentAddress(signature []byte, contractAddressString string, cid strin
 // contract address, CID, and rcid.
 func GetRevokeAddress(signature []byte, contractAddressString string, cid string, rcid string) (common.Address, error) {
 	return getSigningAddress(signature, contractAddressString, cid, rcid)
-}
-
-// GetUpdateAddress recovers the Ethereum address that signed the update request from the signature,
-// contract address, CID, and newCid.
-func GetUpdateAddress(signature []byte, contractAddressString string, cid string, newCid string) (common.Address, error) {
-	return getSigningAddress(signature, contractAddressString, cid, newCid)
 }
 
 // getSigningAddress is a helper function that recovers the signer's address from a signature

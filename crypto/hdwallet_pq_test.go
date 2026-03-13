@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/key_encapsulate"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 	"github.com/smarter-contracts/pulse-protocol-go/types"
@@ -140,7 +141,7 @@ func TestEncryptSignConsentPQ_RoundTrip(t *testing.T) {
 	}
 
 	// Bob decrypts directly via DecryptPQ
-	gotBob, err := DecryptPQ(&req.EncryptedData, &contractAddr, bobPriv, purposes.PulseSymmetricConsent, chainId, consent)
+	gotBob, err := key_encapsulate.DecryptPQ(&req.EncryptedData, &contractAddr, bobPriv, purposes.PulseSymmetricConsent, chainId, consent)
 	if err != nil {
 		t.Fatalf("Bob DecryptPQ() failed: %v", err)
 	}
@@ -273,7 +274,7 @@ func TestEncryptSignRevokePQ_RoundTrip(t *testing.T) {
 
 	// Bob decrypts directly
 	bobRevokePriv, _, _ := DerivePQKeyPair(bobMaster, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
-	gotBob, err := DecryptPQ(&revokeReq.EncryptedData, &contractAddr, bobRevokePriv, purposes.PulseSymmetricRevoke, chainId, consent)
+	gotBob, err := key_encapsulate.DecryptPQ(&revokeReq.EncryptedData, &contractAddr, bobRevokePriv, purposes.PulseSymmetricRevoke, chainId, consent)
 	if err != nil {
 		t.Fatalf("Bob DecryptPQ() revoke failed: %v", err)
 	}

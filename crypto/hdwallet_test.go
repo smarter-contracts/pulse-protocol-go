@@ -27,8 +27,9 @@ import (
 	"encoding/hex"
 	"testing"
 
-	bip32 "github.com/jamesradley/go-bip32"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	bip32 "github.com/jamesradley/go-bip32"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/key_exchange"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
@@ -71,9 +72,9 @@ func mustNewOtherPartyKey(t *testing.T) (*secp.PrivateKey, *secp.PublicKey) {
 	return priv, priv.PubKey()
 }
 
-// ── NewPulseHDPath validation ─────────────────────────────────────────────────────────
+// ── newpulseHDPath validation ─────────────────────────────────────────────────────────
 
-func TestNewPulseHDPath_Validation(t *testing.T) {
+func TestNewpulseHDPath_Validation(t *testing.T) {
 	tests := []struct {
 		name       string
 		otherParty uint32
@@ -118,7 +119,7 @@ func TestNewPulseHDPath_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path, err := NewPulseHDPath(tt.otherParty, tt.chain, tt.consent, tt.purpose)
+			path, err := newpulseHDPath(tt.otherParty, tt.chain, tt.consent, tt.purpose)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error, got nil")
@@ -143,27 +144,27 @@ func TestNewPulseHDPath_Validation(t *testing.T) {
 			if path.Purpose != tt.purpose {
 				t.Errorf("Purpose: got %d, want %d", path.Purpose, tt.purpose)
 			}
-			if path.Protocol != PulseProtocolIdentifier {
-				t.Errorf("Protocol: got 0x%x, want 0x%x", path.Protocol, PulseProtocolIdentifier)
+			if path.Protocol != pulseProtocolIdentifier {
+				t.Errorf("Protocol: got 0x%x, want 0x%x", path.Protocol, pulseProtocolIdentifier)
 			}
 		})
 	}
 }
 
-// ── PulseHDPath.String ────────────────────────────────────────────────────────────────
+// ── pulseHDPath.String ────────────────────────────────────────────────────────────────
 
 func TestPulseHDPath_String_KnownValues(t *testing.T) {
-	// PulseProtocolIdentifier = 0x80434d50 ('CMP' hardened)
+	// pulseProtocolIdentifier = 0x80434d50 ('CMP' hardened)
 	// Display index = 0x80434d50 - 0x80000000 = 0x434d50 = 4410704
 	tests := []struct {
 		name     string
-		path     PulseHDPath
+		path     pulseHDPath
 		expected string
 	}{
 		{
 			name: "basic path m/4410704'/2/1/62/1",
-			path: PulseHDPath{
-				Protocol:   PulseProtocolIdentifier,
+			path: pulseHDPath{
+				Protocol:   pulseProtocolIdentifier,
 				OtherParty: 2,
 				Chain:      1,
 				Consent:    62,
@@ -173,8 +174,8 @@ func TestPulseHDPath_String_KnownValues(t *testing.T) {
 		},
 		{
 			name: "zero values (except protocol)",
-			path: PulseHDPath{
-				Protocol:   PulseProtocolIdentifier,
+			path: pulseHDPath{
+				Protocol:   pulseProtocolIdentifier,
 				OtherParty: 0,
 				Chain:      0,
 				Consent:    0,
@@ -184,8 +185,8 @@ func TestPulseHDPath_String_KnownValues(t *testing.T) {
 		},
 		{
 			name: "purpose 5 (EncryptRevokeStructure)",
-			path: PulseHDPath{
-				Protocol:   PulseProtocolIdentifier,
+			path: pulseHDPath{
+				Protocol:   pulseProtocolIdentifier,
 				OtherParty: 100,
 				Chain:      137,
 				Consent:    999,
@@ -257,9 +258,9 @@ func TestDerivePublicKeyFromParent_ConsistencyWithPrivate(t *testing.T) {
 	p := purposes.PulsePurposeSignTx
 
 	// Route A
-	path, err := NewPulseHDPath(otherParty, chain, consent, p)
+	path, err := newpulseHDPath(otherParty, chain, consent, p)
 	if err != nil {
-		t.Fatalf("NewPulseHDPath() failed: %v", err)
+		t.Fatalf("newpulseHDPath() failed: %v", err)
 	}
 	privKey, err := deriveKeyFromMaster(masterKey, path)
 	if err != nil {
@@ -287,7 +288,7 @@ func TestDerivePublicKeyFromParent_ConsistencyWithPrivate(t *testing.T) {
 
 func TestDeriveKeyFromMaster_Errors(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
-	path, _ := NewPulseHDPath(2, 1, 62, purposes.PulsePurposeSignTx)
+	path, _ := newpulseHDPath(2, 1, 62, purposes.PulsePurposeSignTx)
 
 	if _, err := deriveKeyFromMaster(nil, path); err == nil {
 		t.Error("expected error for nil masterKey")
@@ -335,9 +336,9 @@ func TestDeriveKeyFromMaster_KnownValues(t *testing.T) {
 	 */
 	masterKey := mustNewMasterKey(t)
 
-	path, err := NewPulseHDPath(2, 1, 62, purposes.PulsePurposeSignTx)
+	path, err := newpulseHDPath(2, 1, 62, purposes.PulsePurposeSignTx)
 	if err != nil {
-		t.Fatalf("NewPulseHDPath() failed: %v", err)
+		t.Fatalf("newpulseHDPath() failed: %v", err)
 	}
 
 	privKey, err := deriveKeyFromMaster(masterKey, path)
@@ -365,7 +366,7 @@ func TestDeriveKeyFromMaster_KnownValues(t *testing.T) {
 
 func TestDeriveKeyFromMaster_Determinism(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
-	path, _ := NewPulseHDPath(2, 1, 62, purposes.PulsePurposeSignTx)
+	path, _ := newpulseHDPath(2, 1, 62, purposes.PulsePurposeSignTx)
 
 	key1, err := deriveKeyFromMaster(masterKey, path)
 	if err != nil {
@@ -396,9 +397,9 @@ func TestDeriveKeyFromMaster_DifferentPaths(t *testing.T) {
 
 	keys := make([][]byte, len(paths))
 	for i, p := range paths {
-		path, err := NewPulseHDPath(p.otherParty, p.chain, p.consent, p.purpose)
+		path, err := newpulseHDPath(p.otherParty, p.chain, p.consent, p.purpose)
 		if err != nil {
-			t.Fatalf("NewPulseHDPath(%v) failed: %v", p, err)
+			t.Fatalf("newpulseHDPath(%v) failed: %v", p, err)
 		}
 		k, err := deriveKeyFromMaster(masterKey, path)
 		if err != nil {
@@ -433,9 +434,9 @@ func TestEncryptConsentNotaryEC_RoundTrip(t *testing.T) {
 		t.Fatal("SealedData is empty")
 	}
 
-	decrypted, err := DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
+	decrypted, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
 	if err != nil {
-		t.Fatalf("DecryptEC() failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, decrypted) {
 		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, plaintext)
@@ -457,9 +458,9 @@ func TestEncryptRevokeNotaryEC_RoundTrip(t *testing.T) {
 		t.Fatal("SealedData is empty")
 	}
 
-	decrypted, err := DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
+	decrypted, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
 	if err != nil {
-		t.Fatalf("DecryptEC() failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, decrypted) {
 		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, plaintext)
@@ -497,9 +498,9 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 	}
 
 	// Step 3: Bob decrypts
-	decrypted, err := DecryptEC(&request.EncryptedData, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
+	decrypted, err := key_exchange.DecryptEC(&request.EncryptedData, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
 	if err != nil {
-		t.Fatalf("DecryptEC() failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, decrypted) {
 		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, plaintext)

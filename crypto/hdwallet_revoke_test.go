@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/key_exchange"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 	"github.com/smarter-contracts/pulse-protocol-go/types"
@@ -57,9 +58,9 @@ func TestEncryptSignRevokeEC_RoundTrip(t *testing.T) {
 	}
 
 	// Step 4–5: Bob decrypts
-	decrypted, err := DecryptEC(&request.EncryptedData, addr, bobPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
+	decrypted, err := key_exchange.DecryptEC(&request.EncryptedData, addr, bobPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
 	if err != nil {
-		t.Fatalf("DecryptEC() failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
 	if !bytes.Equal(revokeData, decrypted) {
 		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, revokeData)
@@ -142,9 +143,9 @@ func TestDecryptConsentEC_RoundTrip(t *testing.T) {
 	}
 
 	// Bob decrypts directly — must produce the same result
-	gotBob, err := DecryptEC(&request.EncryptedData, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
+	gotBob, err := key_exchange.DecryptEC(&request.EncryptedData, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
 	if err != nil {
-		t.Fatalf("DecryptEC(bob) failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC(bob) failed: %v", err)
 	}
 	if !bytes.Equal(gotHD, gotBob) {
 		t.Errorf("Alice and Bob decrypted different plaintexts: alice=%q bob=%q", gotHD, gotBob)
@@ -196,9 +197,9 @@ func TestDecryptRevokeEC_RoundTrip(t *testing.T) {
 	}
 
 	// Bob decrypts directly — must produce the same result
-	gotBob, err := DecryptEC(&request.EncryptedData, addr, bobPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
+	gotBob, err := key_exchange.DecryptEC(&request.EncryptedData, addr, bobPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
 	if err != nil {
-		t.Fatalf("DecryptEC(bob) failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC(bob) failed: %v", err)
 	}
 	if !bytes.Equal(gotHD, gotBob) {
 		t.Errorf("Alice and Bob decrypted different plaintexts: alice=%q bob=%q", gotHD, gotBob)

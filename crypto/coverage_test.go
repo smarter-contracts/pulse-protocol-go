@@ -15,6 +15,8 @@ import (
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/key_encapsulate"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/key_exchange"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 	"github.com/smarter-contracts/pulse-protocol-go/types"
@@ -187,13 +189,13 @@ func TestDecryptEC_NilPrivateKey(t *testing.T) {
 		}
 	}()
 
-	result := &PulseECEncryptionResult{
+	result := &types.PulseECEncryptionResult{
 		SealedData: []byte("x"),
 		Key1:       make([]byte, 33),
 		Key2:       make([]byte, 33),
 	}
 	addr := "0x0102030405060708090a0b0c0d0e0f1011121314"
-	_, _ = DecryptEC(result, &addr, nil, purposes.PulsePurposeEncryptConsentStructure, 1, 0)
+	_, _ = key_exchange.DecryptEC(result, &addr, nil, purposes.PulsePurposeEncryptConsentStructure, 1, 0)
 }
 
 // ── DeriveOtherPartyGenerator success path ────────────────────────────────────
@@ -262,7 +264,7 @@ func TestEncryptSignRevokePQ_SignFailure(t *testing.T) {
 
 func TestEncryptECDH_BothKeysNil(t *testing.T) {
 	addr := helperContractAddress()
-	_, err := EncryptECDH([]byte("data"), addr, nil, nil, purposes.PulsePurposeEncryptConsentStructure, 1, 0)
+	_, err := key_exchange.EncryptECDH([]byte("data"), addr, nil, nil, purposes.PulsePurposeEncryptConsentStructure, 1, 0)
 	if err == nil {
 		t.Error("expected error for nil keys")
 	}
@@ -331,7 +333,7 @@ func TestDecryptEC_NoMatchingKey(t *testing.T) {
 		t.Fatalf("EncryptConsentNotaryEC() failed: %v", err)
 	}
 
-	_, err = DecryptEC(result, addr, carolPriv, purposes.PulsePurposeEncryptConsentStructure, 1, 62)
+	_, err = key_exchange.DecryptEC(result, addr, carolPriv, purposes.PulsePurposeEncryptConsentStructure, 1, 62)
 	if err == nil {
 		t.Error("expected error for non-matching key")
 	}
@@ -353,7 +355,7 @@ func TestDecryptEC_DecryptWithKey1(t *testing.T) {
 	}
 
 	// Derive Alice's private key at the same path
-	path, _ := NewPulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptConsentStructure)
+	path, _ := newpulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptConsentStructure)
 	alicePriv, err := deriveKeyFromMaster(masterKey, path)
 	if err != nil {
 		t.Fatalf("deriveKeyFromMaster() failed: %v", err)
@@ -365,9 +367,9 @@ func TestDecryptEC_DecryptWithKey1(t *testing.T) {
 		t.Fatal("expected Alice to be Key1")
 	}
 
-	decrypted, err := DecryptEC(result, addr, alicePriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
+	decrypted, err := key_exchange.DecryptEC(result, addr, alicePriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
 	if err != nil {
-		t.Fatalf("DecryptEC() with Key1 failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC() with Key1 failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, decrypted) {
 		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, plaintext)
@@ -385,7 +387,7 @@ func TestDecryptConsentEC_RoundTripHDWallet(t *testing.T) {
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
 	// Derive Bob's public key for the encryption purpose
-	bobPath, _ := NewPulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptConsentStructure)
+	bobPath, _ := newpulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptConsentStructure)
 	bobPriv, _ := deriveKeyFromMaster(masterKeyBob, bobPath)
 	bobPub := bobPriv.PubKey()
 
@@ -410,7 +412,7 @@ func TestDecryptRevokeEC_RoundTripHDWallet(t *testing.T) {
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
 	// Build consent first to get a CID
-	bobPathConsent, _ := NewPulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptConsentStructure)
+	bobPathConsent, _ := newpulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptConsentStructure)
 	bobPrivConsent, _ := deriveKeyFromMaster(masterKeyBob, bobPathConsent)
 	consentReq, err := EncryptSignConsentEC(masterKeyAlice, []byte("consent"), otherParty, consent, bobPrivConsent.PubKey(), *addr, chainId)
 	if err != nil {
@@ -420,7 +422,7 @@ func TestDecryptRevokeEC_RoundTripHDWallet(t *testing.T) {
 	consentCid, _ := ipfs.GetCid(consentCBOR)
 
 	// Derive Bob's revoke key
-	bobPathRevoke, _ := NewPulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptRevokeStructure)
+	bobPathRevoke, _ := newpulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptRevokeStructure)
 	bobPrivRevoke, _ := deriveKeyFromMaster(masterKeyBob, bobPathRevoke)
 
 	revokeData := []byte("revoke for HD decrypt")
@@ -448,24 +450,7 @@ func TestDerivePQKeyPair_InvalidPurpose_SignTx(t *testing.T) {
 	}
 }
 
-// ── generateAESKey nil key paths ─────────────────────────────────────────────
-
-func TestGenerateAESKey_NilKeys(t *testing.T) {
-	priv, _ := secp.GeneratePrivateKey()
-	pub := priv.PubKey()
-
-	// nil private key
-	_, _, err := generateAESKey(nil, pub, []byte("t"), []byte("c"))
-	if err == nil {
-		t.Error("expected error for nil private key")
-	}
-
-	// nil public key
-	_, _, err = generateAESKey(priv, nil, []byte("t"), []byte("c"))
-	if err == nil {
-		t.Error("expected error for nil public key")
-	}
-}
+// generateAESKey nil-key tests are in internal/key_exchange/key_exchange_test.go
 
 // ── EncryptPQ with deterministic entropy ────────────────────────────────────
 
@@ -477,16 +462,16 @@ func TestEncryptPQ_DeterministicEntropy(t *testing.T) {
 
 	// Use a deterministic reader so we exercise the entropy != nil branch in encapsulateKey
 	entropy := &deterministicReader{seed: 42}
-	result, err := EncryptPQ(entropy, plaintext, addr, []*kyberKEM.PublicKey{pub}, purposes.PulseSymmetricConsent, 137, 0)
+	result, err := key_encapsulate.EncryptPQ(entropy, plaintext, addr, []*kyberKEM.PublicKey{pub}, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
-		t.Fatalf("EncryptPQ() with deterministic entropy failed: %v", err)
+		t.Fatalf("key_encapsulate.EncryptPQ() with deterministic entropy failed: %v", err)
 	}
 
 	// Decrypt to verify correctness
 	priv, _, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
-	decrypted, err := DecryptPQ(result, addr, priv, purposes.PulseSymmetricConsent, 137, 0)
+	decrypted, err := key_encapsulate.DecryptPQ(result, addr, priv, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
-		t.Fatalf("DecryptPQ() failed: %v", err)
+		t.Fatalf("key_encapsulate.DecryptPQ() failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, decrypted) {
 		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, plaintext)
@@ -515,14 +500,14 @@ func TestDecryptPQ_NoMatchingKey(t *testing.T) {
 	_, pubAlice, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	addr := helperContractAddress()
 
-	result, err := EncryptPQ(nil, []byte("data"), addr, []*kyberKEM.PublicKey{pubAlice}, purposes.PulseSymmetricConsent, 137, 0)
+	result, err := key_encapsulate.EncryptPQ(nil, []byte("data"), addr, []*kyberKEM.PublicKey{pubAlice}, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
-		t.Fatalf("EncryptPQ() failed: %v", err)
+		t.Fatalf("key_encapsulate.EncryptPQ() failed: %v", err)
 	}
 
 	// Try to decrypt with a different party's key
 	privBob, _, _ := DerivePQKeyPair(masterKey, 3, 0, 137, purposes.PulsePurposePQDeriveConsent)
-	_, err = DecryptPQ(result, addr, privBob, purposes.PulseSymmetricConsent, 137, 0)
+	_, err = key_encapsulate.DecryptPQ(result, addr, privBob, purposes.PulseSymmetricConsent, 137, 0)
 	if err == nil {
 		t.Error("expected error for non-matching key")
 	}
@@ -563,11 +548,11 @@ func TestDecryptEC_MalformedKey2(t *testing.T) {
 	}
 
 	// Derive Alice's key to match Key1, then corrupt Key2
-	path, _ := NewPulseHDPath(2, 1, 62, purposes.PulsePurposeEncryptConsentStructure)
+	path, _ := newpulseHDPath(2, 1, 62, purposes.PulsePurposeEncryptConsentStructure)
 	alicePriv, _ := deriveKeyFromMaster(masterKey, path)
 	result.Key2 = []byte{0xff, 0xff, 0xff} // malformed
 
-	_, err = DecryptEC(result, addr, alicePriv, purposes.PulsePurposeEncryptConsentStructure, 1, 62)
+	_, err = key_exchange.DecryptEC(result, addr, alicePriv, purposes.PulsePurposeEncryptConsentStructure, 1, 62)
 	if err == nil {
 		t.Error("expected error for malformed Key2")
 	}
@@ -587,7 +572,7 @@ func TestDecryptEC_MalformedKey1(t *testing.T) {
 
 	// Bob matches Key2, so DecryptEC parses Key1 for the other party. Corrupt Key1.
 	result.Key1 = []byte{0xff, 0xff, 0xff} // malformed
-	_, err = DecryptEC(result, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, 1, 62)
+	_, err = key_exchange.DecryptEC(result, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, 1, 62)
 	if err == nil {
 		t.Error("expected error for malformed Key1")
 	}
@@ -650,14 +635,14 @@ func TestEncryptECDH_FullRoundTrip(t *testing.T) {
 	addr := helperContractAddress()
 	plaintext := []byte("ECDH round-trip data")
 
-	result, err := EncryptECDH(plaintext, addr, priv1, priv2.PubKey(), purposes.PulsePurposeEncryptConsentStructure, 1, 62)
+	result, err := key_exchange.EncryptECDH(plaintext, addr, priv1, priv2.PubKey(), purposes.PulsePurposeEncryptConsentStructure, 1, 62)
 	if err != nil {
-		t.Fatalf("EncryptECDH() failed: %v", err)
+		t.Fatalf("key_exchange.EncryptECDH() failed: %v", err)
 	}
 
-	decrypted, err := DecryptEC(result, addr, priv2, purposes.PulsePurposeEncryptConsentStructure, 1, 62)
+	decrypted, err := key_exchange.DecryptEC(result, addr, priv2, purposes.PulsePurposeEncryptConsentStructure, 1, 62)
 	if err != nil {
-		t.Fatalf("DecryptEC() failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, decrypted) {
 		t.Errorf("plaintext mismatch: got %q, want %q", decrypted, plaintext)
@@ -673,9 +658,9 @@ func TestEncryptPQ_MultipleRecipients(t *testing.T) {
 	addr := helperContractAddress()
 	plaintext := []byte("multi-recipient PQ data")
 
-	result, err := EncryptPQ(nil, plaintext, addr, []*kyberKEM.PublicKey{pub1, pub2}, purposes.PulseSymmetricConsent, 137, 0)
+	result, err := key_encapsulate.EncryptPQ(nil, plaintext, addr, []*kyberKEM.PublicKey{pub1, pub2}, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
-		t.Fatalf("EncryptPQ() failed: %v", err)
+		t.Fatalf("key_encapsulate.EncryptPQ() failed: %v", err)
 	}
 	if len(result.Keys) != 2 {
 		t.Fatalf("expected 2 keys, got %d", len(result.Keys))
@@ -683,18 +668,18 @@ func TestEncryptPQ_MultipleRecipients(t *testing.T) {
 
 	// Both recipients can decrypt
 	priv1, _, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
-	d1, err := DecryptPQ(result, addr, priv1, purposes.PulseSymmetricConsent, 137, 0)
+	d1, err := key_encapsulate.DecryptPQ(result, addr, priv1, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
-		t.Fatalf("DecryptPQ(recipient1) failed: %v", err)
+		t.Fatalf("key_encapsulate.DecryptPQ(recipient1) failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, d1) {
 		t.Errorf("recipient1 plaintext mismatch")
 	}
 
 	priv2, _, _ := DerivePQKeyPair(masterKey, 3, 0, 137, purposes.PulsePurposePQDeriveConsent)
-	d2, err := DecryptPQ(result, addr, priv2, purposes.PulseSymmetricConsent, 137, 0)
+	d2, err := key_encapsulate.DecryptPQ(result, addr, priv2, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
-		t.Fatalf("DecryptPQ(recipient2) failed: %v", err)
+		t.Fatalf("key_encapsulate.DecryptPQ(recipient2) failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, d2) {
 		t.Errorf("recipient2 plaintext mismatch")
@@ -706,9 +691,9 @@ func TestEncryptPQ_MultipleRecipients(t *testing.T) {
 func TestDeriveKeyFromMaster_PublicKeyFails(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
 	pubKey := masterKey.PublicKey()
-	path, _ := NewPulseHDPath(2, 1, 62, purposes.PulsePurposeSignTx)
+	path, _ := newpulseHDPath(2, 1, 62, purposes.PulsePurposeSignTx)
 
-	// PulseProtocolIdentifier is hardened, so deriving from a public key must fail
+	// pulseProtocolIdentifier is hardened, so deriving from a public key must fail
 	_, err := deriveKeyFromMaster(pubKey, path)
 	if err == nil {
 		t.Error("expected error when deriving hardened child from public key")
@@ -760,9 +745,9 @@ func TestEncryptRevokeNotaryEC_RoundTripCoverage(t *testing.T) {
 		t.Fatalf("EncryptRevokeNotaryEC() failed: %v", err)
 	}
 
-	decrypted, err := DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, 1, 62)
+	decrypted, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, 1, 62)
 	if err != nil {
-		t.Fatalf("DecryptEC() failed: %v", err)
+		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
 	if !bytes.Equal(plaintext, decrypted) {
 		t.Errorf("plaintext mismatch")
@@ -913,7 +898,7 @@ func TestEncryptPQ_EntropyError(t *testing.T) {
 
 	// errReader fails after returning some bytes — enough for PulseSealWithNewKey
 	// (which needs 44 bytes) but fails during encapsulateKey's io.ReadFull (needs 32 more)
-	_, err := EncryptPQ(&errReader{failAfter: 50}, []byte("data"), addr, []*kyberKEM.PublicKey{pub}, purposes.PulseSymmetricConsent, 137, 0)
+	_, err := key_encapsulate.EncryptPQ(&errReader{failAfter: 50}, []byte("data"), addr, []*kyberKEM.PublicKey{pub}, purposes.PulseSymmetricConsent, 137, 0)
 	if err == nil {
 		t.Error("expected error from failing entropy reader")
 	}
@@ -925,7 +910,7 @@ func TestEncryptPQ_EntropyErrorDuringSeal(t *testing.T) {
 	addr := helperContractAddress()
 
 	// Fail during seal phase (needs 44 bytes for key+nonce)
-	_, err := EncryptPQ(&errReader{failAfter: 10}, []byte("data"), addr, []*kyberKEM.PublicKey{pub}, purposes.PulseSymmetricConsent, 137, 0)
+	_, err := key_encapsulate.EncryptPQ(&errReader{failAfter: 10}, []byte("data"), addr, []*kyberKEM.PublicKey{pub}, purposes.PulseSymmetricConsent, 137, 0)
 	if err == nil {
 		t.Error("expected error from failing entropy reader during seal")
 	}

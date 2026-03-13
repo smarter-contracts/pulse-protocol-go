@@ -1,4 +1,4 @@
-package crypto
+package key_encapsulate
 
 import (
 	"bytes"
@@ -17,11 +17,6 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
-//TODO: Review test pack coverage
-
-type PulsePQEncryptionKey = types.PulsePQEncryptionKey
-type PulsePQEncryptionResult = types.PulsePQEncryptionResult
-
 var PQDataCipherSuite = "rng+aes-gcm-256"
 var PQKeyCipherSuite = "kyber768+hkdf-keccak256+aes-gcm-256"
 
@@ -35,19 +30,6 @@ func packKey(key, nonce []byte) []byte {
 // EncryptPQ performs post-quantum hybrid encryption for multiple recipients.
 // It generates a random AES-256 key to seal the plaintext, then encapsulates that AES key
 // for each recipient using Kyber768 (ML-KEM).
-//
-// Arguments:
-//   - entropy: Optional source of randomness (if nil, uses crypto/rand.Reader).
-//   - plaintext: The data to be encrypted.
-//   - contractAddress: Pointer to the contract address hex string.
-//   - publicKeys: A slice of Kyber768 public keys for all intended recipients.
-//   - purpose: The intended purpose of the encryption (e.g., PulseSymmetricConsent).
-//   - chainId: The blockchain network identifier.
-//   - consentNumber: The sequence number for the consent record.
-//
-// Returns:
-//   - A PulsePQEncryptionResult containing the sealed data and a list of encapsulated keys.
-//   - An error if encryption or encapsulation fails.
 func EncryptPQ(entropy io.Reader,
 	plaintext []byte,
 	contractAddress *string,
@@ -55,8 +37,8 @@ func EncryptPQ(entropy io.Reader,
 	purpose purposes.PulsePurpose,
 	chainId uint32,
 	consentNumber uint32,
-) (*PulsePQEncryptionResult, error) {
-	var result PulsePQEncryptionResult
+) (*types.PulsePQEncryptionResult, error) {
+	var result types.PulsePQEncryptionResult
 
 	// Encrypt the plaintext (consent data) using a random AES key
 	recipientIDHash := getAllRecipientIDHashFromKeys(publicKeys)
@@ -90,19 +72,7 @@ func EncryptPQ(entropy io.Reader,
 }
 
 // encapsulateKey handles the per-recipient key encapsulation process.
-// It generates a Kyber shared secret, derives an AES key via HKDF, and encrypts the data AES key.
-//
-// Arguments:
-//   - entropy: Optional source of randomness (if nil, uses crypto/rand.Reader).
-//   - kemPK: The recipient's Kyber public key.
-//   - dataAESKey: The packed AES key and nonce used for the main data.
-//   - purpose: The purpose of the encryption.
-//   - contextHash: The hash of the encryption context.
-//
-// Returns:
-//   - A PulsePQEncryptionKey containing the encapsulated and encrypted key material.
-//   - An error if encapsulation or encryption fails.
-func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose purposes.PulsePurpose, contextHash []byte) (*PulsePQEncryptionKey, error) {
+func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []byte, purpose purposes.PulsePurpose, contextHash []byte) (*types.PulsePQEncryptionKey, error) {
 	scheme := kyberKEM.Scheme()
 	fingerPrint := getPubKeyFingerprint(kemPK)
 
@@ -139,7 +109,7 @@ func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []b
 	}
 
 	// Pack result
-	return &PulsePQEncryptionKey{
+	return &types.PulsePQEncryptionKey{
 		KeyFingerPrint:      fingerPrint,
 		EncapsulatedKeyKey:  encapsulatedSecret,
 		EncapsulatedDataKey: encryptedKey,
@@ -147,21 +117,7 @@ func encapsulateKey(entropy io.Reader, kemPK *kyberKEM.PublicKey, dataAESKey []b
 }
 
 // DecryptPQ decrypts a message that was encrypted using the post-quantum hybrid scheme.
-// It identifies the correct encapsulated key using the recipient's private key fingerprint,
-// decapsulates the AES key, and then decrypts the main data.
-//
-// Arguments:
-//   - encryptionResult: The result struct containing the sealed data and encapsulated keys.
-//   - contractAddress: Pointer to the contract address hex string.
-//   - myPrivateKey: The recipient's Kyber768 private key.
-//   - purpose: The purpose of the encryption.
-//   - chainId: The blockchain network identifier.
-//   - consentNumber: The sequence number for the consent record.
-//
-// Returns:
-//   - The original plaintext.
-//   - An error if decryption or authentication fails.
-func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
+func DecryptPQ(encryptionResult *types.PulsePQEncryptionResult,
 	contractAddress *string,
 	myPrivateKey *kyberKEM.PrivateKey,
 	purpose purposes.PulsePurpose,
@@ -225,52 +181,20 @@ func DecryptPQ(encryptionResult *PulsePQEncryptionResult,
 }
 
 // getPubKeyFingerprint computes a Keccak-256 fingerprint of a Kyber public key.
-// This fingerprint is used to identify the correct encapsulated key for a recipient.
-//
-// Arguments:
-//   - pk: The Kyber public key.
-//
-// Returns:
-//   - A 32-byte hash (fingerprint) of the public key.
 func getPubKeyFingerprint(pk *kyberKEM.PublicKey) [32]byte {
 	buf := make([]byte, kyberKEM.PublicKeySize)
 	pk.Pack(buf)
 	return [32]byte(hash.PulseHashBytes(buf))
 }
 
-// getAllRecipientIDHashFromKeys computes a single hash representing all recipients.
-// It first generates fingerprints for each public key, then sorts and hashes them.
-//
-// Arguments:
-//   - keys: A slice of Kyber public keys.
-//
-// Returns:
-//   - A byte slice containing the collective recipient identifier hash.
 func getAllRecipientIDHashFromKeys(keys []*kyberKEM.PublicKey) []byte {
 	return hash.PulseHashBytes(getAllRecipientIDStringFromKeys(keys))
 }
 
-// getAllRecipientIDHashFromKeys computes a single hash representing all recipients.
-// It first generates fingerprints for each public key, then sorts and hashes them.
-//
-// Arguments:
-//   - keys: A slice of Kyber public keys.
-//
-// Returns:
-//   - A byte slice containing the collective recipient identifier hash.
 func getAllRecipientIDHashFromFingerPrints(fingerPrints []string) []byte {
 	return hash.PulseHashBytes(getAllRecipientIDStringFromFingerPrints(fingerPrints))
 }
 
-// getAllRecipientIDStringFromKeys computes a single string representing all recipients.
-// It first generates fingerprints for each public key, then sorts and incorporates them
-// into the final string
-//
-// Arguments:
-//   - keys: A slice of Kyber public keys.
-//
-// Returns:
-//   - A byte slice containing recipient String
 func getAllRecipientIDStringFromKeys(keys []*kyberKEM.PublicKey) []byte {
 	var fingerPrints []string
 	for _, pk := range keys {
@@ -281,14 +205,6 @@ func getAllRecipientIDStringFromKeys(keys []*kyberKEM.PublicKey) []byte {
 	return getAllRecipientIDStringFromFingerPrints(fingerPrints)
 }
 
-// getAllRecipientIDHashFromFingerPrints computes a deterministic string for a group of recipients.
-// Fingerprints are sorted alphabetically before appending to the string to ensure consistent results regardless of input order.
-//
-// Arguments:
-//   - fingerPrints: A slice of hex-encoded public key fingerprints.
-//
-// Returns:
-//   - A byte slice representing the collective recipient identifier string.
 func getAllRecipientIDStringFromFingerPrints(fingerPrints []string) []byte {
 	slices.Sort(fingerPrints)
 	output := bytes.Buffer{}
