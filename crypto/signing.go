@@ -53,11 +53,15 @@ func getSigningAddress(signature []byte, contractAddressString string, cids ...s
 	hMessage := buildMessage(contractAddressString, cids...)
 	signingHash := accounts.TextHash(hMessage)
 
+	// Work on a copy so we don't mutate the caller's slice
+	sig := make([]byte, len(signature))
+	copy(sig, signature)
+
 	// Convert the signature from EIP-191 format ( [27,28] -> [0,1] ) if needed
-	if signature[64] == 27 || signature[64] == 28 {
-		signature[64] -= 27
+	if sig[64] == 27 || sig[64] == 28 {
+		sig[64] -= 27
 	}
-	publicKey, err := crypto.SigToPub(signingHash, signature)
+	publicKey, err := crypto.SigToPub(signingHash, sig)
 	if err != nil {
 		return common.Address{}, err
 	}
