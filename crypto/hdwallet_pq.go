@@ -2,19 +2,15 @@ package crypto
 
 import (
 	"errors"
+	"fmt"
 
 	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
 	bip32 "github.com/jamesradley/go-bip32"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/types"
-)
-
-// PQ seed HKDF info strings — kept here so they are part of the protocol spec.
-const (
-	pqConsentSeedInfo = "|pulse|pq|consent|v1|"
-	pqRevokeSeedInfo  = "|pulse|pq|revoke|v1|"
 )
 
 // DerivePQKeyPair deterministically derives an ML-KEM-768 key pair from a BIP-32
@@ -24,13 +20,16 @@ const (
 //
 // where purpose is either PulsePurposePQDeriveConsent (9) or
 // PulsePurposePQDeriveRevoke (10).  The 32-byte node private key is then
-// expanded to a 64-byte ML-KEM seed via HKDF-Keccak256 with a
-// purpose-specific info string, so the chain code is never used directly as
-// key material.
+// expanded to a 64-byte ML-KEM seed via HKDF-Keccak256.
+//
+// HKDF inputs:
+//   - IKM:        the secp256k1 node private key (32 bytes)
+//   - Salt:       Keccak256("|pulse|seed|v1|salt|kyber768|<compressed public key>|")
+//   - Info:       "|pulse|seed|v1|kyber-keygen|kyber768+hkdf-keccak256|rid=<otherPartyNo>|ctx=<contextHash>|"
 //
 // Returns the private key (decapsulation key) and the public key (encapsulation
-// key).  The private key must be kept secret; the public key (EncapsulationKey())
-// may be shared with other parties so they can encrypt to this wallet.
+// key).  The private key must be kept secret; the public key may be shared with
+// other parties so they can encrypt to this wallet.
 func DerivePQKeyPair(
 	masterKey *bip32.Key,
 	otherPartyNo uint32,
@@ -52,19 +51,22 @@ func DerivePQKeyPair(
 		return nil, nil, errors.New("failed to derive PQ node key from master: " + err.Error())
 	}
 
-	// Expand the 32-byte secp256k1 node key to 64 bytes for the ML-KEM seed.
-	var infoSuffix string
-	if purpose == purposes.PulsePurposePQDeriveConsent {
-		infoSuffix = pqConsentSeedInfo
-	} else {
-		infoSuffix = pqRevokeSeedInfo
-	}
-
 	scheme := kyberKEM.Scheme()
 	nodeKeyBytes := nodePrivKey.Serialize()
 	defer wipe.SliceWipe(nodeKeyBytes)
 
-	seed, err := hkdf.PulseHKDFPQSeed(nodeKeyBytes, infoSuffix, scheme.SeedSize())
+	// Transcript: the compressed secp256k1 public key of this HD node
+	transcript := nodePrivKey.PubKey().SerializeCompressed()
+
+	// Recipient ID: the other party number in the clear
+	recipientIdStr := fmt.Sprintf("%d", otherPartyNo)
+
+	// Context: same context hash used elsewhere (chainId, contractAddress, consentNumber)
+	// For seed derivation we don't have a contract address at this level,
+	// so we use the HD path parameters as the context binding.
+	contextHash := context.ContextHash(chainId, "", consentNumber)
+
+	seed, err := hkdf.PulseHKDFPQSeed(nodeKeyBytes, transcript, recipientIdStr, contextHash)
 	if err != nil {
 		return nil, nil, errors.New("failed to derive PQ seed: " + err.Error())
 	}

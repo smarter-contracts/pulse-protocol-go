@@ -84,29 +84,33 @@ func TestPulseHKDF_KnownValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 1. Test Salt String and Salt Value
-			parentAlgo, purpose, suite := getSettings(tt.mode)
+			function, parentAlgo, purpose, suite := getSettings(tt.mode)
+			recipientIdStr := ""
+			if tt.recipientId != nil {
+				recipientIdStr = hex.EncodeToString(tt.recipientId)
+			}
 
-			saltString := createSaltString(parentAlgo, tt.transcript)
+			saltString := createSaltString(function, parentAlgo, tt.transcript)
 			if saltString != tt.expectedSaltString {
 				t.Errorf("saltString mismatch: got %q, want %q", saltString, tt.expectedSaltString)
 			}
-			salt := createSalt(parentAlgo, tt.transcript)
+			salt := createSalt(function, parentAlgo, tt.transcript)
 			if !bytes.Equal(salt, tt.expectedSalt) {
 				t.Errorf("salt mismatch: got %x, want %x", salt, tt.expectedSalt)
 			}
 
-			infoKey := createInfo(purpose, false, suite, tt.recipientId, tt.context)
+			infoKey := createInfo(function, purpose, "key", suite, recipientIdStr, tt.context)
 			if string(infoKey) != tt.expectedInfoStringAES {
 				t.Errorf("infoKeyString mismatch: got %q, want %q", string(infoKey), tt.expectedInfoStringAES)
 			}
 
-			infoNonce := createInfo(purpose, true, suite, tt.recipientId, tt.context)
+			infoNonce := createInfo(function, purpose, "nonce", suite, recipientIdStr, tt.context)
 			if string(infoNonce) != tt.expectedInfoStringNonce {
 				t.Errorf("infoNonceString mismatch: got %q, want %q", string(infoNonce), tt.expectedInfoStringNonce)
 			}
 
 			// 3. Test PRK, AES Key and AES Nonce
-			prkExtracted := pulseExtract(tt.sharedSecret, parentAlgo, tt.transcript)
+			prkExtracted := pulseExtract(tt.sharedSecret, function, parentAlgo, tt.transcript)
 			if !bytes.Equal(prkExtracted, tt.expectedPrk) {
 				t.Errorf("PRK mismatch: got %x, want %x", prkExtracted, tt.expectedPrk)
 			}
@@ -134,5 +138,68 @@ func TestPulseHKDF_KnownValues(t *testing.T) {
 				t.Errorf("AES nonce mismatch: got %x, want %x", nonce, tt.expectedAESNonce)
 			}
 		})
+	}
+}
+
+func TestPulseHKDFPQSeed_Deterministic(t *testing.T) {
+	nodeKey := mustHexDecode("1f09c3843f3ab1fb85185838a72b1a2896c11ad6720bee6108904b6a25adeece")
+	transcript := mustHexDecode("02c1ad8b15196d38595afd2d96cbe92649c63729aebeecea0e2724a48bfce5f968")
+	context := mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3")
+
+	seed1, err := PulseHKDFPQSeed(nodeKey, transcript, "2", context)
+	if err != nil {
+		t.Fatalf("PulseHKDFPQSeed() failed: %v", err)
+	}
+	if len(seed1) != 64 {
+		t.Fatalf("seed length = %d, want 64", len(seed1))
+	}
+
+	seed2, err := PulseHKDFPQSeed(nodeKey, transcript, "2", context)
+	if err != nil {
+		t.Fatalf("PulseHKDFPQSeed() failed: %v", err)
+	}
+	if !bytes.Equal(seed1, seed2) {
+		t.Error("PulseHKDFPQSeed is not deterministic")
+	}
+}
+
+func TestPulseHKDFPQSeed_DifferentNodeKeys(t *testing.T) {
+	// Purpose separation (consent vs revoke) is handled at the HD wallet level —
+	// different purposes produce different nodeKeys.  Verify that different
+	// nodeKeys yield different seeds from PulseHKDFPQSeed.
+	nodeKey1 := mustHexDecode("1f09c3843f3ab1fb85185838a72b1a2896c11ad6720bee6108904b6a25adeece")
+	nodeKey2 := mustHexDecode("2e09c3843f3ab1fb85185838a72b1a2896c11ad6720bee6108904b6a25adeece")
+	transcript := mustHexDecode("02c1ad8b15196d38595afd2d96cbe92649c63729aebeecea0e2724a48bfce5f968")
+	context := mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3")
+
+	seed1, _ := PulseHKDFPQSeed(nodeKey1, transcript, "2", context)
+	seed2, _ := PulseHKDFPQSeed(nodeKey2, transcript, "2", context)
+
+	if bytes.Equal(seed1, seed2) {
+		t.Error("different nodeKeys produced identical seeds")
+	}
+}
+
+func TestPulseHKDFPQSeed_InfoFormat(t *testing.T) {
+	// Verify the info string follows the standard pattern
+	function, _, purpose, suite := getSettings("PQSeed")
+	context := mustHexDecode("7a3770b999386d8d7c0464f12cf647e91e91769fda2d399847d461b594e3c2f3")
+	info := createInfo(function, purpose, "", suite, "2", context)
+
+	expected := "|pulse|seed|v1|kyber-keygen|kyber768+hkdf-keccak256|rid=2|ctx=4cdac3f08f1d9b30e13c4bee9d3fbbaccb1717f4467778c0c0dfbe8b41f46862|"
+	if string(info) != expected {
+		t.Errorf("PQSeed info mismatch:\n  got  %q\n  want %q", string(info), expected)
+	}
+}
+
+func TestPulseHKDFPQSeed_SaltFormat(t *testing.T) {
+	// Verify the salt string follows the standard pattern
+	function, parentAlgo, _, _ := getSettings("PQSeed")
+	transcript := mustHexDecode("02c1ad8b15196d38595afd2d96cbe92649c63729aebeecea0e2724a48bfce5f968")
+	saltString := createSaltString(function, parentAlgo, transcript)
+
+	expected := "|pulse|seed|v1|salt|kyber768|02c1ad8b15196d38595afd2d96cbe92649c63729aebeecea0e2724a48bfce5f968|"
+	if saltString != expected {
+		t.Errorf("PQSeed salt mismatch:\n  got  %q\n  want %q", saltString, expected)
 	}
 }
