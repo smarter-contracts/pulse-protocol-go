@@ -4,12 +4,18 @@ import (
 	"errors"
 	"fmt"
 
+	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	bip32 "github.com/jamesradley/go-bip32"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
+
+// ── HD path ─────────────────────────────────────────────────────────────────
 
 // Pulse Protocol BIP-43 identifier: 0x80434d50 ('CMP' in ASCII)
 const PulseProtocolIdentifier = 0x80434d50 // 2152046672 decimal, or 4410704' in BIP-32 notation
@@ -65,110 +71,10 @@ func (p *PulseHDPath) String() string {
 		uint32(p.Purpose))
 }
 
-func EncryptSignConsentEC(masterKey *bip32.Key,
-	consentData []byte,
-	otherPartyNo uint32,
-	consentNumber uint32,
-	otherPubKey *secp.PublicKey,
-	contractAddress string,
-	chainId uint32,
-) (*types.PulseConsentRequestEC, error) {
-	encryptedConsentData, err := encryptEC(masterKey, consentData, otherPartyNo, consentNumber, otherPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
-	if err != nil {
-		return nil, errors.New("failed to encrypt consent data: " + err.Error())
-	}
+// ── Key derivation ──────────────────────────────────────────────────────────
 
-	returnValue := &types.PulseConsentRequestEC{EncryptedData: *encryptedConsentData}
-	if err := SignConsentRequest(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
-		return nil, err
-	}
-	return returnValue, nil
-}
-
-// SignConsentRequest derives the HD signing key and appends a signature to any
-// consent request type (EC or PQ).  It replaces the former type-specific
-// SignConsentEC function.
-func SignConsentRequest(masterKey *bip32.Key,
-	request SignableConsent,
-	otherPartyNo uint32,
-	consentNumber uint32,
-	contractAddress string,
-	chainId uint32,
-) error {
-	signingCBOR, err := request.EncryptedDataCBOR()
-	if err != nil {
-		return errors.New("failed to marshal consent CBOR: " + err.Error())
-	}
-	cid, err := ipfs.GetCid(signingCBOR)
-	if err != nil {
-		return errors.New("failed to get cid: " + err.Error())
-	}
-
-	signingKeyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purposes.PulsePurposeSignTx)
-	if err != nil {
-		return errors.New("failed to create HD path: " + err.Error())
-	}
-	signingKey, err := deriveKeyFromMaster(masterKey, signingKeyPath)
-	if err != nil {
-		return errors.New("failed to derive signing key from master: " + err.Error())
-	}
-	signature, err := SignConsent(signingKey.ToECDSA(), contractAddress, cid.String())
-	if err != nil {
-		return errors.New("failed to sign consent: " + err.Error())
-	}
-	request.AppendSignature(signature)
-	return nil
-}
-
-func EncryptConsentNotaryEC(
-	masterKey *bip32.Key,
-	notaryData []byte,
-	otherPartyNo uint32,
-	consentNumber uint32,
-	notaryPubKey *secp.PublicKey,
-	contractAddress string,
-	chainId uint32,
-) (*PulseECEncryptionResult, error) {
-	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
-}
-
-func EncryptRevokeNotaryEC(
-	masterKey *bip32.Key,
-	notaryData []byte,
-	otherPartyNo uint32,
-	consentNumber uint32,
-	notaryPubKey *secp.PublicKey,
-	contractAddress string,
-	chainId uint32,
-) (*PulseECEncryptionResult, error) {
-	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
-}
-
-func encryptEC(
-	masterKey *bip32.Key,
-	notaryData []byte,
-	otherPartyNo uint32,
-	consentNumber uint32,
-	notaryPubKey *secp.PublicKey,
-	contractAddress string,
-	chainId uint32,
-	purpose purposes.PulsePurpose,
-) (*PulseECEncryptionResult, error) {
-	keyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purpose)
-	if err != nil {
-		return nil, errors.New("failed to create HD path: " + err.Error())
-	}
-
-	privKey, err := deriveKeyFromMaster(masterKey, keyPath)
-	if err != nil {
-		return nil, errors.New("failed to derive notary encryption key from master: " + err.Error())
-	}
-
-	return EncryptECDH(notaryData, &contractAddress, privKey, notaryPubKey, purpose, chainId, consentNumber)
-}
-
-// DeriveKeyFromMaster derives a private key from a master key following the Pulse HD path
-// Returns a secp256k1 private key suitable for ECDSA signing and ECDH
+// deriveKeyFromMaster derives a private key from a master key following the Pulse HD path.
+// Returns a secp256k1 private key suitable for ECDSA signing and ECDH.
 func deriveKeyFromMaster(masterKey *bip32.Key, path *PulseHDPath) (*secp.PrivateKey, error) {
 	if masterKey == nil {
 		return nil, errors.New("masterKey cannot be nil")
@@ -266,6 +172,189 @@ func derivePublicKeyFromParent(parentKey *bip32.Key, chain uint32, consent uint3
 	return pubKey, nil
 }
 
+// DeriveOtherPartyGenerator derives the public key generator for a specific other party.
+// This is the key at path m/protocol'/otherparty which can be used to derive
+// public keys for that party without knowing their private keys.
+func DeriveOtherPartyGenerator(masterKey *bip32.Key, otherParty uint32) (*bip32.Key, error) {
+	if masterKey == nil {
+		return nil, errors.New("masterKey cannot be nil")
+	}
+	if otherParty >= 0x80000000 {
+		return nil, errors.New("otherParty must be a normal (non-hardened) key index")
+	}
+
+	// Derive: m/protocol'
+	key, err := masterKey.NewChildKey(PulseProtocolIdentifier)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive protocol key: %w", err)
+	}
+
+	// Derive: m/protocol'/otherparty
+	key, err = key.NewChildKey(otherParty)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive otherparty key: %w", err)
+	}
+
+	return key.PublicKey(), nil
+}
+
+// DerivePQKeyPair deterministically derives an ML-KEM-768 key pair from a BIP-32
+// master key.  The derivation follows the standard Pulse HD path:
+//
+//	m/4410704'/otherPartyNo/chainId/consentNumber/purpose
+//
+// where purpose is either PulsePurposePQDeriveConsent (9) or
+// PulsePurposePQDeriveRevoke (10).  The 32-byte node private key is then
+// expanded to a 64-byte ML-KEM seed via HKDF-Keccak256.
+//
+// HKDF inputs:
+//   - IKM:        the secp256k1 node private key (32 bytes)
+//   - Salt:       Keccak256("|pulse|seed|v1|salt|kyber768|<compressed public key>|")
+//   - Info:       "|pulse|seed|v1|kyber-keygen|kyber768+hkdf-keccak256|rid=<otherPartyNo>|ctx=<contextHash>|"
+//
+// Returns the private key (decapsulation key) and the public key (encapsulation
+// key).  The private key must be kept secret; the public key may be shared with
+// other parties so they can encrypt to this wallet.
+func DerivePQKeyPair(
+	masterKey *bip32.Key,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	chainId uint32,
+	purpose purposes.PulsePurpose,
+) (*kyberKEM.PrivateKey, *kyberKEM.PublicKey, error) {
+	if purpose != purposes.PulsePurposePQDeriveConsent && purpose != purposes.PulsePurposePQDeriveRevoke {
+		return nil, nil, errors.New("purpose must be PulsePurposePQDeriveConsent or PulsePurposePQDeriveRevoke")
+	}
+
+	keyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purpose)
+	if err != nil {
+		return nil, nil, errors.New("failed to create PQ HD path: " + err.Error())
+	}
+
+	nodePrivKey, err := deriveKeyFromMaster(masterKey, keyPath)
+	if err != nil {
+		return nil, nil, errors.New("failed to derive PQ node key from master: " + err.Error())
+	}
+
+	scheme := kyberKEM.Scheme()
+	nodeKeyBytes := nodePrivKey.Serialize()
+	defer wipe.SliceWipe(nodeKeyBytes)
+
+	// Transcript: the compressed secp256k1 public key of this HD node
+	transcript := nodePrivKey.PubKey().SerializeCompressed()
+
+	// Recipient ID: the other party number in the clear
+	recipientIdStr := fmt.Sprintf("%d", otherPartyNo)
+
+	// Context: same context hash used elsewhere (chainId, contractAddress, consentNumber)
+	// For seed derivation we don't have a contract address at this level,
+	// so we use the HD path parameters as the context binding.
+	contextHash := context.ContextHash(chainId, "", consentNumber)
+
+	seed, err := hkdf.PulseHKDFPQSeed(nodeKeyBytes, transcript, recipientIdStr, contextHash)
+	if err != nil {
+		return nil, nil, errors.New("failed to derive PQ seed: " + err.Error())
+	}
+	defer wipe.SliceWipe(seed)
+
+	pubKey, privKey := scheme.DeriveKeyPair(seed)
+	return privKey.(*kyberKEM.PrivateKey), pubKey.(*kyberKEM.PublicKey), nil
+}
+
+// ── EC consent ──────────────────────────────────────────────────────────────
+
+func EncryptSignConsentEC(masterKey *bip32.Key,
+	consentData []byte,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	otherPubKey *secp.PublicKey,
+	contractAddress string,
+	chainId uint32,
+) (*types.PulseConsentRequestEC, error) {
+	encryptedConsentData, err := encryptEC(masterKey, consentData, otherPartyNo, consentNumber, otherPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
+	if err != nil {
+		return nil, errors.New("failed to encrypt consent data: " + err.Error())
+	}
+
+	returnValue := &types.PulseConsentRequestEC{EncryptedData: *encryptedConsentData}
+	if err := SignConsentRequest(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+		return nil, err
+	}
+	return returnValue, nil
+}
+
+func EncryptConsentNotaryEC(
+	masterKey *bip32.Key,
+	notaryData []byte,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	notaryPubKey *secp.PublicKey,
+	contractAddress string,
+	chainId uint32,
+) (*PulseECEncryptionResult, error) {
+	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
+}
+
+// DecryptConsentEC derives the consent encryption key from the HD wallet and decrypts
+// the consent payload.  The caller must have been one of the two parties to the
+// original encryption (Key1 or Key2 in the EncryptedData).
+func DecryptConsentEC(masterKey *bip32.Key,
+	request *types.PulseConsentRequestEC,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+) ([]byte, error) {
+	return decryptHDEC(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
+}
+
+// ── PQ consent ──────────────────────────────────────────────────────────────
+
+// EncryptSignConsentPQ encrypts consent data for one or more ML-KEM-768
+// recipients, then appends an EIP-191 secp256k1 signature over the CID of
+// the encrypted payload.  The signing key is the same Pulse HD path as for
+// the EC variant (purpose 1 — SignTx), so the two schemes share signing
+// infrastructure.
+//
+// recipientPubKeys must contain the ML-KEM encapsulation keys of all parties
+// that should be able to decrypt the record.  Typically this is [alicePubKey,
+// bobPubKey] derived via DerivePQKeyPair on each wallet.
+func EncryptSignConsentPQ(
+	masterKey *bip32.Key,
+	consentData []byte,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	recipientPubKeys []*kyberKEM.PublicKey,
+	contractAddress string,
+	chainId uint32,
+) (*types.PulseConsentRequestPQ, error) {
+	encryptedData, err := EncryptPQ(nil, consentData, &contractAddress, recipientPubKeys, purposes.PulseSymmetricConsent, chainId, consentNumber)
+	if err != nil {
+		return nil, errors.New("failed to PQ-encrypt consent data: " + err.Error())
+	}
+
+	req := &types.PulseConsentRequestPQ{EncryptedData: *encryptedData}
+	if err := SignConsentRequest(masterKey, req, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+// DecryptConsentPQ derives the caller's ML-KEM private key from the HD wallet
+// and decrypts the consent payload.
+func DecryptConsentPQ(
+	masterKey *bip32.Key,
+	request *types.PulseConsentRequestPQ,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+) ([]byte, error) {
+	return decryptHDPQ(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposePQDeriveConsent, purposes.PulseSymmetricConsent)
+}
+
+// ── EC revoke ───────────────────────────────────────────────────────────────
+
 // EncryptSignRevokeEC encrypts revoke data and produces a signed PulseRevokeRequestEC.
 // consentCid is the CID of the original consent's encrypted-data CBOR (stored in
 // PulseConsentRequestEC.EncryptedData after marshalling).
@@ -291,6 +380,110 @@ func EncryptSignRevokeEC(masterKey *bip32.Key,
 		return nil, err
 	}
 	return returnValue, nil
+}
+
+func EncryptRevokeNotaryEC(
+	masterKey *bip32.Key,
+	notaryData []byte,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	notaryPubKey *secp.PublicKey,
+	contractAddress string,
+	chainId uint32,
+) (*PulseECEncryptionResult, error) {
+	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
+}
+
+// DecryptRevokeEC derives the revoke encryption key from the HD wallet and decrypts
+// the revoke payload.
+func DecryptRevokeEC(masterKey *bip32.Key,
+	request *types.PulseRevokeRequestEC,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+) ([]byte, error) {
+	return decryptHDEC(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
+}
+
+// ── PQ revoke ───────────────────────────────────────────────────────────────
+
+// EncryptSignRevokePQ encrypts revoke data for one or more ML-KEM-768
+// recipients, then appends an EIP-191 secp256k1 signature that binds the
+// revoke to the original consent CID.
+func EncryptSignRevokePQ(
+	masterKey *bip32.Key,
+	revokeData []byte,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	recipientPubKeys []*kyberKEM.PublicKey,
+	contractAddress string,
+	chainId uint32,
+	consentCid string,
+) (*types.PulseRevokeRequestPQ, error) {
+	encryptedData, err := EncryptPQ(nil, revokeData, &contractAddress, recipientPubKeys, purposes.PulseSymmetricRevoke, chainId, consentNumber)
+	if err != nil {
+		return nil, errors.New("failed to PQ-encrypt revoke data: " + err.Error())
+	}
+
+	req := &types.PulseRevokeRequestPQ{
+		ConsentCid:    consentCid,
+		EncryptedData: *encryptedData,
+	}
+	if err := SignRevokeRequest(masterKey, req, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+// DecryptRevokePQ derives the caller's ML-KEM private key from the HD wallet
+// and decrypts the revoke payload.
+func DecryptRevokePQ(
+	masterKey *bip32.Key,
+	request *types.PulseRevokeRequestPQ,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+) ([]byte, error) {
+	return decryptHDPQ(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposePQDeriveRevoke, purposes.PulseSymmetricRevoke)
+}
+
+// ── Signing ─────────────────────────────────────────────────────────────────
+
+// SignConsentRequest derives the HD signing key and appends a signature to any
+// consent request type (EC or PQ).  It replaces the former type-specific
+// SignConsentEC function.
+func SignConsentRequest(masterKey *bip32.Key,
+	request SignableConsent,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+) error {
+	signingCBOR, err := request.EncryptedDataCBOR()
+	if err != nil {
+		return errors.New("failed to marshal consent CBOR: " + err.Error())
+	}
+	cid, err := ipfs.GetCid(signingCBOR)
+	if err != nil {
+		return errors.New("failed to get cid: " + err.Error())
+	}
+
+	signingKeyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purposes.PulsePurposeSignTx)
+	if err != nil {
+		return errors.New("failed to create HD path: " + err.Error())
+	}
+	signingKey, err := deriveKeyFromMaster(masterKey, signingKeyPath)
+	if err != nil {
+		return errors.New("failed to derive signing key from master: " + err.Error())
+	}
+	signature, err := SignConsent(signingKey.ToECDSA(), contractAddress, cid.String())
+	if err != nil {
+		return errors.New("failed to sign consent: " + err.Error())
+	}
+	request.AppendSignature(signature)
+	return nil
 }
 
 // SignRevokeRequest derives the HD signing key and sets the signature on any
@@ -329,29 +522,29 @@ func SignRevokeRequest(masterKey *bip32.Key,
 	return nil
 }
 
-// DecryptConsentEC derives the consent encryption key from the HD wallet and decrypts
-// the consent payload.  The caller must have been one of the two parties to the
-// original encryption (Key1 or Key2 in the EncryptedData).
-func DecryptConsentEC(masterKey *bip32.Key,
-	request *types.PulseConsentRequestEC,
-	otherPartyNo uint32,
-	consentNumber uint32,
-	contractAddress string,
-	chainId uint32,
-) ([]byte, error) {
-	return decryptHDEC(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
-}
+// ── Internal helpers ────────────────────────────────────────────────────────
 
-// DecryptRevokeEC derives the revoke encryption key from the HD wallet and decrypts
-// the revoke payload.
-func DecryptRevokeEC(masterKey *bip32.Key,
-	request *types.PulseRevokeRequestEC,
+func encryptEC(
+	masterKey *bip32.Key,
+	notaryData []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
+	notaryPubKey *secp.PublicKey,
 	contractAddress string,
 	chainId uint32,
-) ([]byte, error) {
-	return decryptHDEC(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
+	purpose purposes.PulsePurpose,
+) (*PulseECEncryptionResult, error) {
+	keyPath, err := NewPulseHDPath(otherPartyNo, chainId, consentNumber, purpose)
+	if err != nil {
+		return nil, errors.New("failed to create HD path: " + err.Error())
+	}
+
+	privKey, err := deriveKeyFromMaster(masterKey, keyPath)
+	if err != nil {
+		return nil, errors.New("failed to derive notary encryption key from master: " + err.Error())
+	}
+
+	return EncryptECDH(notaryData, &contractAddress, privKey, notaryPubKey, purpose, chainId, consentNumber)
 }
 
 // decryptHDEC derives the encryption private key at the given purpose and decrypts.
@@ -374,28 +567,21 @@ func decryptHDEC(masterKey *bip32.Key,
 	return DecryptEC(encryptedData, &contractAddress, privKey, purpose, chainId, consentNumber)
 }
 
-// DeriveOtherPartyGenerator derives the public key generator for a specific other party
-// This is the key at path m/protocol'/otherparty which can be used to derive
-// public keys for that party without knowing their private keys
-func DeriveOtherPartyGenerator(masterKey *bip32.Key, otherParty uint32) (*bip32.Key, error) {
-	if masterKey == nil {
-		return nil, errors.New("masterKey cannot be nil")
-	}
-	if otherParty >= 0x80000000 {
-		return nil, errors.New("otherParty must be a normal (non-hardened) key index")
-	}
-
-	// Derive: m/protocol'
-	key, err := masterKey.NewChildKey(PulseProtocolIdentifier)
+// decryptHDPQ derives the ML-KEM private key for the given derive purpose and
+// calls DecryptPQ with the symmetric purpose used during encryption.
+func decryptHDPQ(
+	masterKey *bip32.Key,
+	encryptedData *types.PulsePQEncryptionResult,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	contractAddress string,
+	chainId uint32,
+	derivePurpose purposes.PulsePurpose,
+	symPurpose purposes.PulsePurpose,
+) ([]byte, error) {
+	privKey, _, err := DerivePQKeyPair(masterKey, otherPartyNo, consentNumber, chainId, derivePurpose)
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive protocol key: %w", err)
+		return nil, errors.New("failed to derive PQ decryption key: " + err.Error())
 	}
-
-	// Derive: m/protocol'/otherparty
-	key, err = key.NewChildKey(otherParty)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive otherparty key: %w", err)
-	}
-
-	return key.PublicKey(), nil
+	return DecryptPQ(encryptedData, &contractAddress, privKey, symPurpose, chainId, consentNumber)
 }
