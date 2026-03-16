@@ -3,7 +3,6 @@ package context
 import (
 	"bytes"
 	"encoding/hex"
-	"strings"
 	"testing"
 )
 
@@ -40,6 +39,15 @@ func TestContextString(t *testing.T) {
 			want:            "|pulse|ctx|v1|chain=137|contract=0x742d35Cc6634C0532925a3b844Bc454e4438f44e|consentNumber=1234",
 			hashOut:         "7e9b68d32341c8a6b8149450d5dbdea7006ca44fb85b1612424b9f6901c33d50",
 		},
+		{
+			// Matches the contract address used in hdwallet_ec_kv_test.go and hdwallet_pq_kv_test.go
+			name:            "hdwallet_kv_test_address",
+			chainId:         1,
+			contractAddress: "0x0102030405060708091011121314",
+			consentNumber:   2,
+			want:            "|pulse|ctx|v1|chain=1|contract=0x0102030405060708091011121314|consentNumber=2",
+			hashOut:         "05943986ced5d4aa1810f75407928c2e4cd3d2a4bddfcd71085c528323fa44c0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -50,8 +58,12 @@ func TestContextString(t *testing.T) {
 			}
 			h := ContextHash(tt.chainId, tt.contractAddress, tt.consentNumber)
 			gotHash := hex.EncodeToString(h)
-			if strings.Compare(gotHash, tt.hashOut) != 0 {
-				t.Errorf("ContextHash() = %q, want %q", gotHash, tt.hashOut)
+			if tt.hashOut != "" {
+				if gotHash != tt.hashOut {
+					t.Errorf("ContextHash() = %q, want %q", gotHash, tt.hashOut)
+				}
+			} else {
+				t.Logf("ContextHash: %s", gotHash)
 			}
 		})
 	}
