@@ -1,3 +1,7 @@
+// Package key_encapsulate implements post-quantum hybrid encryption and
+// decryption using ML-KEM-768 (Kyber768).  It generates a random AES-256-GCM
+// key to seal the plaintext, then encapsulates that key for each recipient
+// using Kyber768 key encapsulation.
 package key_encapsulate
 
 import (
@@ -17,7 +21,12 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
+// PQDataCipherSuite is the cipher suite identifier for the outer data encryption
+// (random AES key, no key agreement).
 var PQDataCipherSuite = "rng+aes-gcm-256"
+
+// PQKeyCipherSuite is the cipher suite identifier for the per-recipient key
+// encapsulation layer (Kyber768 KEM + HKDF + AES-GCM key wrap).
 var PQKeyCipherSuite = "kyber768+hkdf-keccak256+aes-gcm-256"
 
 func packKey(key, nonce []byte) []byte {

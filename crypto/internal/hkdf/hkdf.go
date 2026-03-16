@@ -1,3 +1,8 @@
+// Package hkdf implements the Pulse Protocol's HKDF key derivation functions
+// using RFC 5869 HMAC-based Extract-and-Expand with Keccak-256.  It supports
+// three modes: ECDH (AES key + nonce from shared secret), Kyber (AES key +
+// nonce from KEM shared secret), and PQSeed (64-byte ML-KEM seed from an HD
+// wallet node key).
 package hkdf
 
 import (

@@ -20,6 +20,8 @@ type PulseECEncryptionResult struct {
 	Key2       []byte `json:"key2"      ` // Public key of the other party, 33-byte compressed format
 }
 
+// MarshalCBOR encodes the encryption result as a DAG-CBOR map:
+// {"t":"ec","v":1,"sd":<bytes>,"k1":<bytes>,"k2":<bytes>}.
 func (result *PulseECEncryptionResult) MarshalCBOR() ([]byte, error) {
 	// {"t":"ec","v":1,"sd":bytes,"k1":bytes,"k2":bytes}
 	nb := basicnode.Prototype.Map.NewBuilder()
@@ -54,6 +56,7 @@ func (result *PulseECEncryptionResult) MarshalCBOR() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// UnmarshalCBOR decodes a DAG-CBOR block into the encryption result.
 func (p *PulseECEncryptionResult) UnmarshalCBOR(block []byte) error {
 	na := basicnode.Prototype.Any.NewBuilder()
 	err := dagcbor.Decode(na, bytes.NewReader(block))
@@ -95,11 +98,13 @@ func (p *PulseECEncryptionResult) UnmarshalCBOR(block []byte) error {
 	return nil
 }
 
+// MarshalJSON implements json.Marshaler.
 func (p *PulseECEncryptionResult) MarshalJSON() ([]byte, error) {
 	type Alias PulseECEncryptionResult
 	return json.Marshal((*Alias)(p))
 }
 
+// UnmarshalJSON implements json.Unmarshaler.
 func (p *PulseECEncryptionResult) UnmarshalJSON(bytes []byte) error {
 	type Alias PulseECEncryptionResult
 	return json.Unmarshal(bytes, (*Alias)(p))

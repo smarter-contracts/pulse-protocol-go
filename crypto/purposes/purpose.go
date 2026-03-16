@@ -1,3 +1,6 @@
+// Package purposes defines the purpose constants used in Pulse Protocol HD
+// wallet derivation paths and symmetric encryption.  Each purpose identifies
+// the intended use of a derived key (signing, encryption, key wrapping, etc.).
 package purposes
 
 import "fmt"
@@ -26,6 +29,7 @@ const (
 	PulseSymmetricKeyWrap   PulsePurpose = 255
 )
 
+// String returns a human-readable label for the purpose.
 func (p PulsePurpose) String() string {
 	switch p {
 	case PulsePurposeSignTx:

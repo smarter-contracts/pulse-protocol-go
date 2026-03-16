@@ -1,6 +1,5 @@
+// Package wipe provides functions for safely zeroing sensitive data in memory.
 package wipe
-
-// wipe contains functions for safely zeroing sensitive data.
 
 // SliceWipe overwrites the provided byte slice with zeros.
 // This is used to clear sensitive data (like private keys or shared secrets) from memory

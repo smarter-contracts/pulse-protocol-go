@@ -1,6 +1,6 @@
+// Package hash provides Keccak-256 hashing functions used throughout the
+// Pulse Protocol for data integrity and identifier generation.
 package hash
-
-// hash contains functions that carry out a Keecak256 hash on the given data.
 
 import "golang.org/x/crypto/sha3"
 

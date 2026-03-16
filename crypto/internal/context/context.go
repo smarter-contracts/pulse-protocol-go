@@ -1,3 +1,7 @@
+// Package context builds and hashes the domain-separation context strings used
+// in Pulse Protocol encryption (AAD, HKDF salt/info).  A context binds an
+// encryption operation to a specific (chainId, contractAddress, consentNumber)
+// tuple.
 package context
 
 import (

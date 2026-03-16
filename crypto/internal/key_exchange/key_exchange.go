@@ -1,3 +1,7 @@
+// Package key_exchange implements ECDH-based encryption and decryption using
+// secp256k1 key pairs.  It derives a shared secret via Elliptic Curve
+// Diffie-Hellman, expands it into an AES-256 key and nonce via HKDF-Keccak256,
+// and seals/opens the plaintext with AES-256-GCM.
 package key_exchange
 
 import (
@@ -17,6 +21,8 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
+// ECDHCipherSuite is the cipher suite identifier included in HKDF info and AES
+// AAD strings for ECDH-based encryption.
 var ECDHCipherSuite = "ecdh-secp256k1+hkdf-keccak256+aes-gcm-256"
 
 // EncryptECDH performs hybrid encryption using Elliptic Curve Diffie-Hellman (ECDH).

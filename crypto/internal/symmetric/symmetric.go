@@ -1,3 +1,12 @@
+// Package symmetric provides AES-256-GCM encryption and decryption for the
+// Pulse Protocol.  The protocol mandates AES-256-GCM for all symmetric
+// encryption, which is used for two purposes:
+//
+//  1. Consent record payload encryption (by both ECDH and ML-KEM key exchange)
+//  2. Consent record AES key wrapping (by ML-KEM only)
+//
+// All seal/open operations include purpose-bound Additional Authenticated Data
+// (AAD) for cryptographic domain separation.
 package symmetric
 
 import (
@@ -12,16 +21,6 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 )
-
-// This file contains cryptographic functions for symmetric encryption used in the Pulse Protocol.
-// We have (strong) opinions about which algorithms to use, and so abstract them away here. The
-// protocol mandates using AES-256-GCM for symmetric encryption.
-//
-// Symmetric encryption is used for two purposes:
-// 1. Consent record encryption (by both ECDH and Kyber)
-// 2. Consent record AES key encryption (by Kyber only)
-//
-// This file contains the common functions for both purposes.
 
 const (
 	AESGCMKeySize    = 32 // AES-256

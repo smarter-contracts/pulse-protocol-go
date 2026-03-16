@@ -1,3 +1,15 @@
+// Package crypto implements the Pulse Protocol's cryptographic operations for
+// consent record management.  It provides HD wallet key derivation (BIP-32),
+// ECDH and ML-KEM-768 (post-quantum) encryption, EIP-191 signing, and
+// signature verification.
+//
+// The primary entry points are the Encrypt/Decrypt/Sign functions for consent
+// and revoke records (both EC and PQ variants), and [DerivePQKeyPair] for
+// ML-KEM key generation.  All key derivation follows the Pulse HD path:
+//
+//	m/4410704'/otherParty/chain/consent/purpose
+//
+// See the examples/ directory for complete EC and PQ workflows.
 package crypto
 
 import (
@@ -265,6 +277,8 @@ func DerivePQKeyPair(
 
 // ── EC consent ──────────────────────────────────────────────────────────────
 
+// EncryptSignConsentEC encrypts consent data to the other party using ECDH and
+// appends an EIP-191 signature over the CID of the encrypted payload.
 func EncryptSignConsentEC(masterKey *bip32.Key,
 	consentData []byte,
 	otherPartyNo uint32,
@@ -285,6 +299,8 @@ func EncryptSignConsentEC(masterKey *bip32.Key,
 	return returnValue, nil
 }
 
+// EncryptConsentNotaryEC encrypts consent notary data to the notary's public key
+// using ECDH at purpose 2 (EncryptConsentNotaryBlock).
 func EncryptConsentNotaryEC(
 	masterKey *bip32.Key,
 	notaryData []byte,
@@ -396,6 +412,8 @@ func EncryptSignRevokeEC(masterKey *bip32.Key,
 	return returnValue, nil
 }
 
+// EncryptRevokeNotaryEC encrypts revoke notary data to the notary's public key
+// using ECDH at purpose 4 (EncryptRevokeNotaryBlock).
 func EncryptRevokeNotaryEC(
 	masterKey *bip32.Key,
 	notaryData []byte,

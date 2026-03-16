@@ -38,21 +38,25 @@ type PulseRevokeRequestPQ struct {
 
 // ── PulseConsentRequestPQ — SignableConsent ───────────────────────────────────
 
+// EncryptedDataCBOR returns the DAG-CBOR encoding of the inner PQ encryption result.
 func (p *PulseConsentRequestPQ) EncryptedDataCBOR() ([]byte, error) {
 	return p.EncryptedData.MarshalCBOR()
 }
 
+// AppendSignature appends an EIP-191 signature to the consent request.
 func (p *PulseConsentRequestPQ) AppendSignature(sig []byte) {
 	p.Signatures = append(p.Signatures, sig)
 }
 
 // ── PulseConsentRequestPQ — JSON ──────────────────────────────────────────────
 
+// MarshalJSON implements json.Marshaler.
 func (p *PulseConsentRequestPQ) MarshalJSON() ([]byte, error) {
 	type Alias PulseConsentRequestPQ
 	return json.Marshal((*Alias)(p))
 }
 
+// UnmarshalJSON implements json.Unmarshaler.
 func (p *PulseConsentRequestPQ) UnmarshalJSON(data []byte) error {
 	type Alias PulseConsentRequestPQ
 	return json.Unmarshal(data, (*Alias)(p))
@@ -60,6 +64,7 @@ func (p *PulseConsentRequestPQ) UnmarshalJSON(data []byte) error {
 
 // ── PulseConsentRequestPQ — DAG-CBOR ──────────────────────────────────────────
 
+// MarshalCBOR encodes the PQ consent request as a DAG-CBOR map.
 func (p *PulseConsentRequestPQ) MarshalCBOR() ([]byte, error) {
 	edBytes, err := p.EncryptedData.MarshalCBOR()
 	if err != nil {
@@ -106,6 +111,7 @@ func (p *PulseConsentRequestPQ) MarshalCBOR() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// UnmarshalCBOR decodes a DAG-CBOR block into the PQ consent request.
 func (p *PulseConsentRequestPQ) UnmarshalCBOR(block []byte) error {
 	na := basicnode.Prototype.Any.NewBuilder()
 	if err := dagcbor.Decode(na, bytes.NewReader(block)); err != nil {
@@ -161,25 +167,30 @@ func (p *PulseConsentRequestPQ) UnmarshalCBOR(block []byte) error {
 
 // ── PulseRevokeRequestPQ — SignableRevoke ─────────────────────────────────────
 
+// EncryptedDataCBOR returns the DAG-CBOR encoding of the inner PQ encryption result.
 func (p *PulseRevokeRequestPQ) EncryptedDataCBOR() ([]byte, error) {
 	return p.EncryptedData.MarshalCBOR()
 }
 
+// GetConsentCid returns the CID of the original consent being revoked.
 func (p *PulseRevokeRequestPQ) GetConsentCid() string {
 	return p.ConsentCid
 }
 
+// AppendSignature sets the revoke signature (replaces any existing signature).
 func (p *PulseRevokeRequestPQ) AppendSignature(sig []byte) {
 	p.Signature = sig
 }
 
 // ── PulseRevokeRequestPQ — JSON ───────────────────────────────────────────────
 
+// MarshalJSON implements json.Marshaler.
 func (p *PulseRevokeRequestPQ) MarshalJSON() ([]byte, error) {
 	type Alias PulseRevokeRequestPQ
 	return json.Marshal((*Alias)(p))
 }
 
+// UnmarshalJSON implements json.Unmarshaler.
 func (p *PulseRevokeRequestPQ) UnmarshalJSON(data []byte) error {
 	type Alias PulseRevokeRequestPQ
 	return json.Unmarshal(data, (*Alias)(p))
@@ -187,6 +198,7 @@ func (p *PulseRevokeRequestPQ) UnmarshalJSON(data []byte) error {
 
 // ── PulseRevokeRequestPQ — DAG-CBOR ───────────────────────────────────────────
 
+// MarshalCBOR encodes the PQ revoke request as a DAG-CBOR map.
 func (p *PulseRevokeRequestPQ) MarshalCBOR() ([]byte, error) {
 	edBytes, err := p.EncryptedData.MarshalCBOR()
 	if err != nil {
@@ -225,6 +237,7 @@ func (p *PulseRevokeRequestPQ) MarshalCBOR() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// UnmarshalCBOR decodes a DAG-CBOR block into the PQ revoke request.
 func (p *PulseRevokeRequestPQ) UnmarshalCBOR(block []byte) error {
 	na := basicnode.Prototype.Any.NewBuilder()
 	if err := dagcbor.Decode(na, bytes.NewReader(block)); err != nil {

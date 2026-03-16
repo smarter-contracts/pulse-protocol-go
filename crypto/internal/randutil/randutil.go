@@ -1,3 +1,5 @@
+// Package randutil provides convenience wrappers around crypto/rand for
+// generating cryptographically secure random bytes, integers, and strings.
 package randutil
 
 import (
