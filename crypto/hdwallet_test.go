@@ -72,6 +72,29 @@ func mustNewOtherPartyKey(t *testing.T) (*secp.PrivateKey, *secp.PublicKey) {
 	return priv, priv.PubKey()
 }
 
+// mustHexDecode decodes a hex string or panics.
+func mustHexDecode(h string) []byte {
+	b, err := hex.DecodeString(h)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// helperContractAddress returns a valid 20-byte Ethereum-like address string pointer.
+func helperContractAddress() *string {
+	var b [20]byte
+	for i := 0; i < 20; i++ {
+		b[i] = byte(i + 1)
+	}
+	const hexdigits = "0123456789abcdef"
+	s := "0x"
+	for _, v := range b {
+		s += string([]byte{hexdigits[v>>4], hexdigits[v&0x0f]})
+	}
+	return &s
+}
+
 // ── newpulseHDPath validation ─────────────────────────────────────────────────────────
 
 func TestNewpulseHDPath_Validation(t *testing.T) {

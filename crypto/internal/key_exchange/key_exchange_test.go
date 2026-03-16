@@ -190,3 +190,113 @@ func TestGenerateAESKey_NilKeys(t *testing.T) {
 		t.Fatal("expected error for nil private key, got nil")
 	}
 }
+
+// ── Tests merged from crypto/key_exchange_test.go ────────────────────────────
+
+func TestEncryptECDH_RoundTrip_WithResult(t *testing.T) {
+	alicePriv, _ := secp.GeneratePrivateKey()
+	alicePub := alicePriv.PubKey()
+	bobPriv, _ := secp.GeneratePrivateKey()
+	bobPub := bobPriv.PubKey()
+
+	pt := []byte("hello pulse")
+	addr := helperContractAddress()
+
+	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err != nil {
+		t.Fatalf("EncryptECDH() failed: %v", err)
+	}
+
+	if !bytes.Equal(res.Key1, alicePub.SerializeCompressed()) {
+		t.Fatalf("result Key1 mismatch: got %x want %x", res.Key1, alicePub.SerializeCompressed())
+	}
+	if !bytes.Equal(res.Key2, bobPub.SerializeCompressed()) {
+		t.Fatalf("result Key2 mismatch: got %x want %x", res.Key2, bobPub.SerializeCompressed())
+	}
+	if len(res.SealedData) == 0 {
+		t.Fatalf("sealed data is empty")
+	}
+
+	decrypted, err := DecryptEC(res, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err != nil {
+		t.Fatalf("DecryptEC() failed: %v", err)
+	}
+	if !bytes.Equal(pt, decrypted) {
+		t.Fatalf("plaintext mismatch: got %q want %q", decrypted, pt)
+	}
+}
+
+func TestDecryptEC_KeyOrderIrrelevant(t *testing.T) {
+	alicePriv, _ := secp.GeneratePrivateKey()
+	bobPriv, _ := secp.GeneratePrivateKey()
+	bobPub := bobPriv.PubKey()
+
+	pt := []byte("order test")
+	addr := helperContractAddress()
+
+	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err != nil {
+		t.Fatalf("EncryptECDH() failed: %v", err)
+	}
+
+	// Swap keys in the result to ensure unpacking still finds the other key
+	res.Key1, res.Key2 = res.Key2, res.Key1
+
+	decrypted, err := DecryptEC(res, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err != nil {
+		t.Fatalf("DecryptEC() failed with swapped keys: %v", err)
+	}
+	if !bytes.Equal(pt, decrypted) {
+		t.Fatalf("plaintext mismatch after swapped keys: got %q want %q", decrypted, pt)
+	}
+}
+
+func TestEncryptECDH_Errors(t *testing.T) {
+	alicePriv, _ := secp.GeneratePrivateKey()
+	bobPriv, _ := secp.GeneratePrivateKey()
+	bobPub := bobPriv.PubKey()
+	addr := helperContractAddress()
+	pt := []byte("hello")
+
+	// Missing private key
+	_, err := EncryptECDH(pt, addr, nil, bobPub, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err == nil {
+		t.Fatal("expected error with nil private key")
+	}
+
+	// Missing other public key
+	_, err = EncryptECDH(pt, addr, alicePriv, nil, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err == nil {
+		t.Fatal("expected error with nil public key")
+	}
+}
+
+func TestDecryptEC_Errors(t *testing.T) {
+	alicePriv, _ := secp.GeneratePrivateKey()
+	bobPriv, _ := secp.GeneratePrivateKey()
+	bobPub := bobPriv.PubKey()
+	addr := helperContractAddress()
+	pt := []byte("secret")
+
+	res, err := EncryptECDH(pt, addr, alicePriv, bobPub, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err != nil {
+		t.Fatalf("EncryptECDH() failed: %v", err)
+	}
+
+	// Decrypt with wrong private key
+	wrongPriv, _ := secp.GeneratePrivateKey()
+	_, err = DecryptEC(res, addr, wrongPriv, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err == nil || err.Error() != "no matching public key found in encryption result" {
+		t.Fatalf("expected 'no matching public key found in encryption result', got %v", err)
+	}
+
+	// Tamper ciphertext
+	resTampered := *res
+	resTampered.SealedData = make([]byte, len(res.SealedData))
+	copy(resTampered.SealedData, res.SealedData)
+	resTampered.SealedData[0] ^= 0xff
+	_, err = DecryptEC(&resTampered, addr, bobPriv, purposes.PulsePurposeEncryptConsentStructure, 0x01, 0)
+	if err == nil {
+		t.Fatal("expected error with tampered ciphertext")
+	}
+}

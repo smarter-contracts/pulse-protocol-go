@@ -362,3 +362,53 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 		t.Errorf("Decrypted mismatch: got %q, want %q", decrypted, plaintext)
 	}
 }
+
+// ── Tests merged from crypto/key_encapsulation_test.go ───────────────────────
+
+func TestEncryptPQ_RoundTrip_FromFile(t *testing.T) {
+	plainText := []byte("pulse text")
+	contractAddress := helperContractAddressPQ()
+	purpose := purposes.PulsePurposeEncryptConsentStructure
+	chainId := uint32(0x01)
+
+	bobPrivate, err := keyFromFile(testDataDir() + "alice_private.hex")
+	if err != nil {
+		t.Skipf("skipping: key file not found: %v", err)
+	}
+	_ = bobPrivate
+	bobPrivate2, err := keyFromFile(testDataDir() + "bob_private.hex")
+	if err != nil {
+		t.Skipf("skipping: key file not found: %v", err)
+	}
+	bobPublic := bobPrivate2.Public().(*kyberKEM.PublicKey)
+
+	result, err := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{bobPublic}, purpose, chainId, 0)
+	if err != nil {
+		t.Fatalf("EncryptPQ: %v", err)
+	}
+
+	decrypted, err := DecryptPQ(result, contractAddress, bobPrivate2, purpose, chainId, 0)
+	if err != nil {
+		t.Fatalf("DecryptPQ: %v", err)
+	}
+	if !bytes.Equal(decrypted, plainText) {
+		t.Fatalf("decrypted plaintext mismatch: got %q want %q", decrypted, plainText)
+	}
+}
+
+func TestDecryptPQ_WrongKey(t *testing.T) {
+	plainText := []byte("data")
+	contractAddress := helperContractAddressPQ()
+	purpose := purposes.PulsePurposeEncryptConsentStructure
+	chainId := uint32(0x01)
+	pk, _, _ := kyberKEM.GenerateKeyPair(rand.Reader)
+
+	result, _ := EncryptPQ(nil, plainText, contractAddress, []*kyberKEM.PublicKey{pk}, purpose, chainId, 0)
+
+	// Decrypt with wrong private key
+	_, wrongSK, _ := kyberKEM.GenerateKeyPair(rand.Reader)
+	_, err := DecryptPQ(result, contractAddress, wrongSK, purpose, chainId, 0)
+	if err == nil || err.Error() != "no key found for this party" {
+		t.Fatalf("expected 'no key found for this party', got %v", err)
+	}
+}
