@@ -2,8 +2,8 @@
 
 ## Intro
 
-Key Encapsulation is the method of encrypting pulse consent data using a Kyber768 cipher suite. 
-This is distinct from the "Key Exchange" method that uses a ECDH (secp256k1) key exchange to derive a symmetric key 
+Key Encapsulation is the method of encrypting pulse consent data using a Kyber768 cipher suite.
+This is distinct from the "Key Exchange" method that uses a ECDH (secp256k1) key exchange to derive a symmetric key
 for encrypting the consent data and documented elsewhere.
 
 The protocol uses the following building cryptographic building blocks:
@@ -12,15 +12,18 @@ The protocol uses the following building cryptographic building blocks:
  - Keccak-256 ( hash function )
  - RFC 5869 HKDF ( key derivation function )
 
+The ML-KEM key pairs are derived from a BIP-32 HD wallet using HKDF seed expansion.
+See [wallet.md](wallet.md) for full details on the HD wallet derivation and PQ key generation.
+
 At a high level, encryption and decryption work as follows:
-  
+
  - **Encryption** (needs consent data and a list of Public Keys):
    1. Generate a random symmetric key (32 bytes) and nonce (12 bytes) "AESDataKey"
    2. Encrypt the consent data/plaintext using AES-GCM with the symmetric key.
    3. For each recipient's public key (including the sender!)
       - Create a fingerprint of the public key by Hashing it.
       - Use Kyber768 and the Public Key to create and encapsulate a "shared secret"
-      - Use HKDF to derive and AES key and nonce from the shared secret "AESKeyKey"
+      - Use HKDF to derive an AES key and nonce from the shared secret "AESKeyKey"
       - Encrypt the AESDataKey with the AESKeyKey using AES-GCM
       - Package the encapsulated shared secret, fingerprint, and encrypted data key into a `PulsePQEncryptionKey`.
    4. Package the ciphertext and list of `PulsePQEncryptionKey` into a `PulsePQEncryptionResult`.
@@ -65,7 +68,7 @@ For CBOR encoding, we explicitly use an IPFS compatible encoding:
 
 | Fieldname | Type   | Value               | 
 |-----------|--------|---------------------|
-| t         | string | "ec"                |
+| t         | string | "pq"                |
 | v         | int    | 1                   |
 | sd        | byte[] | SealedData          |
 | keys      | list   | Keys                |
@@ -106,8 +109,8 @@ Notes:
 
 Notes:
 * Uses AES-256 in GCM mode.
-* ciphertext length is exactly plaintext.length bytes.
-* nonce length is 12 bytes. The key length is 32 bytes.`
+* ciphertext length is plaintext.length + 16 bytes (16-byte GCM authentication tag is appended).
+* nonce length is 12 bytes. The key length is 32 bytes.
 
 ```ENCAPSULATE(publicKey) -> (sharedSecret,encapsulatedSecret)```  /// Kyber768 encapsulation function. Generates a 
 random shared secret, and encapsulates it so that only someone with the associated private key can retrieve ```sharedSecret``` 
@@ -134,16 +137,14 @@ to ensure that keys cannot be reused across different consent transactions and e
 *  ```consentNumber int32``` // Unique number assigned to the consent transaction. This number starts at 1 for the first
     consent between these parties, and increments by 1 for each later consent.
 *  ```chainId int32``` // Chain number of the key used. This is always 1.
-*  ```purpose byte```  // Indicates the type of underyling plaintext:
+*  ```purpose byte```  // Indicates the type of underlying plaintext:
 
 
-| Value | Purpose                                          | String Value |
-|-------|--------------------------------------------------|--------------|
-| 0     | No defined purpose                               |
-| 1     | Consent data                                     | consent      |
-| 2     | Revocation record for a prior consent.           | revoke       |
-| 3     | Update record for modifying an existing consent. | update       |
-| 255   | Wrapping a key                                   | keywrap      |
+| Value | Purpose                                | String Value |
+|-------|----------------------------------------|--------------|
+| 6     | Consent data                           | consent      |
+| 7     | Revocation record for a prior consent. | revoke       |
+| 255   | Wrapping a key                         | keywrap      |
 
 ### Encryption Inputs: Cryptographic
 
@@ -159,15 +160,19 @@ fingerPrints := [ for pk in publicKeys: HEX(FINGERPRINT(pk)) ]
 fingerPrints.SORT()     // Lexical/Alphabetical order
 
 recipientString := "|pulse|group|v1|" + [ for fp in fingerPrints: fp + "|" ]
-receipientStringHash := H(recipientString)
+recipientStringHash := H(recipientString)
 
-contextString := SPRINTF("|pulse|ctx|v1|chain=%d|contract=%s|consentNumber=%d|", chainId, smartContractAddress, consentNumber)
-context := H(contextString)
+contextString := SPRINTF("|pulse|ctx|v1|chain=%d|contract=%s|consentNumber=%d", chainId, smartContractAddress, consentNumber)
+contextHash := H(contextString)
+
+// Note: the HKDF info string double-hashes the context — H(contextHash) not contextHash.
+hkdfContextHash := H(contextHash)
 
 AESDataKey := RNG(32)
 AESDataNonce := RNG(12)
 
-dataAAD := SPRINTF("pulse|%s|v1|rng+aes-gcm-256|rid=%s|ctx=%s|th=%s|nonce=%s", purpose.STRING(), HEX(recipientStringHash), HEX(contextHash), HEX(H(AESDataNonce)), HEX(AESDataNonce),
+// Note: the AAD uses the single-hashed contextHash, not the double-hashed hkdfContextHash.
+dataAAD := SPRINTF("|pulse|%s|v1|rng+aes-gcm-256|rid=%s|ctx=%s|th=%s|nonce=%s|", purpose.STRING(), HEX(recipientStringHash), HEX(contextHash), HEX(H(AESDataNonce)), HEX(AESDataNonce))
 
 encryptedData := AES_SEAL(plaintext, AESDataKey, AESDataNonce, dataAAD)
 
@@ -175,28 +180,28 @@ packedKey := AESDataKey + AESDataNonce  // Concatenate the AESDataKey and AESDat
 
 foreach pubkey in publicKeys:
     sharedSecret, encapsulatedSecret := ENCAPSULATE(pubkey)
-   
-    saltString = SPRINTF("pulse|kdf|v1|salt|kyber768|%s|", HEX(encapsulatedSecret))
+
+    saltString = SPRINTF("|pulse|kdf|v1|salt|kyber768|%s|", HEX(encapsulatedSecret))
     salt := H(saltString)
     prk := EXTRACT(sharedSecret, salt)
 
-    infoKeyString = SPRINTF("pulse|kdf|v1|keywrap-aeskey|kyber768+hkdf-keccak256|rid=%s|ctx=%s", HEX(FINGERPRINT(pubkey)), HEX(context))
+    infoKeyString = SPRINTF("|pulse|kdf|v1|keywrap-aeskey|kyber768+hkdf-keccak256|rid=%s|ctx=%s|", HEX(FINGERPRINT(pubkey)), HEX(hkdfContextHash))
     aesKeyKey := EXPAND(prk, infoKeyString, 32)   // Derive AES key for encrypting the data key.
-    infoKeyNonce := SPRINTF("pulse|kdf|v1|keywrap-aesnonce|kyber768+hkdf-keccak256|rid=%s|ctx=%s", HEX(FINGERPRINT(pubkey)), HEX(context))
+    infoKeyNonce := SPRINTF("|pulse|kdf|v1|keywrap-aesnonce|kyber768+hkdf-keccak256|rid=%s|ctx=%s|", HEX(FINGERPRINT(pubkey)), HEX(hkdfContextHash))
     aesKeyNonce := EXPAND(prk, infoKeyNonce, 12)  // Derive nonce for encrypting the data key.
 
-    keyAAD := SPRINTF("pulse|%s|v1|kyber768+hkdf-keccak256+aes-gcm-256|rid=%s|ctx=%s|th=%s|nonce=%s", purpose.STRING(), HEX(FINGERPRINT(pubkey), HEX(context), HEX(H(encapsulatedSecret)), HEX(AESKeyNonce))
+    keyAAD := SPRINTF("|pulse|%s|v1|kyber768+hkdf-keccak256+aes-gcm-256|rid=%s|ctx=%s|th=%s|nonce=%s|", purpose.STRING(), HEX(FINGERPRINT(pubkey)), HEX(contextHash), HEX(H(encapsulatedSecret)), HEX(aesKeyNonce))
 
-    encryptedKey := AES_SEAL(packedKey, AESKeyKey, AESKeyNonce, keyAAD)
+    encryptedKey := AES_SEAL(packedKey, aesKeyKey, aesKeyNonce, keyAAD)
 
     store PulsePQEncryptionKey {
-        Fingerprint: FINGERPRINT(pubkey),
-        EncapsulatedKey: encapsulatedKey,
-        EncryptedDataKey: encryptedPackedKey
+        KeyFingerPrint:      FINGERPRINT(pubkey),
+        EncapsulatedKeyKey:  encapsulatedSecret,
+        EncapsulatedDataKey: encryptedKey
     }
 
 encryptionResult := PulsePQEncryptionResult {
-    Ciphertext: encryptedData,
+    SealedData: encryptedData,
     Keys: [ all stored PulsePQEncryptionKey records ]
 }
 ```
@@ -210,45 +215,49 @@ encryptionResult := PulsePQEncryptionResult {
 
 ```
 contextString := SPRINTF("|pulse|ctx|v1|chain=%d|contract=%s|consentNumber=%d", chainId, smartContractAddress, consentNumber)
-context := H(contextString)
+contextHash := H(contextString)
+
+// Note: the HKDF info string double-hashes the context — H(contextHash) not contextHash.
+hkdfContextHash := H(contextHash)
 
 publicKey := PUBKEY(privateKey)
 fingerPrint := FINGERPRINT(publicKey)
 
-cipherText := encryptedData.Ciphertext
+sealedData := encryptedData.SealedData
 keys := encryptedData.Keys
 
 foreach key in keys:
-    if key.Fingerprint == fingerPrint:
+    if key.KeyFingerPrint == fingerPrint:
         myKey := key
-        fingerPrints := fingerPrints.append(key.Fingerprint)
-// Error if no key founcd for the recipient's public key.
+    fingerPrints := fingerPrints.append(HEX(key.KeyFingerPrint))
+// Error if no key found for the recipient's public key.
 fingerPrints.SORT()     // Lexical/Alphabetical order
 
 recipientString := "|pulse|group|v1|" + [ for fp in fingerPrints: fp + "|" ]
-receipientStringHash := H(recipientString)
+recipientStringHash := H(recipientString)
 
-sharedSecret := DECAPSULATE(privateKey, key.EncapsulatedKey)
+sharedSecret := DECAPSULATE(privateKey, myKey.EncapsulatedKeyKey)
 
 // Build Salt and Info same as Encryption Algorithm
-saltString = SPRINTF("pulse|kdf|v1|salt|kyber768|%s", HEX(key.EncapsulatedKeyKey))
+saltString = SPRINTF("|pulse|kdf|v1|salt|kyber768|%s|", HEX(myKey.EncapsulatedKeyKey))
 salt := H(saltString)
 prk := EXTRACT(sharedSecret, salt)
 
-infoKeyString = SPRINTF("pulse|kdf|v1|keywrap-aeskey|kyber768+hkdf-keccak256|rid=%s|ctx=%s", HEX(fingerPrint), HEX(context))
+infoKeyString = SPRINTF("|pulse|kdf|v1|keywrap-aeskey|kyber768+hkdf-keccak256|rid=%s|ctx=%s|", HEX(fingerPrint), HEX(hkdfContextHash))
 aesKeyKey := EXPAND(prk, infoKeyString, 32)   // Derive AES key for encrypting the data key.
-infoKeyNonce := SPRINTF("pulse|kdf|v1|keywrap-aesnonce|kyber768+hkdf-keccak256|rid=%s|ctx=%s", HEX(fingerPrint), HEX(context))
+infoKeyNonce := SPRINTF("|pulse|kdf|v1|keywrap-aesnonce|kyber768+hkdf-keccak256|rid=%s|ctx=%s|", HEX(fingerPrint), HEX(hkdfContextHash))
 aesKeyNonce := EXPAND(prk, infoKeyNonce, 12)  // Derive nonce for encrypting the data key.
 
-keyAAD := SPRINTF("pulse|%s|v1|kyber768+hkdf-keccak256+aes-gcm-256|rid=%s|ctx=%s|th=%s|nonce=%s", purpose.STRING(), HEX(fingerPrint), HEX(context), HEX(H(myKey.EncapsulatedKeyKey)), HEX(aesKeyNonce))
+// Note: the AAD uses the single-hashed contextHash, not the double-hashed hkdfContextHash.
+keyAAD := SPRINTF("|pulse|%s|v1|kyber768+hkdf-keccak256+aes-gcm-256|rid=%s|ctx=%s|th=%s|nonce=%s|", purpose.STRING(), HEX(fingerPrint), HEX(contextHash), HEX(H(myKey.EncapsulatedKeyKey)), HEX(aesKeyNonce))
 
-decryptedKey := AES_OPEN(myKey.EncryptedDataKey, aesKeyKey, aesKeyNonce, keyAAD)
+decryptedKey := AES_OPEN(myKey.EncapsulatedDataKey, aesKeyKey, aesKeyNonce, keyAAD)
 
 aesDataKey := decryptedKey[0:32]
 aesDataNonce := decryptedKey[32:44]
 
-dataAAD := SPRINTF("pulse|%s|v1|rng+aes-gcm-256|rid=%s|ctx=%s|th=%s|nonce=%s", purpose.STRING(), HEX(recipientStringHash), HEX(contextHash), HEX(H(AESDataNonce)), HEX(AESDataNonce))
-plaintext := AES_OPEN(cipherText, aesDataKey, aesDataNonce, dataAAD)
+dataAAD := SPRINTF("|pulse|%s|v1|rng+aes-gcm-256|rid=%s|ctx=%s|th=%s|nonce=%s|", purpose.STRING(), HEX(recipientStringHash), HEX(contextHash), HEX(H(aesDataNonce)), HEX(aesDataNonce))
+plaintext := AES_OPEN(sealedData, aesDataKey, aesDataNonce, dataAAD)
 
 ```
 
@@ -279,7 +288,7 @@ structures.
 | ChainId              | Chain number                                                               | 1 (0x00000001)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | SmartContractAddress | Address of the smart contract, as a string                                 | "0x0102030405060708091011121314"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ConsentNumber        | Unique number (for these participants) assigned to the consent transaction | 2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Purpose              | Purpose of the consent transaction                                         | 1 (consent)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Purpose              | Purpose of the consent transaction                                         | 6 (consent)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Plaintext            | Consent record to be encrypted                                             | "This is the consent record"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ### Random Values

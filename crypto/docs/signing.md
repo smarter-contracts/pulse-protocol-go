@@ -2,7 +2,7 @@
 
 ## Intro
 
-This document describes the protocol for signing consent/revoke/update consent requests using the Pulse protocol.
+This document describes the protocol for signing consent and revoke requests using the Pulse protocol.
 
 The signatures that are generated are designed to be used by the Pulse Smart Contract, which will use signatures
 on a transaction to recover the Ethereum/Polygon address of the signer. This makes use of the ECDSA Recover operation,
@@ -12,14 +12,18 @@ correctly at the smart contract level.
 
 The signatures are generated using an Elliptic Curve Digital Signature Algorithm (ECDSA) with the secp256k1 curve.
 
+The signing key is derived from a BIP-32 HD wallet using the Pulse derivation path at purpose 1 (SignTx).
+See [wallet.md](wallet.md) for full details on the HD wallet derivation.
+
 The message for a signature is created in three steps:
-1. Pack the Smart Contract Address, plus one (consent) or two (revoke/update) cid values into a byte array, then hash it 
+1. Parse the Smart Contract Address from a hex string into a 20-byte binary address.
+2. Pack the binary contract address, plus one (consent) or two (revoke) CID values into a byte array, then hash it
 using Keccak256.
-2. Create an EIP-191 compatible message as ```"\x19Ethereum Signed Message:\n" + <length of message>(0x20) " + <message>(result of step 1)```
+3. Create an EIP-191 compatible message as ```"\x19Ethereum Signed Message:\n" + <length of message>(0x20) " + <message>(result of step 2)```
 Hash the result using Keccak256
 
 The resulting signature is 65 bytes long, with 32 bytes of R and 32 bytes of S plus a recovery ID byte. The recoveryID
-byte will be used, but EIP-191 expects the recovery ID to be 27 or 28. Signing libraries will often return 0 or 1 for 
+byte will be used, but EIP-191 expects the recovery ID to be 27 or 28. Signing libraries will often return 0 or 1 for
 the recovery ID, so we need to convert these to 27 or 28 by adding 27 to the result.
 
 ## Formal Definition
@@ -57,28 +61,28 @@ using Elliptic Curve Digital Signature Algorithm (ECDSA) with the secp256k1 curv
 
 ```RECOVER(message byte[], signature PulseSignature) -> PublicKey``` // Recover the public key from a signature and message```
 
+```PARSEHEX(hexString) -> byte[]``` // Parse a hex string into a byte array. Strips any leading "0x" prefix.
+
 ```PACK(arguments...) -> byte[]``` // Pack a sequence of arguments into a byte array in the order they are specified.```
 
 ```ADDRESS(publicKey secp256k1.PublicKey) -> string``` // Convert a public key to a 20 byte Ethereum address.```
 
 ### Signing Inputs
 
-*  ```contractAddress``` String with the contract address.
+*  ```contractAddress``` String with the contract address (hex, with or without "0x" prefix).
 *  ```cid``` IPFS content cid of the consent record we are using
 *  ```rcid``` IPFS cid of the revocation record we are using (if revoking)
-*  ```newCid``` IPFS cid of the updated record we are using (if updating)
 *  ```privateKey secp256k1.PrivateKey``` // Private key for the signing account.```
 
 ### Signing Algorithm
 
 ```
+contract := PARSEHEX(contractAddress)    // 20-byte binary address
 switch( purpose ) {
     case CONSENT:
-        message = PACK(contractAddress, cid)
+        message = PACK(contract, cid)
     case REVOKE:
-        message = PACK(contractAddress, cid, rcid)
-    case UPDATE:
-        message = PACK(contractAddress, cid, newCid)
+        message = PACK(contract, cid, rcid)
 }
 
 hMessage := H(message)
@@ -92,29 +96,25 @@ signature[64] := signature[64] + 27,
 
 ### Recovery Inputs
 
-*  ```contractAddress``` String with the contract address.
+*  ```contractAddress``` String with the contract address (hex, with or without "0x" prefix).
 *  ```cid``` IPFS content cid of the consent record we are using
 *  ```rcid``` IPFS cid of the revocation record we are using (if revoking)
-*  ```newCid``` IPFS cid of the updated record we are using (if updating)
 *  ```signature bytes[65]``` // Signature of the message.```
 
-### Decryption Algorithm
+### Recovery Algorithm
 
 ```
-contract := PARSEHEX(contractAddress)
+contract := PARSEHEX(contractAddress)    // 20-byte binary address
 switch( purpose ) {
     case CONSENT:
         message = PACK(contract, cid)
     case REVOKE:
         message = PACK(contract, cid, rcid)
-    case UPDATE:
-        message = PACK(contract, cid, newCid)
 }
 
 hMessage := H(message)
 eip191Message := SPRINTF("\x19Ethereum Signed Message:\n32%s", hMessage)
 sMessage := H(eip191Message)
-signature := ECDSA(sMessage, privateKey)
 
 publicKey := RECOVER(sMessage, signature)
 address := ADDRESS(publicKey)
@@ -137,7 +137,6 @@ Strings are written inside double quotes: "string value"
 | privateKeyBob | da4782769625a2cfe4c5ab998f71e19892d0769ed42c0551b2efab5eceae884c |
 | cid | "bafyreialkztkqka6ki4arwlrryrhpamzaa3otihmegainx4puyyiq7yspm" |
 | rcid | "bafyreidxxmeu4hn46zhbwclzwykj7vdbixj5boduhql7ihm4i2djqt4dmq" |
-| newCid | "bafyreifstfribprjfru4wdidm4nh4qetpftezzxqnz2kls67jgwwhlxcve" |
 
 ### Derived Values
 
@@ -157,8 +156,3 @@ Strings are written inside double quotes: "string value"
 | sMessage(revoke)        | H("\019Ethereum Signed Message\n\040" + hMessage(revoke) )  | 268c86604e8c4b1925b4ab12fc9c6ac5d0a974c0e8b70466678319a69ab76b88 |
 | revokeSignature(Alice)  | ECDSA(sMessage(revoke), privateKeyAlice)                    | 380309be5b333ee98a842eba5243d6ea12df1460242b945852b80066dd14f3b06dadac3afe2acdfcc5762ef8fa6eff0df71cbc17eee4e83ed8911e8a577162721b |
 | revokeSignaure(Bob)     | ECDSA(sMessage(revoke), privateKeyBob )                     | 07c1b03984ca30b557638a808768de4a992fc0a82290d2d8a9af8130ae3e4ec1365d0952bea16f671a71a8b8b0ff9c65370761a44b1a53518d66ac78e493e4d61c |
-| updateMessage           | PACK(contract, cid, newCid )                                | 9b980288ae5f7a1aca113faec133e765879a5fab62616679726569616c6b7a746b716b61366b69346172776c727279726870616d7a6161336f7469686d656761696e7834707579796971377973706d626166797265696673746672696270726a66727534776469646d346e6834716574706674657a7a78716e7a326b6c7336376a677777686c78637665 |
-| hMessage(update)        | H(updateMessage)                                            | b4457c87c7b32e312e3b80c63bd9874100f092529548469eae2ac1e525dc7add | 
-| sMessage(update)        | H("\019Ethereum Signed Message\n\040" + hMessage(update) )  | ab250d898ca036dec9a1bb67881c3ee660185ba5c73c6dd669cf590aac50b511 |
-| updateSignature(Alice)  | ECDSA(sMessage(update), privateKeyAlice)                    | 75c4002da7ee7c0b284163c55894fff6822855637bed817907a5c8768f95a5500d56a012ec09d6454c28ee80e5f5d3fc207df5cb1685c0ffc0caf0ba16f999d91b |
-| updateSignaure(Bob)     | ECDSA(sMessage(update), privateKeyBob )                     | 0137c16dc62294067053dfd8f1832c30af22aaf3ae7e0a066eb0921586dc126e3cd5fad4dd40c46cb0e8f9fe6d9210f48195be37eb28d27d80d1a76739ab476f1b |
