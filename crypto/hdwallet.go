@@ -294,10 +294,10 @@ func EncryptConsentNotaryEC(
 	contractAddress string,
 	chainId uint32,
 ) (*types.PulseECEncryptionResult, error) {
-	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
+	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptConsentNotaryBlock)
 }
 
-// DecryptConsentNotaryEC derives the consent encryption key from the HD wallet
+// DecryptConsentNotaryEC derives the consent notary encryption key from the HD wallet
 // and decrypts a notary block produced by EncryptConsentNotaryEC.
 func DecryptConsentNotaryEC(masterKey *bip32.Key,
 	encryptedData *types.PulseECEncryptionResult,
@@ -306,7 +306,7 @@ func DecryptConsentNotaryEC(masterKey *bip32.Key,
 	contractAddress string,
 	chainId uint32,
 ) ([]byte, error) {
-	return decryptHDEC(masterKey, encryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
+	return decryptHDEC(masterKey, encryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptConsentNotaryBlock)
 }
 
 // DecryptConsentEC derives the consent encryption key from the HD wallet and decrypts
@@ -405,10 +405,10 @@ func EncryptRevokeNotaryEC(
 	contractAddress string,
 	chainId uint32,
 ) (*types.PulseECEncryptionResult, error) {
-	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
+	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeNotaryBlock)
 }
 
-// DecryptRevokeNotaryEC derives the revoke encryption key from the HD wallet
+// DecryptRevokeNotaryEC derives the revoke notary encryption key from the HD wallet
 // and decrypts a notary block produced by EncryptRevokeNotaryEC.
 func DecryptRevokeNotaryEC(masterKey *bip32.Key,
 	encryptedData *types.PulseECEncryptionResult,
@@ -417,7 +417,7 @@ func DecryptRevokeNotaryEC(masterKey *bip32.Key,
 	contractAddress string,
 	chainId uint32,
 ) ([]byte, error) {
-	return decryptHDEC(masterKey, encryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
+	return decryptHDEC(masterKey, encryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeNotaryBlock)
 }
 
 // DecryptRevokeEC derives the revoke encryption key from the HD wallet and decrypts

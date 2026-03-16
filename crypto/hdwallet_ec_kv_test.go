@@ -10,23 +10,34 @@ package crypto
  * ── Test parameters ──────────────────────────────────────────────────────────
  *   Alice seed (BIP-32 Test Vector 1): 000102030405060708090a0b0c0d0e0f
  *   Bob seed:                          101112131415161718191a1b1c1d1e1f
+ *   Notary private key (hex):          aa01020304050607080910111213141516171819202122232425262728293031
  *   contractAddress: "0x0102030405060708091011121314"
  *   chainId:         1
  *   otherParty:      3  (Bob's party number from Alice's perspective)
  *   consentNumber:   2
  *   notaryData:      "notary block payload for kv test"
- *   consentData:     constructed as notaryCid + "|consent payload for kv test"
+ *   consentData:     constructed as notaryCBOR + "|consent payload for kv test"
  *   revokeNotaryData: "revoke notary block payload for kv test"
- *   revokeData:      constructed as revokeNotaryCid + "|revoke payload for kv test"
+ *   revokeData:      constructed as revokeNotaryCBOR + "|revoke payload for kv test"
+ *
+ * ── Notary key ───────────────────────────────────────────────────────────────
+ *   The notary public key is a standalone secp256k1 key pair (not derived from
+ *   any HD wallet).  The same notary key is used for both consent and revoke
+ *   notary blocks.  Only Alice (the HD wallet holder) can decrypt the notary;
+ *   Bob can decrypt the outer consent/revoke structure but NOT the embedded
+ *   notary.
  *
  * ── Lifecycle ────────────────────────────────────────────────────────────────
- *   1. Alice encrypts notary data          → EncryptConsentNotaryEC
- *   2. Alice builds consent plaintext       (notaryCid + consent payload)
- *   3. Alice encrypts + signs consent      → EncryptSignConsentEC
+ *   1. Alice encrypts notary data          → EncryptConsentNotaryEC (purpose 2)
+ *   2. Alice builds consent plaintext       (notaryCBOR + consent payload)
+ *   3. Alice encrypts + signs consent      → EncryptSignConsentEC   (purpose 3)
  *   4. Bob counter-signs consent           → SignConsentRequest
- *   5. Bob decrypts consent                → DecryptConsentEC
- *   6. Alice encrypts revoke notary data   → EncryptRevokeNotaryEC
- *   7. Alice encrypts + signs revoke       → EncryptSignRevokeEC
+ *   5. Both parties decrypt consent        → DecryptConsentEC
+ *   6. Alice decrypts embedded notary      → DecryptConsentNotaryEC
+ *   7. Bob cannot decrypt embedded notary  (negative test)
+ *   8. Alice encrypts revoke notary data   → EncryptRevokeNotaryEC  (purpose 4)
+ *   9. Alice encrypts + signs revoke       → EncryptSignRevokeEC    (purpose 5)
+ *  10. Both parties decrypt revoke; only Alice decrypts revoke notary
  */
 
 import (
@@ -34,6 +45,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	bip32 "github.com/jamesradley/go-bip32"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
@@ -56,44 +68,57 @@ func mustNewBobMasterKey(t *testing.T) *bip32.Key {
 	return key
 }
 
+// kvNotarySeed is a fixed 32-byte private key for the standalone notary key pair.
+// This is NOT derived from any HD wallet — it represents the notary service's key.
+var kvNotarySeed, _ = hex.DecodeString("aa01020304050607080910111213141516171819202122232425262728293031")
+
+func mustNewNotaryKey(t *testing.T) (*secp.PrivateKey, *secp.PublicKey) {
+	t.Helper()
+	priv := secp.PrivKeyFromBytes(kvNotarySeed)
+	return priv, priv.PubKey()
+}
+
 // ── Known values (populated from first run with -v) ─────────────────────────
 // To regenerate: clear all kv* constants, run with -v, paste logged values.
 
 const (
-	// Notary encryption (purpose 3 — EncryptConsentStructure)
-	kvNotaryPath      = "m/4410704'/3/1/2/3"
-	kvNotaryAlicePriv = "61e1d6824a3faf93e939d06471854c887497d2a7e93bb3fbfe23ea643009682c"
-	kvNotaryAlicePub  = "02759a7c74a13b454e94c4846d0ee14366d4f8716bd6bc1fce99507952e7220a2c"
-	kvNotarySealedHex = "102f9c210ed37e2dca07f51a4a2a6aef08adac93c707e123c68834e0a8d7532008dbfbe94f8d78061f5f6b1ba69cf61a"
+	// Notary key (standalone, not from wallet)
+	kvNotaryPubHex = "02fade94180988b62103c7788bac14dd71819c92ad3c757ac5eb3477054970d805" // compressed secp256k1 public key of the notary
+
+	// Notary encryption (purpose 2 — EncryptConsentNotaryBlock)
+	kvNotaryPath      = "m/4410704'/3/1/2/2"
+	kvNotaryAlicePriv = "de9ff0acd0e4774ec79ef72dd2e086b8e45e97214fed3cac5b7b352c94e8eeaa"
+	kvNotaryAlicePub  = "03c502eb5c46c4c98b3b82f6a479800ca93a5c3ff82c48efef2825972f7189a188"
+	kvNotarySealedHex = "5633c336c4f8c6dcda0399783b83daf472b1023b49f522746780cecec098284fc39b162fb912866008591f865bba8389"
 
 	// Consent encryption (purpose 3 — EncryptConsentStructure)
 	kvConsentPath      = "m/4410704'/3/1/2/3"
 	kvConsentAlicePriv = "61e1d6824a3faf93e939d06471854c887497d2a7e93bb3fbfe23ea643009682c"
 	kvConsentAlicePub  = "02759a7c74a13b454e94c4846d0ee14366d4f8716bd6bc1fce99507952e7220a2c"
-	kvConsentSealedHex = "1c218e390ecf3728ca5be512013465e516b1ab9fd317fd3283862af4bdc7422cb5cbf7f20f56889401a2bfe4ee97b752ee4ab1bfb177e55272156c8de26f23e36eae745660501da51476793ff4c4867361ea163bf53891d1e3e192153cb2cab77d3b50b4e2295d"
-	kvConsentCid       = "bafyreighzi443e5s5o4fuwhwf5vqrtickdewp7jn4ul6xcvlllcumag3g4"
+	kvConsentSealedHex = "db219c2219c93f39a70afd40327b0853662991b123a8056a6415e6b95cbe896edf976ab220d20cd91654e1ec105d4a48eb0282eed2fa57ad1a68d047a0038ae8806c14ab61b0f85bd62b68655740c0240fd54697952996c7121172a0af2f9cea878ca2c6a441749454599896d0d098f7bb34d738a4d91e7022731f19834f71d4bb9bf3c3e9f53b20310ae4ed73569acbfe10f6df79d9ac838e5d375c52c6f1a72fbf7e8cae1589dcf9ecfcb9d5c1e4b0ff50b2f9fdc7"
+	kvConsentCid       = "bafyreiabnu633o7opc26xejbewl22zsuhao4kjoeuayzhfep3h2nzfir6i"
 
 	// Consent signatures
-	kvAliceConsentSigHex = "d60d2d7fe716968734f18e111fffdd90263d7ba5c15a5660f89385ac835b00cd1b9d04cf6186f8e832e95118212ed72f95de42043efdc803112299f8450900a71c"
-	kvBobConsentSigHex   = "f1b5688ac257871225c6be17a6bd629581e9e7775845a79f9d2139ec7b861fc749a44af842e5309ec7fd566a9731c986db4dfd018e799ba6a14521bee12455651c"
+	kvAliceConsentSigHex = "25ae549d74b2ce9eba99926a6004ca7348fee56627f0b9567f782b8433c4ca1e1e7fc07dc433341c66c4e85f3227c390842dd281ceacbf627adf298df79cb5b91b"
+	kvBobConsentSigHex   = "e99dec3d32237d06252c37e002f05c2da522c5d74b321893d8e28ecc77c37bbb42668c6b1bbed29629d44cb2f1fb1dca5836e6a74d3c41af2d396cef8f22b80f1c"
 	kvAliceConsentAddr   = "1147b934b5c0fcabbaed2cf128a3db1eb71ef2c0"
 	kvBobConsentAddr     = "a897e536ce08d36cd12387b21dbe0053f4c091c7"
 
-	// Revoke notary encryption (purpose 5 — EncryptRevokeStructure)
-	kvRevokeNotaryPath      = "m/4410704'/3/1/2/5"
-	kvRevokeNotaryAlicePriv = "e36c8f883748b24f1ce6c2202c0f9eea257b7d8e6ddb334130dd2878b7c74731"
-	kvRevokeNotaryAlicePub  = "03ee864493c54357eefca45c3531d444650cc30dd1e15e82c990f069b11ad07993"
-	kvRevokeNotarySealedHex = "84e13da7a5f3827c39f7aee04dfee2585f86256cd0350e5df58e659466d515288026d10d92e729d9fcaa01b4000853f7c338108cd77071"
+	// Revoke notary encryption (purpose 4 — EncryptRevokeNotaryBlock)
+	kvRevokeNotaryPath      = "m/4410704'/3/1/2/4"
+	kvRevokeNotaryAlicePriv = "fc216eb1fe324fef31308b8550dbd2e31e627143334d7dec596c9dd685c594bb"
+	kvRevokeNotaryAlicePub  = "03ca619266af8f2b255b5ab690815bf6786511c83b8368ff8be412f2ad46f86cf8"
+	kvRevokeNotarySealedHex = "efbddc817f89c54b6cb47afa479bcb7516456053683414762ccc5dd0b44f86d6d9267668cdc9f6ced99973ad147285d41d72941b92bb3f"
 
 	// Revoke encryption (purpose 5 — EncryptRevokeStructure)
 	kvRevokePath      = "m/4410704'/3/1/2/5"
 	kvRevokeAlicePriv = "e36c8f883748b24f1ce6c2202c0f9eea257b7d8e6ddb334130dd2878b7c74731"
 	kvRevokeAlicePub  = "03ee864493c54357eefca45c3531d444650cc30dd1e15e82c990f069b11ad07993"
-	kvRevokeSealedHex = "94e52db1bcf3cb7a3dfbb7a059b3ea595291362fce2d1543a99571c477d2117d83628b1f87fb68d9210e46229effa2bfab7d36ed12a18d46e9528c09eb3973115e2fb7cdbc7a091333b8ce0e18d358c374ab8c29b4a3be246db863361f231c28de94e529ce5e"
-	kvRevokeCid       = "bafyreift2xak4frxworujwg6oggkr2xgagpekowor524wnt62kyetbuqhq"
+	kvRevokeSealedHex = "53e53faaabf5c36457e1a4a36cff83fe517728e32f7f526ac05991355b4c1f6dfa98cafa9f6bd652439a911d11e12bbef2290cbb7e6c39bac36e65c3b85fc206bee68360ac82f9eeffe09b12b24a4cdf07c28894c2b56dfd0eedc173499183af5cbe45cde0e24146306bbe8bc18598663bdb38452268966fd02261cc5c57c90c27fe0d4f80c7e4624d442f82b2bdc9453189bc077111bad6df3b466bc4b97888444daac402976a31690888e463b44ef3b35af0abdac2b399d969f3eb"
+	kvRevokeCid       = "bafyreicugoorid62wdueq6fjj5elgrd3az2zeyp6nws353g4kh3km7tqy4"
 
 	// Revoke signature
-	kvRevokeAliceSigHex = "a7f73138feb86955b2d87e57b66f283acd20dba30f674f26ed233e92bd7d34ab28d461a1f494bf3b8dfb14667ab6b39b46143995a566f550abb24fae73cd08b71c"
+	kvRevokeAliceSigHex = "1124ea27c9eca5072fbfb2a45156b72a3692e0b1c0a8ab3791579d12e5120127474a8bbddbf488dce638ad3cfba31589ec1f99fae4d687979a3f9aed5d97bb091c"
 	kvRevokeAliceAddr   = "1147b934b5c0fcabbaed2cf128a3db1eb71ef2c0"
 )
 
@@ -101,6 +126,8 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	// ── Fixed inputs ─────────────────────────────────────────────────────
 	aliceMaster := mustNewMasterKey(t)
 	bobMaster := mustNewBobMasterKey(t)
+	notaryPriv, notaryPub := mustNewNotaryKey(t)
+	_ = notaryPriv // only needed for negative decrypt test reference
 
 	const (
 		contractAddress = "0x0102030405060708091011121314"
@@ -110,7 +137,10 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	)
 	notaryData := []byte("notary block payload for kv test")
 
-	// Derive Bob's encryption public key for the consent purpose
+	t.Logf("Notary pub key:         %s", textformat.FormatHex(notaryPub.SerializeCompressed()))
+	assertKVHex(t, "Notary pub key", notaryPub.SerializeCompressed(), kvNotaryPubHex)
+
+	// Derive Bob's encryption public key for the consent structure purpose
 	bobConsentPath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptConsentStructure)
 	bobConsentPriv, err := deriveKeyFromMaster(bobMaster, bobConsentPath)
 	if err != nil {
@@ -118,11 +148,11 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	}
 	bobConsentPub := bobConsentPriv.PubKey()
 
-	// ── Step 1: Alice encrypts notary data ───────────────────────────────
-	notaryPath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptConsentStructure)
+	// ── Step 1: Alice encrypts notary data (purpose 2) ──────────────────
+	notaryPath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptConsentNotaryBlock)
 	notaryAlicePriv, _ := deriveKeyFromMaster(aliceMaster, notaryPath)
 
-	notaryResult, err := EncryptConsentNotaryEC(aliceMaster, notaryData, otherParty, consentNumber, bobConsentPub, contractAddress, chainId)
+	notaryResult, err := EncryptConsentNotaryEC(aliceMaster, notaryData, otherParty, consentNumber, notaryPub, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("EncryptConsentNotaryEC: %v", err)
 	}
@@ -137,20 +167,16 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	assertKVHex(t, "Notary Alice pub", notaryAlicePriv.PubKey().SerializeCompressed(), kvNotaryAlicePub)
 	assertKVHex(t, "Notary sealed data", notaryResult.SealedData, kvNotarySealedHex)
 
-	// ── Step 2: Build consent plaintext including notary CID ─────────────
+	// ── Step 2: Build consent plaintext with embedded notary CBOR ────────
 	notaryCBOR, err := notaryResult.MarshalCBOR()
 	if err != nil {
 		t.Fatalf("notary MarshalCBOR: %v", err)
 	}
-	notaryCid, err := ipfs.GetCid(notaryCBOR)
-	if err != nil {
-		t.Fatalf("notary GetCid: %v", err)
-	}
-	consentPlaintext := []byte(notaryCid.String() + "|consent payload for kv test")
-	t.Logf("Notary CID:             %s", notaryCid.String())
-	t.Logf("Consent plaintext:      %s", string(consentPlaintext))
+	consentPlaintext := append(notaryCBOR, []byte("|consent payload for kv test")...)
+	t.Logf("Notary CBOR len:        %d bytes", len(notaryCBOR))
+	t.Logf("Consent plaintext len:  %d bytes", len(consentPlaintext))
 
-	// ── Step 3: Alice encrypts + signs consent ───────────────────────────
+	// ── Step 3: Alice encrypts + signs consent (purpose 3) ──────────────
 	consentPath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptConsentStructure)
 	consentAlicePriv, _ := deriveKeyFromMaster(aliceMaster, consentPath)
 
@@ -199,7 +225,6 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	}
 
 	t.Logf("Bob consent sig:        %s", textformat.FormatHex(consentReq.Signatures[1]))
-	// Assert signature BEFORE GetConsentAddress, which mutates the recovery byte in-place
 	assertKVHex(t, "Bob consent sig", consentReq.Signatures[1], kvBobConsentSigHex)
 
 	bobConsentAddr, err := GetConsentAddress(consentReq.Signatures[1], contractAddress, consentCid.String())
@@ -209,28 +234,53 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	t.Logf("Bob consent addr:       %s", hex.EncodeToString(bobConsentAddr[:]))
 	assertKV(t, "Bob consent addr", hex.EncodeToString(bobConsentAddr[:]), kvBobConsentAddr)
 
-	// ── Step 5: Bob decrypts consent ─────────────────────────────────────
-	decryptedConsent, err := DecryptConsentEC(bobMaster, consentReq, otherParty, consentNumber, contractAddress, chainId)
+	// ── Step 5: Both parties decrypt consent ─────────────────────────────
+	decryptedBob, err := DecryptConsentEC(bobMaster, consentReq, otherParty, consentNumber, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("DecryptConsentEC(bob): %v", err)
 	}
-	if !bytes.Equal(consentPlaintext, decryptedConsent) {
-		t.Fatalf("consent plaintext mismatch: got %q, want %q", decryptedConsent, consentPlaintext)
+	if !bytes.Equal(consentPlaintext, decryptedBob) {
+		t.Fatalf("Bob consent plaintext mismatch: got %d bytes, want %d bytes", len(decryptedBob), len(consentPlaintext))
 	}
-	t.Logf("Bob decrypted consent:  %s", string(decryptedConsent))
+	t.Logf("Bob decrypted consent:  %d bytes (OK)", len(decryptedBob))
 
-	// ── Step 6: Alice encrypts revoke notary ─────────────────────────────
+	decryptedAlice, err := DecryptConsentEC(aliceMaster, consentReq, otherParty, consentNumber, contractAddress, chainId)
+	if err != nil {
+		t.Fatalf("DecryptConsentEC(alice): %v", err)
+	}
+	if !bytes.Equal(consentPlaintext, decryptedAlice) {
+		t.Fatalf("Alice consent plaintext mismatch")
+	}
+	t.Logf("Alice decrypted consent: %d bytes (OK)", len(decryptedAlice))
+
+	// ── Step 6: Alice decrypts embedded notary ──────────────────────────
+	aliceDecryptedNotary, err := DecryptConsentNotaryEC(aliceMaster, notaryResult, otherParty, consentNumber, contractAddress, chainId)
+	if err != nil {
+		t.Fatalf("DecryptConsentNotaryEC(alice): %v", err)
+	}
+	if !bytes.Equal(notaryData, aliceDecryptedNotary) {
+		t.Fatalf("Alice notary plaintext mismatch: got %q, want %q", aliceDecryptedNotary, notaryData)
+	}
+	t.Logf("Alice decrypted notary: %s", string(aliceDecryptedNotary))
+
+	// ── Step 7: Bob cannot decrypt notary ────────────────────────────────
+	// Bob does not hold the notary private key, and his HD wallet derives a
+	// different key at the notary block purpose, so DecryptConsentNotaryEC
+	// must fail when called with Bob's master key.
+	_, err = DecryptConsentNotaryEC(bobMaster, notaryResult, otherParty, consentNumber, contractAddress, chainId)
+	if err == nil {
+		t.Error("expected Bob to fail decrypting notary, but succeeded")
+	} else {
+		t.Logf("Bob notary decrypt:     failed as expected (%v)", err)
+	}
+
+	// ── Step 8: Alice encrypts revoke notary (purpose 4) ────────────────
 	revokeNotaryData := []byte("revoke notary block payload for kv test")
 
-	// Derive Bob's revoke encryption key
-	bobRevokePath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptRevokeStructure)
-	bobRevokePriv, _ := deriveKeyFromMaster(bobMaster, bobRevokePath)
-	bobRevokePub := bobRevokePriv.PubKey()
-
-	revokeNotaryPath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptRevokeStructure)
+	revokeNotaryPath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptRevokeNotaryBlock)
 	revokeNotaryAlicePriv, _ := deriveKeyFromMaster(aliceMaster, revokeNotaryPath)
 
-	revokeNotaryResult, err := EncryptRevokeNotaryEC(aliceMaster, revokeNotaryData, otherParty, consentNumber, bobRevokePub, contractAddress, chainId)
+	revokeNotaryResult, err := EncryptRevokeNotaryEC(aliceMaster, revokeNotaryData, otherParty, consentNumber, notaryPub, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("EncryptRevokeNotaryEC: %v", err)
 	}
@@ -245,12 +295,16 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	assertKVHex(t, "Revoke notary Alice pub", revokeNotaryAlicePriv.PubKey().SerializeCompressed(), kvRevokeNotaryAlicePub)
 	assertKVHex(t, "Revoke notary sealed", revokeNotaryResult.SealedData, kvRevokeNotarySealedHex)
 
-	// ── Step 7: Alice builds revoke plaintext and encrypts + signs ───────
+	// ── Step 9: Alice builds revoke plaintext and encrypts + signs ───────
 	revokeNotaryCBOR, _ := revokeNotaryResult.MarshalCBOR()
-	revokeNotaryCid, _ := ipfs.GetCid(revokeNotaryCBOR)
-	revokePlaintext := []byte(revokeNotaryCid.String() + "|revoke payload for kv test")
-	t.Logf("Revoke notary CID:      %s", revokeNotaryCid.String())
-	t.Logf("Revoke plaintext:       %s", string(revokePlaintext))
+	revokePlaintext := append(revokeNotaryCBOR, []byte("|revoke payload for kv test")...)
+	t.Logf("Revoke notary CBOR len: %d bytes", len(revokeNotaryCBOR))
+	t.Logf("Revoke plaintext len:   %d bytes", len(revokePlaintext))
+
+	// Derive Bob's revoke encryption key
+	bobRevokePath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptRevokeStructure)
+	bobRevokePriv, _ := deriveKeyFromMaster(bobMaster, bobRevokePath)
+	bobRevokePub := bobRevokePriv.PubKey()
 
 	revokePath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptRevokeStructure)
 	revokeAlicePriv, _ := deriveKeyFromMaster(aliceMaster, revokePath)
@@ -291,6 +345,43 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	}
 	if !match {
 		t.Error("revoke signer was not a consent signer")
+	}
+
+	// ── Step 10: Both parties decrypt revoke; only Alice decrypts notary ─
+	decryptedRevokeAlice, err := DecryptRevokeEC(aliceMaster, revokeReq, otherParty, consentNumber, contractAddress, chainId)
+	if err != nil {
+		t.Fatalf("DecryptRevokeEC(alice): %v", err)
+	}
+	if !bytes.Equal(revokePlaintext, decryptedRevokeAlice) {
+		t.Fatalf("Alice revoke plaintext mismatch")
+	}
+	t.Logf("Alice decrypted revoke: %d bytes (OK)", len(decryptedRevokeAlice))
+
+	decryptedRevokeBob, err := DecryptRevokeEC(bobMaster, revokeReq, otherParty, consentNumber, contractAddress, chainId)
+	if err != nil {
+		t.Fatalf("DecryptRevokeEC(bob): %v", err)
+	}
+	if !bytes.Equal(revokePlaintext, decryptedRevokeBob) {
+		t.Fatalf("Bob revoke plaintext mismatch")
+	}
+	t.Logf("Bob decrypted revoke:   %d bytes (OK)", len(decryptedRevokeBob))
+
+	// Alice can decrypt revoke notary
+	aliceDecryptedRevokeNotary, err := DecryptRevokeNotaryEC(aliceMaster, revokeNotaryResult, otherParty, consentNumber, contractAddress, chainId)
+	if err != nil {
+		t.Fatalf("DecryptRevokeNotaryEC(alice): %v", err)
+	}
+	if !bytes.Equal(revokeNotaryData, aliceDecryptedRevokeNotary) {
+		t.Fatalf("Alice revoke notary plaintext mismatch")
+	}
+	t.Logf("Alice decrypted revoke notary: %s", string(aliceDecryptedRevokeNotary))
+
+	// Bob cannot decrypt revoke notary
+	_, err = DecryptRevokeNotaryEC(bobMaster, revokeNotaryResult, otherParty, consentNumber, contractAddress, chainId)
+	if err == nil {
+		t.Error("expected Bob to fail decrypting revoke notary, but succeeded")
+	} else {
+		t.Logf("Bob revoke notary decrypt: failed as expected (%v)", err)
 	}
 }
 

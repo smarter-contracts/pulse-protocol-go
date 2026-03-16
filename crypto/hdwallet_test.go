@@ -444,7 +444,7 @@ func TestEncryptConsentNotaryEC_RoundTrip(t *testing.T) {
 	}
 
 	// Bob decrypts directly with his private key
-	gotBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptConsentStructure, chainId, consent)
+	gotBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptConsentNotaryBlock, chainId, consent)
 	if err != nil {
 		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
@@ -478,7 +478,7 @@ func TestEncryptRevokeNotaryEC_RoundTrip(t *testing.T) {
 	}
 
 	// Bob decrypts directly with his private key
-	gotBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, chainId, consent)
+	gotBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeNotaryBlock, chainId, consent)
 	if err != nil {
 		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}

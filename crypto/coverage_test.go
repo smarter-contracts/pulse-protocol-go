@@ -755,7 +755,7 @@ func TestEncryptRevokeNotaryEC_RoundTripCoverage(t *testing.T) {
 	}
 
 	// Bob decrypts directly
-	decryptedBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeStructure, 1, 62)
+	decryptedBob, err := key_exchange.DecryptEC(result, addr, notaryPriv, purposes.PulsePurposeEncryptRevokeNotaryBlock, 1, 62)
 	if err != nil {
 		t.Fatalf("key_exchange.DecryptEC() failed: %v", err)
 	}
