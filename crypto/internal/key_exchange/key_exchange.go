@@ -39,6 +39,9 @@ func EncryptECDH(plaintext []byte,
 	if myPrivateKey == nil || otherPublicKey == nil {
 		return nil, errors.New("must provide both private and public keys to encrypt")
 	}
+	if contractAddress == nil || *contractAddress == "" {
+		return nil, errors.New("contract address must be provided")
+	}
 	contextHash := context.ContextHash(chainId, *contractAddress, consentNumber)
 	transcriptHash := generateTranscriptHash(textformat.FormatHex(myPrivateKey.PubKey().SerializeCompressed()),
 		textformat.FormatHex(otherPublicKey.SerializeCompressed()))
@@ -72,6 +75,9 @@ func DecryptEC(encryptionResult *types.PulseECEncryptionResult,
 	chainId uint32,
 	consentNumber uint32,
 ) ([]byte, error) {
+	if contractAddress == nil || *contractAddress == "" {
+		return nil, errors.New("contract address must be provided")
+	}
 	myPublicKey := myPrivateKey.PubKey().SerializeCompressed()
 
 	// Figure out which public key is the other party's

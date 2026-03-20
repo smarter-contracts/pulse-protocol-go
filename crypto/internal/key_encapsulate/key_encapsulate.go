@@ -48,6 +48,12 @@ func EncryptPQ(entropy io.Reader,
 	consentNumber uint32,
 ) (*types.PulsePQEncryptionResult, error) {
 	var result types.PulsePQEncryptionResult
+	if contractAddress == nil || *contractAddress == "" {
+		return nil, errors.New("contract address must be provided")
+	}
+	if len(publicKeys) < 1 {
+		return nil, errors.New("must provide at least one public key to encrypt")
+	}
 
 	// Encrypt the plaintext (consent data) using a random AES key
 	recipientIDHash := getAllRecipientIDHashFromKeys(publicKeys)
@@ -133,6 +139,9 @@ func DecryptPQ(encryptionResult *types.PulsePQEncryptionResult,
 	chainId uint32,
 	consentNumber uint32,
 ) ([]byte, error) {
+	if contractAddress == nil || *contractAddress == "" {
+		return nil, errors.New("contract address must be provided")
+	}
 	contextHash := context.ContextHash(chainId, *contractAddress, consentNumber)
 
 	// Scan the encryptionResult for my public key fingerprint, and get the shared secret.
