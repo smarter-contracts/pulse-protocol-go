@@ -1,0 +1,5 @@
+# IDE
+.idea/
+
+# Test output
+coverage.out
