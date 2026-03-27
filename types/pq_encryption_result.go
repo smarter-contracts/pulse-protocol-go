@@ -170,14 +170,51 @@ func (p *PulsePQEncryptionResult) UnmarshalCBOR(block []byte) error {
 	return nil
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON implements json.Marshaler for PulsePQEncryptionResult.
 func (p *PulsePQEncryptionResult) MarshalJSON() ([]byte, error) {
 	type Alias PulsePQEncryptionResult
 	return json.Marshal((*Alias)(p))
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements json.Unmarshaler for PulsePQEncryptionResult.
 func (p *PulsePQEncryptionResult) UnmarshalJSON(bytes []byte) error {
 	type Alias PulsePQEncryptionResult
 	return json.Unmarshal(bytes, (*Alias)(p))
+}
+
+// ── PulsePQEncryptionKey — JSON ───────────────────────────────────────────────
+
+// MarshalJSON implements json.Marshaler, encoding KeyFingerPrint as a base64
+// string (matching []byte behaviour) rather than Go's default int-array encoding
+// for fixed-size arrays.
+func (k *PulsePQEncryptionKey) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		KeyFingerPrint      []byte `json:"keyFingerPrint"`
+		EncapsulatedKeyKey  []byte `json:"encapsulatedKeyKey"`
+		EncapsulatedDataKey []byte `json:"encapsulatedDataKey"`
+	}{
+		KeyFingerPrint:      k.KeyFingerPrint[:],
+		EncapsulatedKeyKey:  k.EncapsulatedKeyKey,
+		EncapsulatedDataKey: k.EncapsulatedDataKey,
+	})
+}
+
+// UnmarshalJSON implements json.Unmarshaler, decoding a base64-encoded
+// keyFingerPrint into the fixed-size [32]byte field.
+func (k *PulsePQEncryptionKey) UnmarshalJSON(data []byte) error {
+	var v struct {
+		KeyFingerPrint      []byte `json:"keyFingerPrint"`
+		EncapsulatedKeyKey  []byte `json:"encapsulatedKeyKey"`
+		EncapsulatedDataKey []byte `json:"encapsulatedDataKey"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	if len(v.KeyFingerPrint) != 32 {
+		return fmt.Errorf("keyFingerPrint must be 32 bytes, got %d", len(v.KeyFingerPrint))
+	}
+	copy(k.KeyFingerPrint[:], v.KeyFingerPrint)
+	k.EncapsulatedKeyKey = v.EncapsulatedKeyKey
+	k.EncapsulatedDataKey = v.EncapsulatedDataKey
+	return nil
 }
