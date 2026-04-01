@@ -11,6 +11,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
+	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 )
 
 func mustPrivFromHex(h string) *secp.PrivateKey {
@@ -204,7 +205,7 @@ func TestEncrypt_Values(t *testing.T) {
 				t.Fatalf("result Key2 mismatch: got %x, want %x", result.Key2, bobPub.SerializeCompressed())
 			}
 
-			cbor, err := result.MarshalCBOR()
+			cbor, err := ipfs.MarshalConsentEC(result)
 			if err != nil {
 				t.Fatalf("CBOR marshal failed: %v", err)
 			}

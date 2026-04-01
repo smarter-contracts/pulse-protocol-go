@@ -51,7 +51,11 @@ func TestConsentSigners_TwoSignatures(t *testing.T) {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
 	// Alice counter-signs (simulates a second party using the same key for simplicity)
-	if err = SignConsentRequest(masterKey, request, otherParty, consent, contractAddr, chainId); err != nil {
+	reqCBOR, err := ipfs.MarshalConsentEC(&request.EncryptedData)
+	if err != nil {
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
+	}
+	if err = SignConsentRequest(masterKey, request, reqCBOR, otherParty, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("second SignConsentRequest() failed: %v", err)
 	}
 
@@ -109,9 +113,9 @@ func TestRevokeSignerWasConsentSigner_Valid(t *testing.T) {
 	}
 
 	// Derive the consent CID (as the mid-tier would)
-	consentCBOR, err := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, err := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	if err != nil {
-		t.Fatalf("MarshalCBOR() failed: %v", err)
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
 	}
 	consentCid, err := ipfs.GetCid(consentCBOR)
 	if err != nil {
@@ -149,9 +153,9 @@ func TestRevokeSignerWasConsentSigner_DifferentKey(t *testing.T) {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
 
-	consentCBOR, err := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, err := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	if err != nil {
-		t.Fatalf("MarshalCBOR() failed: %v", err)
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
 	}
 	consentCid, err := ipfs.GetCid(consentCBOR)
 	if err != nil {
@@ -190,16 +194,17 @@ func TestRevokeSignerWasConsentSigner_MultipleConsentSigners(t *testing.T) {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
 	// Add a second (counter-)signature
-	if err = SignConsentRequest(masterKey, consentReq, otherParty, consent, contractAddr, chainId); err != nil {
+	consentCBORForSign, _ := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
+	if err = SignConsentRequest(masterKey, consentReq, consentCBORForSign, otherParty, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("second SignConsentRequest() failed: %v", err)
 	}
 	if len(consentReq.Signatures) != 2 {
 		t.Fatalf("expected 2 signatures, got %d", len(consentReq.Signatures))
 	}
 
-	consentCBOR, err := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, err := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	if err != nil {
-		t.Fatalf("MarshalCBOR() failed: %v", err)
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
 	}
 	consentCid, err := ipfs.GetCid(consentCBOR)
 	if err != nil {
@@ -228,7 +233,7 @@ func TestRevokeSignerWasConsentSigner_NilInputs(t *testing.T) {
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
 	consentReq, _ := EncryptSignConsentEC(masterKey, []byte("consent"), otherParty, consent, bobPub, contractAddr, chainId)
-	consentCBOR, _ := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, _ := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
 	revokeReq, _ := EncryptSignRevokeEC(masterKey, []byte("revoke"), otherParty, consent, bobPub, contractAddr, chainId, consentCid.String())
 

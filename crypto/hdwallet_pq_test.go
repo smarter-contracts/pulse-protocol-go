@@ -16,7 +16,6 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/key_encapsulate"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
-	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
 // ── DerivePQKeyPair ───────────────────────────────────────────────────────────
@@ -199,7 +198,8 @@ func TestSignConsentRequest_PQ_CounterSign(t *testing.T) {
 	}
 
 	// Bob counter-signs
-	if err = SignConsentRequest(bobMaster, req, alicePartyNo, consent, contractAddr, chainId); err != nil {
+	reqCBOR, _ := ipfs.MarshalConsentPQ(&req.EncryptedData)
+	if err = SignConsentRequest(bobMaster, req, reqCBOR, alicePartyNo, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("Bob SignConsentRequest() failed: %v", err)
 	}
 
@@ -235,9 +235,9 @@ func TestEncryptSignRevokePQ_RoundTrip(t *testing.T) {
 	}
 
 	// Derive the consent CID
-	consentCBOR, err := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, err := ipfs.MarshalConsentPQ(&consentReq.EncryptedData)
 	if err != nil {
-		t.Fatalf("MarshalCBOR() failed: %v", err)
+		t.Fatalf("MarshalConsentPQ() failed: %v", err)
 	}
 	consentCid, err := ipfs.GetCid(consentCBOR)
 	if err != nil {
@@ -317,14 +317,14 @@ func TestPulseConsentRequestPQ_CBORRoundTrip(t *testing.T) {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
 
-	encoded, err := req.MarshalCBOR()
+	encoded, err := ipfs.MarshalConsentRequestPQ(req)
 	if err != nil {
-		t.Fatalf("MarshalCBOR() failed: %v", err)
+		t.Fatalf("MarshalConsentRequestPQ() failed: %v", err)
 	}
 
-	var decoded types.PulseConsentRequestPQ
-	if err := decoded.UnmarshalCBOR(encoded); err != nil {
-		t.Fatalf("UnmarshalCBOR() failed: %v", err)
+	decoded, err := ipfs.UnmarshalConsentRequestPQ(encoded)
+	if err != nil {
+		t.Fatalf("UnmarshalConsentRequestPQ() failed: %v", err)
 	}
 
 	if !bytes.Equal(req.EncryptedData.SealedData, decoded.EncryptedData.SealedData) {
@@ -352,14 +352,14 @@ func TestPulseRevokeRequestPQ_CBORRoundTrip(t *testing.T) {
 		t.Fatalf("EncryptSignRevokePQ() failed: %v", err)
 	}
 
-	encoded, err := req.MarshalCBOR()
+	encoded, err := ipfs.MarshalRevokeRequestPQ(req)
 	if err != nil {
-		t.Fatalf("MarshalCBOR() failed: %v", err)
+		t.Fatalf("MarshalRevokeRequestPQ() failed: %v", err)
 	}
 
-	var decoded types.PulseRevokeRequestPQ
-	if err := decoded.UnmarshalCBOR(encoded); err != nil {
-		t.Fatalf("UnmarshalCBOR() failed: %v", err)
+	decoded, err := ipfs.UnmarshalRevokeRequestPQ(encoded)
+	if err != nil {
+		t.Fatalf("UnmarshalRevokeRequestPQ() failed: %v", err)
 	}
 
 	if decoded.ConsentCid != fakeConsentCid {
@@ -401,7 +401,7 @@ func TestRevokeSignerWasConsentSigner_PQ(t *testing.T) {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
 
-	consentCBOR, _ := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, _ := ipfs.MarshalConsentPQ(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
 
 	_, aliceRevokePub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
@@ -412,14 +412,14 @@ func TestRevokeSignerWasConsentSigner_PQ(t *testing.T) {
 
 	// Manually recover consent signers and revoke signer using helpers
 	// (the wire types are PQ but the signing primitives are EC/secp256k1)
-	consentCBORForSig, _ := consentReq.EncryptedData.MarshalCBOR()
+	consentCBORForSig, _ := ipfs.MarshalConsentPQ(&consentReq.EncryptedData)
 	consentCidForSig, _ := ipfs.GetCid(consentCBORForSig)
 	consentSignerAddr, err := GetConsentAddress(consentReq.Signatures[0], contractAddr, consentCidForSig.String())
 	if err != nil {
 		t.Fatalf("GetConsentAddress() failed: %v", err)
 	}
 
-	revokeCBOR, _ := revokeReq.EncryptedData.MarshalCBOR()
+	revokeCBOR, _ := ipfs.MarshalConsentPQ(&revokeReq.EncryptedData)
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 	revokeSignerAddr, err := GetRevokeAddress(revokeReq.Signature, contractAddr, revokeReq.ConsentCid, revokeCid.String())
 	if err != nil {

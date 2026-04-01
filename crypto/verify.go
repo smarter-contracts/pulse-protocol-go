@@ -20,7 +20,7 @@ func ConsentSigners(request *types.PulseConsentRequestEC, contractAddress string
 		return nil, errors.New("request has no signatures")
 	}
 
-	cbor, err := request.EncryptedData.MarshalCBOR()
+	cbor, err := ipfs.MarshalConsentEC(&request.EncryptedData)
 	if err != nil {
 		return nil, fmt.Errorf("marshalling encrypted data: %w", err)
 	}
@@ -64,7 +64,7 @@ func RevokeSignerWasConsentSigner(
 	}
 
 	// Recover the revoke signer
-	revokeCBOR, err := revoke.EncryptedData.MarshalCBOR()
+	revokeCBOR, err := ipfs.MarshalConsentEC(&revoke.EncryptedData)
 	if err != nil {
 		return false, fmt.Errorf("marshalling revoke encrypted data: %w", err)
 	}

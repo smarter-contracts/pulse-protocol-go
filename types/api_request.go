@@ -1,7 +1,5 @@
 package types
 
-import "fmt"
-
 // ── PulseConsentPayload ───────────────────────────────────────────────────────
 
 // PulseConsentPayload is the polymorphic consent content transmitted in a grant
@@ -22,21 +20,6 @@ type PulseConsentPayload struct {
 
 // IsMultiKey reports whether this payload uses PQ (multi-key) encryption.
 func (p *PulseConsentPayload) IsMultiKey() bool { return len(p.Keys) > 0 }
-
-// MarshalCBOR encodes the payload to its V2 IPFS DAG-CBOR representation.
-// PQ payloads encode as PulsePQEncryptionResult; EC payloads encode as
-// PulseECEncryptionResult.
-func (p *PulseConsentPayload) MarshalCBOR() ([]byte, error) {
-	if p.IsMultiKey() {
-		r := &PulsePQEncryptionResult{SealedData: p.SealedData, Keys: p.Keys}
-		return r.MarshalCBOR()
-	}
-	if len(p.Key1) == 0 || len(p.Key2) == 0 {
-		return nil, fmt.Errorf("EC consent payload requires key1 and key2")
-	}
-	r := &PulseECEncryptionResult{SealedData: p.SealedData, Key1: p.Key1, Key2: p.Key2}
-	return r.MarshalCBOR()
-}
 
 // ── PulseGrantRequest ─────────────────────────────────────────────────────────
 
@@ -67,26 +50,6 @@ type PulseRevokePayload struct {
 
 // IsMultiKey reports whether this payload uses PQ (multi-key) encryption.
 func (p *PulseRevokePayload) IsMultiKey() bool { return len(p.Keys) > 0 }
-
-// MarshalCBOR encodes the payload to its V2 IPFS DAG-CBOR representation.
-// PQ payloads encode as RevokeStructureMulti; EC payloads encode as RevokeStructure.
-func (p *PulseRevokePayload) MarshalCBOR() ([]byte, error) {
-	if p.IsMultiKey() {
-		r := &RevokeStructureMulti{
-			PulsePQEncryptionResult: PulsePQEncryptionResult{SealedData: p.SealedData, Keys: p.Keys},
-			Grant:                   p.GrantRef,
-		}
-		return r.MarshalCBOR()
-	}
-	if len(p.Key1) == 0 || len(p.Key2) == 0 {
-		return nil, fmt.Errorf("EC revoke payload requires key1 and key2")
-	}
-	r := &RevokeStructure{
-		PulseECEncryptionResult: PulseECEncryptionResult{SealedData: p.SealedData, Key1: p.Key1, Key2: p.Key2},
-		Grant:                   p.GrantRef,
-	}
-	return r.MarshalCBOR()
-}
 
 // ── PulseRevokeRequest ────────────────────────────────────────────────────────
 

@@ -104,7 +104,7 @@ func TestSignConsentRequest_NilMasterKey(t *testing.T) {
 			Key2:       make([]byte, 33),
 		},
 	}
-	err := SignConsentRequest(nil, req, 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
+	err := SignConsentRequest(nil, req, []byte("fake-cbor"), 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
 	if err == nil {
 		t.Error("expected error for nil masterKey")
 	}
@@ -121,7 +121,7 @@ func TestSignRevokeRequest_NilMasterKey(t *testing.T) {
 			Key2:       make([]byte, 33),
 		},
 	}
-	err := SignRevokeRequest(nil, req, 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
+	err := SignRevokeRequest(nil, req, []byte("fake-cbor"), 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
 	if err == nil {
 		t.Error("expected error for nil masterKey")
 	}
@@ -237,7 +237,7 @@ func TestEncryptSignConsentPQ_SignFailure(t *testing.T) {
 	}
 
 	// Counter-sign with nil masterKey should fail at signing stage
-	err = SignConsentRequest(nil, req, 2, 0, *addr, 137)
+	err = SignConsentRequest(nil, req, []byte("fake-cbor"), 2, 0, *addr, 137)
 	if err == nil {
 		t.Error("expected error for nil masterKey in SignConsentRequest")
 	}
@@ -254,7 +254,7 @@ func TestEncryptSignRevokePQ_SignFailure(t *testing.T) {
 	}
 
 	// Attempt to re-sign with nil master key
-	err = SignRevokeRequest(nil, req, 2, 0, *addr, 137)
+	err = SignRevokeRequest(nil, req, []byte("fake-cbor"), 2, 0, *addr, 137)
 	if err == nil {
 		t.Error("expected error for nil masterKey in SignRevokeRequest")
 	}
@@ -418,7 +418,7 @@ func TestDecryptRevokeEC_RoundTripHDWallet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
-	consentCBOR, _ := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, _ := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
 
 	// Derive Bob's revoke key
@@ -615,7 +615,7 @@ func TestRevokeSignerWasConsentSigner_CorruptedRevokeSignature(t *testing.T) {
 	addr := helperContractAddress()
 
 	consentReq, _ := EncryptSignConsentEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
-	consentCBOR, _ := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, _ := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
 	revokeReq, _ := EncryptSignRevokeEC(masterKey, []byte("revoke"), 2, 62, bobPub, *addr, 1, consentCid.String())
 
@@ -720,7 +720,7 @@ func TestRevokeSignerWasConsentSigner_ConsentNoSignatures(t *testing.T) {
 	addr := helperContractAddress()
 
 	consentReq, _ := EncryptSignConsentEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
-	consentCBOR, _ := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, _ := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
 	revokeReq, _ := EncryptSignRevokeEC(masterKey, []byte("revoke"), 2, 62, bobPub, *addr, 1, consentCid.String())
 
@@ -802,7 +802,7 @@ func TestSignConsentRequest_PublicKeyFails(t *testing.T) {
 
 	// Sign with a public key instead of a private key
 	pubKey := masterKey.PublicKey()
-	err = SignConsentRequest(pubKey, req, 2, 62, *addr, 1)
+	err = SignConsentRequest(pubKey, req, []byte("fake-cbor"), 2, 62, *addr, 1)
 	if err == nil {
 		t.Error("expected error when signing with public key")
 	}
@@ -823,7 +823,7 @@ func TestSignRevokeRequest_PublicKeyFails(t *testing.T) {
 	req := &types.PulseRevokeRequestEC{ConsentCid: "bafyfake", EncryptedData: *result}
 
 	pubKey := masterKey.PublicKey()
-	err = SignRevokeRequest(pubKey, req, 2, 62, *addr, 1)
+	err = SignRevokeRequest(pubKey, req, []byte("fake-cbor"), 2, 62, *addr, 1)
 	if err == nil {
 		t.Error("expected error when signing with public key")
 	}

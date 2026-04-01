@@ -168,7 +168,7 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	assertKVHex(t, "Notary sealed data", notaryResult.SealedData, kvNotarySealedHex)
 
 	// ── Step 2: Build consent plaintext with embedded notary CBOR ────────
-	notaryCBOR, err := notaryResult.MarshalCBOR()
+	notaryCBOR, err := ipfs.MarshalConsentEC(notaryResult)
 	if err != nil {
 		t.Fatalf("notary MarshalCBOR: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 		t.Fatalf("EncryptSignConsentEC: %v", err)
 	}
 
-	consentCBOR, err := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, err := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	if err != nil {
 		t.Fatalf("consent MarshalCBOR: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	assertKV(t, "Alice consent addr", hex.EncodeToString(aliceConsentAddr[:]), kvAliceConsentAddr)
 
 	// ── Step 4: Bob counter-signs consent ────────────────────────────────
-	if err := SignConsentRequest(bobMaster, consentReq, otherParty, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignConsentRequest(bobMaster, consentReq, consentCBOR, otherParty, consentNumber, contractAddress, chainId); err != nil {
 		t.Fatalf("SignConsentRequest(bob): %v", err)
 	}
 	if len(consentReq.Signatures) != 2 {
@@ -296,7 +296,7 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 	assertKVHex(t, "Revoke notary sealed", revokeNotaryResult.SealedData, kvRevokeNotarySealedHex)
 
 	// ── Step 9: Alice builds revoke plaintext and encrypts + signs ───────
-	revokeNotaryCBOR, _ := revokeNotaryResult.MarshalCBOR()
+	revokeNotaryCBOR, _ := ipfs.MarshalConsentEC(revokeNotaryResult)
 	revokePlaintext := append(revokeNotaryCBOR, []byte("|revoke payload for kv test")...)
 	t.Logf("Revoke notary CBOR len: %d bytes", len(revokeNotaryCBOR))
 	t.Logf("Revoke plaintext len:   %d bytes", len(revokePlaintext))
@@ -314,7 +314,7 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 		t.Fatalf("EncryptSignRevokeEC: %v", err)
 	}
 
-	revokeCBOR, _ := revokeReq.EncryptedData.MarshalCBOR()
+	revokeCBOR, _ := ipfs.MarshalConsentEC(&revokeReq.EncryptedData)
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 
 	t.Logf("Revoke path:            %s", revokePath.String())
