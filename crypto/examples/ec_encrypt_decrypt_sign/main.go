@@ -166,7 +166,7 @@ func main() {
 
 	// Compute and display the consent CID — this is what gets stored on-chain
 	// and referenced in any future revoke request.
-	consentCBOR, err := consentRequest.EncryptedData.MarshalCBOR()
+	consentCBOR, err := ipfs.MarshalConsentEC(&consentRequest.EncryptedData)
 	must("marshal consent encrypted data to CBOR", err)
 	consentCid, err := ipfs.GetCid(consentCBOR)
 	must("compute consent CID", err)
@@ -187,6 +187,7 @@ func main() {
 	must("Bob: SignConsentRequest", crypto.SignConsentRequest(
 		bobMasterKey,
 		consentRequest,
+		consentCBOR,
 		alicePartyNo,  // Bob's view: Alice is the other party
 		consentNumber,
 		contractAddress,

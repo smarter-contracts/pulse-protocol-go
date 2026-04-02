@@ -16,6 +16,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
+	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 )
 
 func helperContractAddressPQ() *string {
@@ -330,7 +331,7 @@ func TestEncryptPQ_KnownValues(t *testing.T) {
 		t.Errorf("SealedData mismatch: got %x, want %s", result.SealedData, expectedSealedData)
 	}
 
-	resultCBOR, err := result.MarshalCBOR()
+	resultCBOR, err := ipfs.MarshalConsentPQ(result)
 	if err != nil {
 		t.Fatalf("result.CBOR() failed: %v", err)
 	}

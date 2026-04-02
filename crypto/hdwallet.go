@@ -292,8 +292,13 @@ func EncryptSignConsentEC(masterKey *bip32.Key,
 		return nil, errors.New("failed to encrypt consent data: " + err.Error())
 	}
 
+	cbor, err := ipfs.MarshalConsentEC(encryptedConsentData)
+	if err != nil {
+		return nil, errors.New("failed to marshal consent CBOR: " + err.Error())
+	}
+
 	returnValue := &types.PulseConsentRequestEC{EncryptedData: *encryptedConsentData}
-	if err := SignConsentRequest(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignConsentRequest(masterKey, returnValue, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
 		return nil, err
 	}
 	return returnValue, nil
@@ -363,8 +368,13 @@ func EncryptSignConsentPQ(
 		return nil, errors.New("failed to PQ-encrypt consent data: " + err.Error())
 	}
 
+	cbor, err := ipfs.MarshalConsentPQ(encryptedData)
+	if err != nil {
+		return nil, errors.New("failed to marshal PQ consent CBOR: " + err.Error())
+	}
+
 	req := &types.PulseConsentRequestPQ{EncryptedData: *encryptedData}
-	if err := SignConsentRequest(masterKey, req, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignConsentRequest(masterKey, req, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
 		return nil, err
 	}
 	return req, nil
@@ -402,11 +412,16 @@ func EncryptSignRevokeEC(masterKey *bip32.Key,
 		return nil, errors.New("failed to encrypt revoke data: " + err.Error())
 	}
 
+	cbor, err := ipfs.MarshalConsentEC(encryptedRevokeData)
+	if err != nil {
+		return nil, errors.New("failed to marshal revoke CBOR: " + err.Error())
+	}
+
 	returnValue := &types.PulseRevokeRequestEC{
 		ConsentCid:    consentCid,
 		EncryptedData: *encryptedRevokeData,
 	}
-	if err := SignRevokeRequest(masterKey, returnValue, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignRevokeRequest(masterKey, returnValue, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
 		return nil, err
 	}
 	return returnValue, nil
@@ -470,11 +485,16 @@ func EncryptSignRevokePQ(
 		return nil, errors.New("failed to PQ-encrypt revoke data: " + err.Error())
 	}
 
+	cbor, err := ipfs.MarshalConsentPQ(encryptedData)
+	if err != nil {
+		return nil, errors.New("failed to marshal PQ revoke CBOR: " + err.Error())
+	}
+
 	req := &types.PulseRevokeRequestPQ{
 		ConsentCid:    consentCid,
 		EncryptedData: *encryptedData,
 	}
-	if err := SignRevokeRequest(masterKey, req, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignRevokeRequest(masterKey, req, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
 		return nil, err
 	}
 	return req, nil
@@ -496,20 +516,18 @@ func DecryptRevokePQ(
 // ── Signing ─────────────────────────────────────────────────────────────────
 
 // SignConsentRequest derives the HD signing key and appends a signature to any
-// consent request type (EC or PQ).  It replaces the former type-specific
-// SignConsentEC function.
+// consent request type (EC or PQ).  encryptedDataCBOR must be the DAG-CBOR
+// encoding of the encrypted payload (e.g. from ipfs.MarshalConsentEC); its CID
+// is what gets signed.
 func SignConsentRequest(masterKey *bip32.Key,
 	request SignableConsent,
+	encryptedDataCBOR []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
 ) error {
-	signingCBOR, err := request.EncryptedDataCBOR()
-	if err != nil {
-		return errors.New("failed to marshal consent CBOR: " + err.Error())
-	}
-	cid, err := ipfs.GetCid(signingCBOR)
+	cid, err := ipfs.GetCid(encryptedDataCBOR)
 	if err != nil {
 		return errors.New("failed to get cid: " + err.Error())
 	}
@@ -531,21 +549,19 @@ func SignConsentRequest(masterKey *bip32.Key,
 }
 
 // SignRevokeRequest derives the HD signing key and sets the signature on any
-// revoke request type (EC or PQ).  The signature covers the contract address,
-// the original consent CID, and the CID of the revoke encrypted data —
-// binding the revocation cryptographically to both records.
+// revoke request type (EC or PQ).  encryptedDataCBOR must be the DAG-CBOR
+// encoding of the revoke structure (e.g. from ipfs.MarshalRevokeEC); its CID,
+// together with the original consent CID from request.GetConsentCid(), is what
+// gets signed, binding the revocation cryptographically to both records.
 func SignRevokeRequest(masterKey *bip32.Key,
 	request SignableRevoke,
+	encryptedDataCBOR []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
 ) error {
-	revokeCBOR, err := request.EncryptedDataCBOR()
-	if err != nil {
-		return errors.New("failed to marshal revoke CBOR: " + err.Error())
-	}
-	revokeCid, err := ipfs.GetCid(revokeCBOR)
+	revokeCid, err := ipfs.GetCid(encryptedDataCBOR)
 	if err != nil {
 		return errors.New("failed to get revoke cid: " + err.Error())
 	}

@@ -181,7 +181,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	assertKVHex(t, "Notary sealed data", notaryResult.SealedData, kvPQNotarySealedHex)
 
 	// ── Step 3: Build consent plaintext with embedded notary CBOR ────────
-	notaryCBOR, err := notaryResult.MarshalCBOR()
+	notaryCBOR, err := ipfs.MarshalConsentEC(notaryResult)
 	if err != nil {
 		t.Fatalf("notary MarshalCBOR: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	assertKVHex(t, "Signing Bob pub", signingBobPriv.PubKey().SerializeCompressed(), kvPQSigningBobPub)
 
 	// Consent CID and Alice's address (non-deterministic CID, but address recovery must work)
-	consentCBOR, _ := consentReq.EncryptedData.MarshalCBOR()
+	consentCBOR, _ := ipfs.MarshalConsentPQ(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
 	t.Logf("PQ consent CID:              %s", consentCid.String())
 
@@ -246,7 +246,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Alice consent addr:          %s", hex.EncodeToString(aliceConsentAddr[:]))
 
 	// ── Step 5: Bob counter-signs consent ────────────────────────────────
-	if err := SignConsentRequest(bobMaster, consentReq, otherParty, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignConsentRequest(bobMaster, consentReq, consentCBOR, otherParty, consentNumber, contractAddress, chainId); err != nil {
 		t.Fatalf("SignConsentRequest(bob): %v", err)
 	}
 	if len(consentReq.Signatures) != 2 {
@@ -351,7 +351,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	assertKVHex(t, "Revoke notary sealed", revokeNotaryResult.SealedData, kvPQRevokeNotarySealedHex)
 
 	// ── Step 9: Alice encrypts + signs revoke (PQ) ───────────────────────
-	revokeNotaryCBOR, _ := revokeNotaryResult.MarshalCBOR()
+	revokeNotaryCBOR, _ := ipfs.MarshalConsentEC(revokeNotaryResult)
 	revokePlaintext := append(revokeNotaryCBOR, []byte("|revoke payload for kv test")...)
 	t.Logf("Revoke notary CBOR len:      %d bytes", len(revokeNotaryCBOR))
 	t.Logf("Revoke plaintext len:        %d bytes", len(revokePlaintext))
@@ -383,7 +383,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	}
 
 	// Revoke signature recovery
-	revokeCBOR, _ := revokeReq.EncryptedData.MarshalCBOR()
+	revokeCBOR, _ := ipfs.MarshalConsentPQ(&revokeReq.EncryptedData)
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 	t.Logf("PQ revoke CID (rcid):        %s", revokeCid.String())
 

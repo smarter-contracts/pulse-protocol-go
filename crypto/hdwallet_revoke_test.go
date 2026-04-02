@@ -67,9 +67,9 @@ func TestEncryptSignRevokeEC_RoundTrip(t *testing.T) {
 	}
 
 	// Step 6: Signature recovery
-	revokeCBOR, err := request.EncryptedData.MarshalCBOR()
+	revokeCBOR, err := ipfs.MarshalConsentEC(&request.EncryptedData)
 	if err != nil {
-		t.Fatalf("MarshalCBOR() failed: %v", err)
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
 	}
 	revokeCid, err := ipfs.GetCid(revokeCBOR)
 	if err != nil {
@@ -106,7 +106,11 @@ func TestSignRevokeRequest_OnExistingRequest(t *testing.T) {
 	}
 
 	// SignRevokeRequest works for any revoke type (EC or PQ)
-	if err = SignRevokeRequest(masterKey, request, otherParty, consent, contractAddr, chainId); err != nil {
+	revokeCBOR, err := ipfs.MarshalConsentEC(result)
+	if err != nil {
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
+	}
+	if err = SignRevokeRequest(masterKey, request, revokeCBOR, otherParty, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("SignRevokeRequest() failed: %v", err)
 	}
 	if len(request.Signature) == 0 {

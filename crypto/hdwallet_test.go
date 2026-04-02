@@ -550,9 +550,9 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 	}
 
 	// Step 4: Signature can be recovered
-	signingCBOR, err := request.EncryptedData.MarshalCBOR()
+	signingCBOR, err := ipfs.MarshalConsentEC(&request.EncryptedData)
 	if err != nil {
-		t.Fatalf("MarshalCBOR() failed: %v", err)
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
 	}
 	cid, err := ipfs.GetCid(signingCBOR)
 	if err != nil {
@@ -568,7 +568,7 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 	t.Logf("Recovered signing address: %s", hex.EncodeToString(recoveredAddr[:]))
 
 	// Step 5: A second party counter-signs (appends a second signature)
-	if err = SignConsentRequest(masterKey, request, otherParty, consent, contractAddr, chainId); err != nil {
+	if err = SignConsentRequest(masterKey, request, signingCBOR, otherParty, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("second SignConsentRequest() failed: %v", err)
 	}
 	if len(request.Signatures) != 2 {
@@ -595,7 +595,11 @@ func TestSignConsentRequest_OnExistingRequest(t *testing.T) {
 	request.EncryptedData = *result
 
 	// Sign it — SignConsentRequest works for any consent type (EC or PQ)
-	if err = SignConsentRequest(masterKey, request, otherParty, consent, contractAddr, chainId); err != nil {
+	reqCBOR, err := ipfs.MarshalConsentEC(result)
+	if err != nil {
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
+	}
+	if err = SignConsentRequest(masterKey, request, reqCBOR, otherParty, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("SignConsentRequest() failed: %v", err)
 	}
 	if len(request.Signatures) != 1 {

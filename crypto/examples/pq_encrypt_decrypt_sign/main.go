@@ -155,7 +155,7 @@ func main() {
 	fmt.Printf("  Signatures so far:      %d\n", len(consentRequest.Signatures))
 	fmt.Printf("  Alice's signature:      %s\n", hex.EncodeToString(consentRequest.Signatures[0]))
 
-	consentCBOR, err := consentRequest.EncryptedData.MarshalCBOR()
+	consentCBOR, err := ipfs.MarshalConsentPQ(&consentRequest.EncryptedData)
 	must("marshal consent encrypted data to CBOR", err)
 	consentCid, err := ipfs.GetCid(consentCBOR)
 	must("compute consent CID", err)
@@ -170,6 +170,7 @@ func main() {
 	must("Bob: SignConsentRequest", crypto.SignConsentRequest(
 		bobMasterKey,
 		consentRequest,
+		consentCBOR,
 		alicePartyNo,
 		consentNumber,
 		contractAddress,
@@ -268,7 +269,7 @@ func main() {
 	// signature, then confirm they are the same Ethereum address.
 	section("10. Confirm revoke signer was a consent signer")
 
-	revokeCBOR, err := revokeRequest.EncryptedData.MarshalCBOR()
+	revokeCBOR, err := ipfs.MarshalConsentPQ(&revokeRequest.EncryptedData)
 	must("marshal revoke encrypted data", err)
 	revokeCid, err := ipfs.GetCid(revokeCBOR)
 	must("compute revoke CID", err)
