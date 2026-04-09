@@ -3,9 +3,9 @@ module github.com/smarter-contracts/pulse-protocol-go/crypto
 go 1.25.3
 
 require (
-	github.com/cloudflare/circl v1.6.2
+	github.com/cloudflare/circl v1.6.3
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
-	github.com/ethereum/go-ethereum v1.16.8
+	github.com/ethereum/go-ethereum v1.17.0
 	github.com/jamesradley/go-bip32 v1.0.1
 	golang.org/x/crypto v0.46.0
 )
