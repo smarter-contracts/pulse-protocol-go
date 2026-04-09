@@ -16,7 +16,7 @@ import (
 	"errors"
 	"fmt"
 
-	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	kyberKEM "github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	bip32 "github.com/jamesradley/go-bip32"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"

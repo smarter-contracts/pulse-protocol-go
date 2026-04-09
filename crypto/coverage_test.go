@@ -12,7 +12,7 @@ import (
 	"io"
 	"testing"
 
-	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	kyberKEM "github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/key_encapsulate"
