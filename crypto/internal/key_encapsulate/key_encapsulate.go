@@ -1,7 +1,7 @@
 // Package key_encapsulate implements post-quantum hybrid encryption and
-// decryption using ML-KEM-768 (Kyber768).  It generates a random AES-256-GCM
+// decryption using NIST ML-KEM-768 (FIPS 203).  It generates a random AES-256-GCM
 // key to seal the plaintext, then encapsulates that key for each recipient
-// using Kyber768 key encapsulation.
+// using ML-KEM-768 key encapsulation.
 package key_encapsulate
 
 import (
@@ -10,7 +10,7 @@ import (
 	"io"
 	"slices"
 
-	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	kyberKEM "github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hkdf"

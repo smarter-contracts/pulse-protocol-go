@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"log"
 
-	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	kyberKEM "github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	bip32 "github.com/jamesradley/go-bip32"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"

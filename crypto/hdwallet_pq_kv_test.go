@@ -47,7 +47,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	kyberKEM "github.com/cloudflare/circl/kem/kyber/kyber768"
+	kyberKEM "github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
@@ -57,6 +57,11 @@ import (
 // ── Known values (populated from first run with -v) ─────────────────────────
 // To regenerate: clear all kvPQ* constants, run with -v, paste logged values.
 //
+// As of v1.1.0 the KEM uses NIST ML-KEM-768 (FIPS 203) via circl/kem/mlkem/mlkem768.
+// Previously circl/kem/kyber/kyber768 (CRYSTALS-Kyber Round 3) was used; the
+// fingerprint values changed because ML-KEM uses SHA3-512(seed || K) for key
+// generation whereas Kyber R3 used SHA3-512(seed).
+//
 // PQ encryption is non-deterministic (random KEM), so only deterministic
 // derivations are pinned.  Encrypted output, CIDs, and signatures are
 // verified functionally (round-trip) rather than by known value.
@@ -64,8 +69,8 @@ import (
 const (
 	// PQ consent key derivation (purpose 9 — PulsePurposePQDeriveConsent)
 	kvPQConsentKeyPath       = "m/4410704'/3/1/2/9"
-	kvPQAliceConsentPubFP    = "031ca30b2f9ac61fe6649278258e94e3ec2ec918db0853d19de7579200d26da7" // ML-KEM-768 public key fingerprint (Keccak256)
-	kvPQBobConsentPubFP      = "81cea2acf154fda8c30f29f799692b1b3fbb5f1ad9b17420cd48b0985082df45"
+	kvPQAliceConsentPubFP    = "339dd3c75c1d9050c74a343b02babd5415bde0eace37a7d0ecc0682d750984d6" // NIST ML-KEM-768 public key fingerprint (Keccak256)
+	kvPQBobConsentPubFP      = "83f0b64c4e38c3c8167f5286b9b079e926c91d15c140bc516bcd70b789e22331"
 	kvPQConsentNodeAlicePriv = "7d3607e752508cf9e8e3188ef8db8890f5d7aac618865c9d4a52460f76d32a6b" // secp256k1 node key used to derive PQ seed
 	kvPQConsentNodeAlicePub  = "02704fab5d7282c0e6719bcc762f2e45d481351741598483900b8e4c429d11e2b3"
 	kvPQConsentNodeBobPriv   = "af988f9d0ab2f603851d56d20bd0eb3749814dd44bfd2d5d638f900cee0be74b"
@@ -86,8 +91,8 @@ const (
 
 	// PQ revoke key derivation (purpose 10 — PulsePurposePQDeriveRevoke)
 	kvPQRevokeKeyPath       = "m/4410704'/3/1/2/10"
-	kvPQAliceRevokePubFP    = "d49540b0dcad70d8988ee1fd6818a33df881505dd79fa880a9a395af48260b20"
-	kvPQBobRevokePubFP      = "5c9995e1dbc90b217fcd88b38fb313c3e2f754c376b4b9fd748d1df5ee996854"
+	kvPQAliceRevokePubFP    = "bffe71771b9b84ccec7b2c9cb24ae736a128f25bffed5e197ad56c3c31ded1bc" // NIST ML-KEM-768
+	kvPQBobRevokePubFP      = "30a4275b6c98c1bd3e4f32db360d224e40cfae3b3ac62be10c1955215dda7512"
 	kvPQRevokeNodeAlicePriv = "923b9ee0e2e2ef45d8c5b8f91ac02c4be9bf6982d71ab5751c928021abba52af"
 	kvPQRevokeNodeAlicePub  = "03f3bb3680cfaec89a75fd0e99e8a20737e40f644f6c3243a8f058fd92ecc53aa4"
 	kvPQRevokeNodeBobPriv   = "8162d312cd9f751121b09ddd34b3d4f57ba056c73cd9c9d1c83367e3d4372be8"
