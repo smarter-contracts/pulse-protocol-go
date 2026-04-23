@@ -6,14 +6,9 @@ import "time"
 // It is encrypted alongside the consent payload and provides an auditable record of the
 // circumstances of the transaction (IP address, timestamp, etc.).
 //
-// The NotaryBlock is encrypted using ECDH between the Grantor's key and the Mid-Tier's
-// Notary Public Key, so only the Mid-Tier can decrypt it. The encrypted block is embedded
-// in the consent or revoke record before the outer participant encryption is applied.
-//
-// All fields are optional — the parties decide which contextual fields to include.
-//
-// Note: this is a stub implementation. Fields will be expanded in a later phase once the
-// full notary requirements are defined.
+// The NotaryBlock is encrypted using ECDH between the grantor's purpose-2 key and the
+// Mid-Tier notary public key, so only Mid-Tier can decrypt it. The encrypted bytes are
+// embedded in the consent record before the outer participant encryption is applied.
 type NotaryBlock struct {
 	Timestamp time.Time `json:"timestamp" cbor:"ts"`
 	IPAddress string    `json:"ipAddress" cbor:"ip"`
