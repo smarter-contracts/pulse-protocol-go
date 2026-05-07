@@ -3,3 +3,7 @@
 
 # Test output
 coverage.out
+
+# Compiled test binaries
+crypto/ec_encrypt_decrypt_sign
+pq_encrypt_decrypt_sign
