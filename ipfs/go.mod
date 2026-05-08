@@ -6,7 +6,7 @@ require (
 	github.com/ipfs/go-cid v0.6.0
 	github.com/ipld/go-ipld-prime v0.22.0
 	github.com/multiformats/go-multihash v0.2.3
-	github.com/smarter-contracts/pulse-protocol-go/types v1.0.0
+	github.com/smarter-contracts/pulse-protocol-go/types v1.1.0
 	github.com/stretchr/testify v1.11.1
 )
 
