@@ -181,7 +181,11 @@ type stubConsentStore struct {
 	lastSet       *ConsentRecord            // most recent Set call
 	activeRecords []*ConsentRecord          // returned by FindActive
 	findActiveErr error                     // error returned by FindActive
+	cursor        string                    // value returned by GetSyncCursor
 }
+
+// setCursor pre-seeds the sync cursor for test setup.
+func (s *stubConsentStore) setCursor(c string) { s.cursor = c }
 
 func (s *stubConsentStore) Get(id string) (*ConsentRecord, error) {
 	if s.records == nil {
@@ -204,13 +208,18 @@ func (s *stubConsentStore) Set(r *ConsentRecord) error {
 func (s *stubConsentStore) FindActive(_, _ string) ([]*ConsentRecord, error) {
 	return s.activeRecords, s.findActiveErr
 }
-func (s *stubConsentStore) GetSyncCursor() (string, error) { return "", nil }
-func (s *stubConsentStore) SetSyncCursor(_ string) error   { return nil }
+func (s *stubConsentStore) GetSyncCursor() (string, error) { return s.cursor, nil }
+func (s *stubConsentStore) SetSyncCursor(c string) error   { s.cursor = c; return nil }
 
 type stubMidTierClient struct {
 	submitGrantCalled  bool
 	submitRevokeCalled bool
 	lastRevoke         *RevokeRecord
+	// GetConsentsSince config
+	sinceEvents   []ConsentEvent
+	sinceErr      error
+	capturedXpub  string
+	capturedCursor string
 }
 
 func (s *stubMidTierClient) SubmitGrant(_ context.Context, _ ConsentRecord, _ string, _ map[string]any) error {
@@ -222,6 +231,8 @@ func (s *stubMidTierClient) SubmitRevoke(_ context.Context, r RevokeRecord) erro
 	s.lastRevoke = &r
 	return nil
 }
-func (s *stubMidTierClient) GetConsentsSince(_ context.Context, _, _ string) ([]ConsentEvent, error) {
-	return nil, nil
+func (s *stubMidTierClient) GetConsentsSince(_ context.Context, xpub, cursor string) ([]ConsentEvent, error) {
+	s.capturedXpub = xpub
+	s.capturedCursor = cursor
+	return s.sinceEvents, s.sinceErr
 }
