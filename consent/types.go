@@ -6,16 +6,25 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedpermission"
 )
 
-// TransactionStatus represents the progression of a grant or revoke transaction
-// through the mid-tier pipeline.
+// TransactionStatus represents the status string sent by mid-tier in a callback.
+// Grant and revoke transactions use distinct prefixes so the type can be inferred
+// from the status alone; the CallbackRequest.Type field confirms it.
 type TransactionStatus string
 
 const (
+	// Grant transaction statuses (no prefix).
 	TransactionStatusPending   TransactionStatus = "pending"
-	TransactionStatusIPFSLive  TransactionStatus = "ipfs-live"
+	TransactionStatusIPFSLive  TransactionStatus = "ipfs_live"
 	TransactionStatusSubmitted TransactionStatus = "submitted"
 	TransactionStatusConfirmed TransactionStatus = "confirmed"
-	TransactionStatusFailed    TransactionStatus = "failed"
+	TransactionStatusRejected  TransactionStatus = "rejected"
+	TransactionStatusDelayed   TransactionStatus = "delayed"
+
+	// Revoke transaction statuses (rev_ prefix).
+	TransactionStatusRevPending   TransactionStatus = "rev_pending"
+	TransactionStatusRevIPFSLive  TransactionStatus = "rev_ipfs_live"
+	TransactionStatusRevSubmitted TransactionStatus = "rev_submitted"
+	TransactionStatusRevConfirmed TransactionStatus = "rev_confirmed"
 )
 
 // TransactionType distinguishes grant from revoke callbacks.
@@ -41,7 +50,8 @@ const (
 	// ConsentStatusActive is set when mid-tier confirms the on-chain transaction.
 	ConsentStatusActive ConsentStatus = "active"
 
-	// ConsentStatusRevoked is terminal: the consent has been revoked and confirmed.
+	// ConsentStatusRevoked is terminal: the consent has been revoked and confirmed on-chain.
+	// Set when HandleTransactionCallback receives a rev_confirmed callback.
 	ConsentStatusRevoked ConsentStatus = "revoked"
 
 	// ConsentStatusRejected is terminal: the ConsentReviewer or app rejected the consent.
@@ -74,7 +84,8 @@ type ConsentRecord struct {
 	Status      ConsentStatus
 	ConsentNo   int
 	ChainID     int
-	CID         string     // IPFS CID; empty until mid-tier confirms
+	CID         string     // grant IPFS CID; empty until grant ipfs_live callback
+	RevokeCID   string     // revoke IPFS CID; empty until rev_ipfs_live callback
 	ExpiresAt   *time.Time // nil means no expiry
 	Payload     *feedpermission.FeedPermissionPayload // decrypted; nil until ingest succeeds
 	SealedBytes []byte     // outer-encrypted record for IPFS submission
