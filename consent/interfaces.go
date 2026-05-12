@@ -78,8 +78,9 @@ type MidTierClient interface {
 	// is returned verbatim in each callback.
 	SubmitGrant(ctx context.Context, record ConsentRecord, callbackURL string, metadata map[string]any) error
 
-	// SubmitRevoke submits a sealed revocation record.
-	SubmitRevoke(ctx context.Context, record RevokeRecord) error
+	// SubmitRevoke submits a sealed revocation record. callbackURL receives
+	// rev_* progress updates; metadata is returned verbatim in each callback.
+	SubmitRevoke(ctx context.Context, record RevokeRecord, callbackURL string, metadata map[string]any) error
 
 	// GetConsentsSince returns an ordered list of consent events (by
 	// blockNumber:txIndex) for the signing addresses derived from xpub,

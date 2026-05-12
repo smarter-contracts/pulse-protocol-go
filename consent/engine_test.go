@@ -226,7 +226,7 @@ func (s *stubMidTierClient) SubmitGrant(_ context.Context, _ ConsentRecord, _ st
 	s.submitGrantCalled = true
 	return nil
 }
-func (s *stubMidTierClient) SubmitRevoke(_ context.Context, r RevokeRecord) error {
+func (s *stubMidTierClient) SubmitRevoke(_ context.Context, r RevokeRecord, _ string, _ map[string]any) error {
 	s.submitRevokeCalled = true
 	s.lastRevoke = &r
 	return nil

@@ -139,7 +139,7 @@ func (e *ConsentEngine) RevokeConsent(ctx context.Context, consentID string) err
 		Signature:   revokeRequest.Signature,
 	}
 
-	if err := e.mt.SubmitRevoke(ctx, revokeRec); err != nil {
+	if err := e.mt.SubmitRevoke(ctx, revokeRec, "", nil); err != nil {
 		return fmt.Errorf("consent: RevokeConsent SubmitRevoke: %w", err)
 	}
 
