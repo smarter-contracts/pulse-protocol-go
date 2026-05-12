@@ -10,6 +10,7 @@ package crypto
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"testing"
 
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/key_exchange"
@@ -17,6 +18,8 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
+
+var errTestKey = errors.New("key unavailable")
 
 // ── EncryptSignRevokeEC round-trip ────────────────────────────────────────────
 

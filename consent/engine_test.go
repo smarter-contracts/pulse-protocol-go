@@ -151,11 +151,30 @@ func makeTestWallet(t *testing.T) *stubWalletStore {
 	return &stubWalletStore{key: key}
 }
 
-type stubCounterpartyDirectory struct{}
+// makeTestXpub derives the extended public key at m/4410704'/{otherPartyId} from
+// the test wallet. Used in revoke tests that need a valid grantor xpub.
+func makeTestXpub(t *testing.T, otherPartyId uint32) string {
+	t.Helper()
+	wallet := makeTestWallet(t)
+	xpub, err := ppcrypto.DeriveOtherPartyXpub(wallet, otherPartyId)
+	if err != nil {
+		t.Fatalf("DeriveOtherPartyXpub(%d): %v", otherPartyId, err)
+	}
+	return xpub
+}
+
+type stubCounterpartyDirectory struct {
+	xpub string // if non-empty, returned by GetXpub (found=true)
+}
 
 func (s *stubCounterpartyDirectory) GetOrAssignIndex(_ string) (int, error) { return 0, nil }
-func (s *stubCounterpartyDirectory) GetXpub(_ string) (string, bool, error) { return "", false, nil }
-func (s *stubCounterpartyDirectory) StoreXpub(_, _ string) error            { return nil }
+func (s *stubCounterpartyDirectory) GetXpub(_ string) (string, bool, error) {
+	if s.xpub == "" {
+		return "", false, nil
+	}
+	return s.xpub, true, nil
+}
+func (s *stubCounterpartyDirectory) StoreXpub(_, _ string) error { return nil }
 
 type stubConsentStore struct {
 	records map[string]*ConsentRecord // pre-seeded records for Get
@@ -185,14 +204,20 @@ func (s *stubConsentStore) GetSyncCursor() (string, error)                   { r
 func (s *stubConsentStore) SetSyncCursor(_ string) error                     { return nil }
 
 type stubMidTierClient struct {
-	submitGrantCalled bool
+	submitGrantCalled  bool
+	submitRevokeCalled bool
+	lastRevoke         *RevokeRecord
 }
 
 func (s *stubMidTierClient) SubmitGrant(_ context.Context, _ ConsentRecord, _ string, _ map[string]any) error {
 	s.submitGrantCalled = true
 	return nil
 }
-func (s *stubMidTierClient) SubmitRevoke(_ context.Context, _ RevokeRecord) error { return nil }
+func (s *stubMidTierClient) SubmitRevoke(_ context.Context, r RevokeRecord) error {
+	s.submitRevokeCalled = true
+	s.lastRevoke = &r
+	return nil
+}
 func (s *stubMidTierClient) GetConsentsSince(_ context.Context, _, _ string) ([]ConsentEvent, error) {
 	return nil, nil
 }
