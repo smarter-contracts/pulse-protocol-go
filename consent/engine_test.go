@@ -177,8 +177,10 @@ func (s *stubCounterpartyDirectory) GetXpub(_ string) (string, bool, error) {
 func (s *stubCounterpartyDirectory) StoreXpub(_, _ string) error { return nil }
 
 type stubConsentStore struct {
-	records map[string]*ConsentRecord // pre-seeded records for Get
-	lastSet *ConsentRecord            // most recent Set call
+	records       map[string]*ConsentRecord // pre-seeded records for Get
+	lastSet       *ConsentRecord            // most recent Set call
+	activeRecords []*ConsentRecord          // returned by FindActive
+	findActiveErr error                     // error returned by FindActive
 }
 
 func (s *stubConsentStore) Get(id string) (*ConsentRecord, error) {
@@ -199,9 +201,11 @@ func (s *stubConsentStore) Set(r *ConsentRecord) error {
 	s.records[r.ID] = r
 	return nil
 }
-func (s *stubConsentStore) FindActive(_, _ string) ([]*ConsentRecord, error) { return nil, nil }
-func (s *stubConsentStore) GetSyncCursor() (string, error)                   { return "", nil }
-func (s *stubConsentStore) SetSyncCursor(_ string) error                     { return nil }
+func (s *stubConsentStore) FindActive(_, _ string) ([]*ConsentRecord, error) {
+	return s.activeRecords, s.findActiveErr
+}
+func (s *stubConsentStore) GetSyncCursor() (string, error) { return "", nil }
+func (s *stubConsentStore) SetSyncCursor(_ string) error   { return nil }
 
 type stubMidTierClient struct {
 	submitGrantCalled  bool
