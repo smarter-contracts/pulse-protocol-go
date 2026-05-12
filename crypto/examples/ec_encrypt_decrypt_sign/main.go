@@ -93,16 +93,12 @@ func main() {
 
 	alice, err := newWallet("Alice")
 	must("create Alice's wallet", err)
-	aliceMasterKey, err := alice.GetMasterKey()
-	must("get Alice's master key", err)
 
 	// ── Step 2: Create Bob's wallet ───────────────────────────────────────────
 	section("2. Create Bob's wallet")
 
 	bob, err := newWallet("Bob")
 	must("create Bob's wallet", err)
-	bobMasterKey, err := bob.GetMasterKey()
-	must("get Bob's master key", err)
 
 	// ── Step 3: Bob shares his encryption public key with Alice ───────────────
 	//
@@ -114,7 +110,7 @@ func main() {
 	// on-chain registry.
 	section("3. Bob derives and shares his generator key for Alice")
 
-	bobGeneratorForAlice, err := crypto.DeriveOtherPartyGenerator(bobMasterKey, alicePartyNo)
+	bobGeneratorForAlice, err := crypto.DeriveOtherPartyGenerator(bob, alicePartyNo)
 	must("Bob: DeriveOtherPartyGenerator", err)
 	fmt.Printf("  [Bob] Generator public key (m/4410704'/%d): %s\n",
 		alicePartyNo, hex.EncodeToString(bobGeneratorForAlice.Key))
@@ -145,7 +141,7 @@ func main() {
 	fmt.Printf("  Plaintext (%d bytes): %s\n", len(consentData), consentData)
 
 	consentRequest, err := crypto.EncryptSignConsentEC(
-		aliceMasterKey,
+		alice,
 		consentData,
 		bobPartyNo,
 		consentNumber,
@@ -185,7 +181,7 @@ func main() {
 	section("5. Bob counter-signs the consent record")
 
 	must("Bob: SignConsentRequest", crypto.SignConsentRequest(
-		bobMasterKey,
+		bob,
 		consentRequest,
 		consentCBOR,
 		alicePartyNo,  // Bob's view: Alice is the other party
@@ -205,7 +201,7 @@ func main() {
 	section("6. Both parties decrypt the consent record")
 
 	decryptedByAlice, err := crypto.DecryptConsentEC(
-		aliceMasterKey,
+		alice,
 		consentRequest,
 		bobPartyNo,    // Alice's view: Bob is the other party
 		consentNumber,
@@ -216,7 +212,7 @@ func main() {
 	fmt.Printf("  [Alice] Decrypted: %s\n", decryptedByAlice)
 
 	decryptedByBob, err := crypto.DecryptConsentEC(
-		bobMasterKey,
+		bob,
 		consentRequest,
 		alicePartyNo,  // Bob's view: Alice is the other party
 		consentNumber,
@@ -260,7 +256,7 @@ func main() {
 	must("Alice: DerivePublicKeyFromParent (revoke)", err)
 
 	revokeRequest, err := crypto.EncryptSignRevokeEC(
-		aliceMasterKey,
+		alice,
 		revokeData,
 		bobPartyNo,
 		consentNumber,

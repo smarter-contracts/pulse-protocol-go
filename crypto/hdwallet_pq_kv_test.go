@@ -119,6 +119,8 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	// ── Fixed inputs (same as EC KV test) ────────────────────────────────
 	aliceMaster := mustNewMasterKey(t)
 	bobMaster := mustNewBobMasterKey(t)
+	aliceWallet := &testWalletStore{key: aliceMaster}
+	bobWallet := &testWalletStore{key: bobMaster}
 
 	const (
 		contractAddress = "0x0102030405060708091011121314"
@@ -129,11 +131,11 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	notaryData := []byte("notary block payload for kv test")
 
 	// ── Step 1: Derive PQ consent key pairs ──────────────────────────────
-	aliceConsentPrivPQ, aliceConsentPubPQ, err := DerivePQKeyPair(aliceMaster, otherParty, consentNumber, chainId, purposes.PulsePurposePQDeriveConsent)
+	aliceConsentPrivPQ, aliceConsentPubPQ, err := DerivePQKeyPair(aliceWallet, otherParty, consentNumber, chainId, purposes.PulsePurposePQDeriveConsent)
 	if err != nil {
 		t.Fatalf("Alice DerivePQKeyPair(consent): %v", err)
 	}
-	_, bobConsentPubPQ, err := DerivePQKeyPair(bobMaster, otherParty, consentNumber, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, bobConsentPubPQ, err := DerivePQKeyPair(bobWallet, otherParty, consentNumber, chainId, purposes.PulsePurposePQDeriveConsent)
 	if err != nil {
 		t.Fatalf("Bob DerivePQKeyPair(consent): %v", err)
 	}
@@ -170,7 +172,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	notaryPath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptConsentNotaryBlock)
 	notaryAlicePriv, _ := deriveKeyFromMaster(aliceMaster, notaryPath)
 
-	notaryResult, err := EncryptConsentNotaryEC(aliceMaster, notaryData, otherParty, consentNumber, notaryPub, contractAddress, chainId)
+	notaryResult, err := EncryptConsentNotaryEC(aliceWallet, notaryData, otherParty, consentNumber, notaryPub, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("EncryptConsentNotaryEC: %v", err)
 	}
@@ -195,7 +197,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Consent plaintext len:       %d bytes", len(consentPlaintext))
 
 	// ── Step 4: Alice encrypts + signs consent (PQ) ──────────────────────
-	consentReq, err := EncryptSignConsentPQ(aliceMaster, consentPlaintext, otherParty, consentNumber,
+	consentReq, err := EncryptSignConsentPQ(aliceWallet, consentPlaintext, otherParty, consentNumber,
 		[]*kyberKEM.PublicKey{aliceConsentPubPQ, bobConsentPubPQ}, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ: %v", err)
@@ -251,7 +253,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Alice consent addr:          %s", hex.EncodeToString(aliceConsentAddr[:]))
 
 	// ── Step 5: Bob counter-signs consent ────────────────────────────────
-	if err := SignConsentRequest(bobMaster, consentReq, consentCBOR, otherParty, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignConsentRequest(bobWallet, consentReq, consentCBOR, otherParty, consentNumber, contractAddress, chainId); err != nil {
 		t.Fatalf("SignConsentRequest(bob): %v", err)
 	}
 	if len(consentReq.Signatures) != 2 {
@@ -265,7 +267,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Bob consent addr:            %s", hex.EncodeToString(bobConsentAddr[:]))
 
 	// ── Step 6: Both parties decrypt consent ─────────────────────────────
-	decryptedAlice, err := DecryptConsentPQ(aliceMaster, consentReq, otherParty, consentNumber, contractAddress, chainId)
+	decryptedAlice, err := DecryptConsentPQ(aliceWallet, consentReq, otherParty, consentNumber, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("DecryptConsentPQ(alice): %v", err)
 	}
@@ -274,7 +276,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	}
 	t.Logf("Alice decrypted consent:     %s", string(decryptedAlice))
 
-	decryptedBob, err := DecryptConsentPQ(bobMaster, consentReq, otherParty, consentNumber, contractAddress, chainId)
+	decryptedBob, err := DecryptConsentPQ(bobWallet, consentReq, otherParty, consentNumber, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("DecryptConsentPQ(bob): %v", err)
 	}
@@ -284,7 +286,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Bob decrypted consent:       %d bytes (OK)", len(decryptedBob))
 
 	// ── Step 6b: Alice decrypts embedded notary ─────────────────────────
-	aliceDecryptedNotary, err := DecryptConsentNotaryEC(aliceMaster, notaryResult, otherParty, consentNumber, contractAddress, chainId)
+	aliceDecryptedNotary, err := DecryptConsentNotaryEC(aliceWallet, notaryResult, otherParty, consentNumber, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("DecryptConsentNotaryEC(alice): %v", err)
 	}
@@ -294,7 +296,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Alice decrypted notary:      %s", string(aliceDecryptedNotary))
 
 	// ── Step 6c: Bob cannot decrypt notary ──────────────────────────────
-	_, err = DecryptConsentNotaryEC(bobMaster, notaryResult, otherParty, consentNumber, contractAddress, chainId)
+	_, err = DecryptConsentNotaryEC(bobWallet, notaryResult, otherParty, consentNumber, contractAddress, chainId)
 	if err == nil {
 		t.Error("expected Bob to fail decrypting notary, but succeeded")
 	} else {
@@ -302,11 +304,11 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	}
 
 	// ── Step 7: Derive PQ revoke key pairs ───────────────────────────────
-	_, aliceRevokePubPQ, err := DerivePQKeyPair(aliceMaster, otherParty, consentNumber, chainId, purposes.PulsePurposePQDeriveRevoke)
+	_, aliceRevokePubPQ, err := DerivePQKeyPair(aliceWallet, otherParty, consentNumber, chainId, purposes.PulsePurposePQDeriveRevoke)
 	if err != nil {
 		t.Fatalf("Alice DerivePQKeyPair(revoke): %v", err)
 	}
-	_, bobRevokePubPQ, err := DerivePQKeyPair(bobMaster, otherParty, consentNumber, chainId, purposes.PulsePurposePQDeriveRevoke)
+	_, bobRevokePubPQ, err := DerivePQKeyPair(bobWallet, otherParty, consentNumber, chainId, purposes.PulsePurposePQDeriveRevoke)
 	if err != nil {
 		t.Fatalf("Bob DerivePQKeyPair(revoke): %v", err)
 	}
@@ -340,7 +342,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	revokeNotaryPath, _ := newpulseHDPath(otherParty, chainId, consentNumber, purposes.PulsePurposeEncryptRevokeNotaryBlock)
 	revokeNotaryAlicePriv, _ := deriveKeyFromMaster(aliceMaster, revokeNotaryPath)
 
-	revokeNotaryResult, err := EncryptRevokeNotaryEC(aliceMaster, revokeNotaryData, otherParty, consentNumber, notaryPub, contractAddress, chainId)
+	revokeNotaryResult, err := EncryptRevokeNotaryEC(aliceWallet, revokeNotaryData, otherParty, consentNumber, notaryPub, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("EncryptRevokeNotaryEC: %v", err)
 	}
@@ -361,7 +363,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Revoke notary CBOR len:      %d bytes", len(revokeNotaryCBOR))
 	t.Logf("Revoke plaintext len:        %d bytes", len(revokePlaintext))
 
-	revokeReq, err := EncryptSignRevokePQ(aliceMaster, revokePlaintext, otherParty, consentNumber,
+	revokeReq, err := EncryptSignRevokePQ(aliceWallet, revokePlaintext, otherParty, consentNumber,
 		[]*kyberKEM.PublicKey{aliceRevokePubPQ, bobRevokePubPQ}, contractAddress, chainId, consentCid.String())
 	if err != nil {
 		t.Fatalf("EncryptSignRevokePQ: %v", err)
@@ -405,7 +407,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	}
 
 	// ── Step 10: Both parties decrypt revoke; only Alice decrypts notary ─
-	decryptedRevokeAlice, err := DecryptRevokePQ(aliceMaster, revokeReq, otherParty, consentNumber, contractAddress, chainId)
+	decryptedRevokeAlice, err := DecryptRevokePQ(aliceWallet, revokeReq, otherParty, consentNumber, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("DecryptRevokePQ(alice): %v", err)
 	}
@@ -414,7 +416,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	}
 	t.Logf("Alice decrypted revoke:      %d bytes (OK)", len(decryptedRevokeAlice))
 
-	decryptedRevokeBob, err := DecryptRevokePQ(bobMaster, revokeReq, otherParty, consentNumber, contractAddress, chainId)
+	decryptedRevokeBob, err := DecryptRevokePQ(bobWallet, revokeReq, otherParty, consentNumber, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("DecryptRevokePQ(bob): %v", err)
 	}
@@ -424,7 +426,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Bob decrypted revoke:        %d bytes (OK)", len(decryptedRevokeBob))
 
 	// Alice can decrypt revoke notary
-	aliceDecryptedRevokeNotary, err := DecryptRevokeNotaryEC(aliceMaster, revokeNotaryResult, otherParty, consentNumber, contractAddress, chainId)
+	aliceDecryptedRevokeNotary, err := DecryptRevokeNotaryEC(aliceWallet, revokeNotaryResult, otherParty, consentNumber, contractAddress, chainId)
 	if err != nil {
 		t.Fatalf("DecryptRevokeNotaryEC(alice): %v", err)
 	}
@@ -434,7 +436,7 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	t.Logf("Alice decrypted revoke notary: %s", string(aliceDecryptedRevokeNotary))
 
 	// Bob cannot decrypt revoke notary
-	_, err = DecryptRevokeNotaryEC(bobMaster, revokeNotaryResult, otherParty, consentNumber, contractAddress, chainId)
+	_, err = DecryptRevokeNotaryEC(bobWallet, revokeNotaryResult, otherParty, consentNumber, contractAddress, chainId)
 	if err == nil {
 		t.Error("expected Bob to fail decrypting revoke notary, but succeeded")
 	} else {

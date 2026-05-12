@@ -32,7 +32,7 @@ func TestEncryptSignRevokeEC_RoundTrip(t *testing.T) {
 	 *   5. The decrypted plaintext matches the original
 	 *   6. The signature can be recovered to a valid Ethereum address via GetRevokeAddress
 	 */
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	bobPriv, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
@@ -43,7 +43,7 @@ func TestEncryptSignRevokeEC_RoundTrip(t *testing.T) {
 	revokeData := []byte("revoke record payload")
 
 	// Step 1–3: encrypt + sign
-	request, err := EncryptSignRevokeEC(masterKey, revokeData, otherParty, consent, bobPub, contractAddr, chainId, fakeConsentCid)
+	request, err := EncryptSignRevokeEC(wallet, revokeData, otherParty, consent, bobPub, contractAddr, chainId, fakeConsentCid)
 	if err != nil {
 		t.Fatalf("EncryptSignRevokeEC() failed: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestEncryptSignRevokeEC_RoundTrip(t *testing.T) {
 // ── SignRevokeRequest on a pre-built request ──────────────────────────────────
 
 func TestSignRevokeRequest_OnExistingRequest(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
@@ -96,7 +96,7 @@ func TestSignRevokeRequest_OnExistingRequest(t *testing.T) {
 	const fakeConsentCid = "bafyreifepiu23okd26ixpwptj76hjnbkk6nofql7pojk5bxjyb6c74gbly"
 
 	// Build encrypted data without signing
-	result, err := EncryptRevokeNotaryEC(masterKey, []byte("data"), otherParty, consent, bobPub, contractAddr, chainId)
+	result, err := EncryptRevokeNotaryEC(wallet, []byte("data"), otherParty, consent, bobPub, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptRevokeNotaryEC() failed: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestSignRevokeRequest_OnExistingRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarshalConsentEC() failed: %v", err)
 	}
-	if err = SignRevokeRequest(masterKey, request, revokeCBOR, otherParty, consent, contractAddr, chainId); err != nil {
+	if err = SignRevokeRequest(wallet, request, revokeCBOR, otherParty, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("SignRevokeRequest() failed: %v", err)
 	}
 	if len(request.Signature) == 0 {
@@ -125,20 +125,20 @@ func TestDecryptConsentEC_RoundTrip(t *testing.T) {
 	 * Verifies that DecryptConsentEC can decrypt what EncryptSignConsentEC produced,
 	 * recovering the same plaintext that Bob would get via DecryptEC directly.
 	 */
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	bobPriv, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	plaintext := []byte("consent payload for HD decrypt test")
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
-	request, err := EncryptSignConsentEC(masterKey, plaintext, otherParty, consent, bobPub, contractAddr, chainId)
+	request, err := EncryptSignConsentEC(wallet, plaintext, otherParty, consent, bobPub, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
 
 	// HD-wallet holder (Alice) decrypts via master key
-	gotHD, err := DecryptConsentEC(masterKey, request, otherParty, consent, contractAddr, chainId)
+	gotHD, err := DecryptConsentEC(wallet, request, otherParty, consent, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("DecryptConsentEC() failed: %v", err)
 	}
@@ -157,19 +157,19 @@ func TestDecryptConsentEC_RoundTrip(t *testing.T) {
 }
 
 func TestDecryptConsentEC_WrongKey(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
-	request, err := EncryptSignConsentEC(masterKey, []byte("payload"), otherParty, consent, bobPub, contractAddr, chainId)
+	request, err := EncryptSignConsentEC(wallet, []byte("payload"), otherParty, consent, bobPub, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
 
 	// A different HD path (wrong consent number) — must fail or produce garbled output
-	_, err = DecryptConsentEC(masterKey, request, otherParty, consent+1, contractAddr, chainId)
+	_, err = DecryptConsentEC(wallet, request, otherParty, consent+1, contractAddr, chainId)
 	if err == nil {
 		t.Error("expected decryption error for wrong consent number, got nil")
 	}
@@ -178,7 +178,7 @@ func TestDecryptConsentEC_WrongKey(t *testing.T) {
 // ── DecryptRevokeEC ───────────────────────────────────────────────────────────
 
 func TestDecryptRevokeEC_RoundTrip(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	bobPriv, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
@@ -186,13 +186,13 @@ func TestDecryptRevokeEC_RoundTrip(t *testing.T) {
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 	const fakeConsentCid = "bafyreifepiu23okd26ixpwptj76hjnbkk6nofql7pojk5bxjyb6c74gbly"
 
-	request, err := EncryptSignRevokeEC(masterKey, revokeData, otherParty, consent, bobPub, contractAddr, chainId, fakeConsentCid)
+	request, err := EncryptSignRevokeEC(wallet, revokeData, otherParty, consent, bobPub, contractAddr, chainId, fakeConsentCid)
 	if err != nil {
 		t.Fatalf("EncryptSignRevokeEC() failed: %v", err)
 	}
 
 	// HD-wallet holder (Alice) decrypts via master key
-	gotHD, err := DecryptRevokeEC(masterKey, request, otherParty, consent, contractAddr, chainId)
+	gotHD, err := DecryptRevokeEC(wallet, request, otherParty, consent, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("DecryptRevokeEC() failed: %v", err)
 	}
@@ -211,19 +211,19 @@ func TestDecryptRevokeEC_RoundTrip(t *testing.T) {
 }
 
 func TestDecryptRevokeEC_WrongKey(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 	const fakeConsentCid = "bafyreifepiu23okd26ixpwptj76hjnbkk6nofql7pojk5bxjyb6c74gbly"
 
-	request, err := EncryptSignRevokeEC(masterKey, []byte("payload"), otherParty, consent, bobPub, contractAddr, chainId, fakeConsentCid)
+	request, err := EncryptSignRevokeEC(wallet, []byte("payload"), otherParty, consent, bobPub, contractAddr, chainId, fakeConsentCid)
 	if err != nil {
 		t.Fatalf("EncryptSignRevokeEC() failed: %v", err)
 	}
 
-	_, err = DecryptRevokeEC(masterKey, request, otherParty, consent+1, contractAddr, chainId)
+	_, err = DecryptRevokeEC(wallet, request, otherParty, consent+1, contractAddr, chainId)
 	if err == nil {
 		t.Error("expected decryption error for wrong consent number, got nil")
 	}
@@ -238,17 +238,17 @@ func TestConsentRevokeUnlinkability(t *testing.T) {
 	 * The ciphertexts — and in particular Key1, the sender's derived public key —
 	 * must differ between the two records.
 	 */
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const otherParty, chainId = uint32(2), uint32(1)
 
-	r1, err := EncryptSignConsentEC(masterKey, []byte("consent 1"), otherParty, 0, bobPub, contractAddr, chainId)
+	r1, err := EncryptSignConsentEC(wallet, []byte("consent 1"), otherParty, 0, bobPub, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("consent 1 failed: %v", err)
 	}
-	r2, err := EncryptSignConsentEC(masterKey, []byte("consent 2"), otherParty, 1, bobPub, contractAddr, chainId)
+	r2, err := EncryptSignConsentEC(wallet, []byte("consent 2"), otherParty, 1, bobPub, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("consent 2 failed: %v", err)
 	}

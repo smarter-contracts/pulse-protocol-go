@@ -25,14 +25,14 @@ func TestDerivePQKeyPair_Deterministic(t *testing.T) {
 	 * Deriving the same key pair twice from the same master key must produce
 	 * identical encapsulation keys (and therefore identical fingerprints).
 	 */
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
-	_, pub1, err := DerivePQKeyPair(masterKey, otherParty, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, pub1, err := DerivePQKeyPair(wallet, otherParty, consent, chainId, purposes.PulsePurposePQDeriveConsent)
 	if err != nil {
 		t.Fatalf("first DerivePQKeyPair() failed: %v", err)
 	}
-	_, pub2, err := DerivePQKeyPair(masterKey, otherParty, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, pub2, err := DerivePQKeyPair(wallet, otherParty, consent, chainId, purposes.PulsePurposePQDeriveConsent)
 	if err != nil {
 		t.Fatalf("second DerivePQKeyPair() failed: %v", err)
 	}
@@ -51,11 +51,11 @@ func TestDerivePQKeyPair_ConsentRevokeUnlinked(t *testing.T) {
 	 * The consent and revoke paths use different HKDF info strings, so they
 	 * must produce distinct key pairs even for the same (otherParty, consent, chain).
 	 */
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
-	_, consentPub, _ := DerivePQKeyPair(masterKey, otherParty, consent, chainId, purposes.PulsePurposePQDeriveConsent)
-	_, revokePub, _ := DerivePQKeyPair(masterKey, otherParty, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
+	_, consentPub, _ := DerivePQKeyPair(wallet, otherParty, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, revokePub, _ := DerivePQKeyPair(wallet, otherParty, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
 
 	buf1 := make([]byte, kyberKEM.PublicKeySize)
 	buf2 := make([]byte, kyberKEM.PublicKeySize)
@@ -70,11 +70,11 @@ func TestDerivePQKeyPair_DifferentConsentNumbers(t *testing.T) {
 	/*
 	 * Keys for different consent numbers on the same (otherParty, chain) must differ.
 	 */
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	const otherParty, chainId = uint32(2), uint32(1)
 
-	_, pub0, _ := DerivePQKeyPair(masterKey, otherParty, 0, chainId, purposes.PulsePurposePQDeriveConsent)
-	_, pub1, _ := DerivePQKeyPair(masterKey, otherParty, 1, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, pub0, _ := DerivePQKeyPair(wallet, otherParty, 0, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, pub1, _ := DerivePQKeyPair(wallet, otherParty, 1, chainId, purposes.PulsePurposePQDeriveConsent)
 
 	buf0 := make([]byte, kyberKEM.PublicKeySize)
 	buf1b := make([]byte, kyberKEM.PublicKeySize)
@@ -86,8 +86,8 @@ func TestDerivePQKeyPair_DifferentConsentNumbers(t *testing.T) {
 }
 
 func TestDerivePQKeyPair_InvalidPurpose(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, _, err := DerivePQKeyPair(masterKey, 2, 0, 1, purposes.PulsePurposeSignTx)
+	wallet := mustNewTestWallet(t)
+	_, _, err := DerivePQKeyPair(wallet, 2, 0, 1, purposes.PulsePurposeSignTx)
 	if err == nil {
 		t.Error("expected error for non-PQ purpose, got nil")
 	}
@@ -100,8 +100,8 @@ func TestEncryptSignConsentPQ_RoundTrip(t *testing.T) {
 	 * Alice derives a PQ key pair for Bob's view, Bob derives one for Alice's view.
 	 * Alice encrypts to both public keys.  Both parties must be able to decrypt.
 	 */
-	aliceMaster := mustNewMasterKey(t)
-	bobMaster := mustNewMasterKey(t) // same seed — distinct wallets in a real system would differ
+	aliceWallet := mustNewTestWallet(t)
+	bobWallet := mustNewTestWallet(t) // same seed — distinct wallets in a real system would differ
 
 	addr := helperContractAddress()
 	contractAddr := *addr
@@ -109,17 +109,17 @@ func TestEncryptSignConsentPQ_RoundTrip(t *testing.T) {
 	const alicePartyNo, bobPartyNo, consent, chainId = uint32(1), uint32(2), uint32(0), uint32(137)
 
 	// Each party derives their own PQ key pair for this consent
-	alicePriv, alicePub, err := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	alicePriv, alicePub, err := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
 	if err != nil {
 		t.Fatalf("Alice DerivePQKeyPair() failed: %v", err)
 	}
-	bobPriv, bobPub, err := DerivePQKeyPair(bobMaster, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	bobPriv, bobPub, err := DerivePQKeyPair(bobWallet, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
 	if err != nil {
 		t.Fatalf("Bob DerivePQKeyPair() failed: %v", err)
 	}
 
 	// Alice encrypts to both (Alice + Bob)
-	req, err := EncryptSignConsentPQ(aliceMaster, plaintext, bobPartyNo, consent, []*kyberKEM.PublicKey{alicePub, bobPub}, contractAddr, chainId)
+	req, err := EncryptSignConsentPQ(aliceWallet, plaintext, bobPartyNo, consent, []*kyberKEM.PublicKey{alicePub, bobPub}, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestEncryptSignConsentPQ_RoundTrip(t *testing.T) {
 	}
 
 	// Alice decrypts
-	gotAlice, err := DecryptConsentPQ(aliceMaster, req, bobPartyNo, consent, contractAddr, chainId)
+	gotAlice, err := DecryptConsentPQ(aliceWallet, req, bobPartyNo, consent, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("Alice DecryptConsentPQ() failed: %v", err)
 	}
@@ -157,20 +157,20 @@ func TestEncryptSignConsentPQ_RoundTrip(t *testing.T) {
 }
 
 func TestEncryptSignConsentPQ_WrongKey(t *testing.T) {
-	aliceMaster := mustNewMasterKey(t)
+	aliceWallet := mustNewTestWallet(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const bobPartyNo, consent, chainId = uint32(2), uint32(0), uint32(137)
 
-	_, alicePub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, alicePub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
 
-	req, err := EncryptSignConsentPQ(aliceMaster, []byte("payload"), bobPartyNo, consent, []*kyberKEM.PublicKey{alicePub}, contractAddr, chainId)
+	req, err := EncryptSignConsentPQ(aliceWallet, []byte("payload"), bobPartyNo, consent, []*kyberKEM.PublicKey{alicePub}, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
 
 	// Decrypt with wrong consent number must fail
-	_, err = DecryptConsentPQ(aliceMaster, req, bobPartyNo, consent+1, contractAddr, chainId)
+	_, err = DecryptConsentPQ(aliceWallet, req, bobPartyNo, consent+1, contractAddr, chainId)
 	if err == nil {
 		t.Error("expected error for wrong consent number, got nil")
 	}
@@ -183,23 +183,23 @@ func TestSignConsentRequest_PQ_CounterSign(t *testing.T) {
 	 * A second party calls SignConsentRequest to counter-sign a PQ consent.
 	 * After the counter-sign, two signatures must be present.
 	 */
-	aliceMaster := mustNewMasterKey(t)
-	bobMaster := mustNewMasterKey(t)
+	aliceWallet := mustNewTestWallet(t)
+	bobWallet := mustNewTestWallet(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const alicePartyNo, bobPartyNo, consent, chainId = uint32(1), uint32(2), uint32(0), uint32(137)
 
-	_, alicePub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
-	_, bobPub, _ := DerivePQKeyPair(bobMaster, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, alicePub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, bobPub, _ := DerivePQKeyPair(bobWallet, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
 
-	req, err := EncryptSignConsentPQ(aliceMaster, []byte("consent"), bobPartyNo, consent, []*kyberKEM.PublicKey{alicePub, bobPub}, contractAddr, chainId)
+	req, err := EncryptSignConsentPQ(aliceWallet, []byte("consent"), bobPartyNo, consent, []*kyberKEM.PublicKey{alicePub, bobPub}, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
 
 	// Bob counter-signs
 	reqCBOR, _ := ipfs.MarshalConsentPQ(&req.EncryptedData)
-	if err = SignConsentRequest(bobMaster, req, reqCBOR, alicePartyNo, consent, contractAddr, chainId); err != nil {
+	if err = SignConsentRequest(bobWallet, req, reqCBOR, alicePartyNo, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("Bob SignConsentRequest() failed: %v", err)
 	}
 
@@ -219,17 +219,17 @@ func TestEncryptSignRevokePQ_RoundTrip(t *testing.T) {
 	 *   3. Alice can decrypt the revoke ciphertext
 	 *   4. Bob can decrypt the revoke ciphertext directly
 	 */
-	aliceMaster := mustNewMasterKey(t)
-	bobMaster := mustNewMasterKey(t)
+	aliceWallet := mustNewTestWallet(t)
+	bobWallet := mustNewTestWallet(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const alicePartyNo, bobPartyNo, consent, chainId = uint32(1), uint32(2), uint32(0), uint32(137)
 
 	// Derive keys for consent
-	_, aliceConsentPub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
-	_, bobConsentPub, _ := DerivePQKeyPair(bobMaster, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, aliceConsentPub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, bobConsentPub, _ := DerivePQKeyPair(bobWallet, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
 
-	consentReq, err := EncryptSignConsentPQ(aliceMaster, []byte("consent payload"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceConsentPub, bobConsentPub}, contractAddr, chainId)
+	consentReq, err := EncryptSignConsentPQ(aliceWallet, []byte("consent payload"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceConsentPub, bobConsentPub}, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
@@ -245,11 +245,11 @@ func TestEncryptSignRevokePQ_RoundTrip(t *testing.T) {
 	}
 
 	// Derive keys for revoke
-	_, aliceRevokePub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
-	_, bobRevokePub, _ := DerivePQKeyPair(bobMaster, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
+	_, aliceRevokePub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
+	_, bobRevokePub, _ := DerivePQKeyPair(bobWallet, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
 
 	revokeData := []byte("revoke payload")
-	revokeReq, err := EncryptSignRevokePQ(aliceMaster, revokeData, bobPartyNo, consent, []*kyberKEM.PublicKey{aliceRevokePub, bobRevokePub}, contractAddr, chainId, consentCid.String())
+	revokeReq, err := EncryptSignRevokePQ(aliceWallet, revokeData, bobPartyNo, consent, []*kyberKEM.PublicKey{aliceRevokePub, bobRevokePub}, contractAddr, chainId, consentCid.String())
 	if err != nil {
 		t.Fatalf("EncryptSignRevokePQ() failed: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestEncryptSignRevokePQ_RoundTrip(t *testing.T) {
 	}
 
 	// Alice decrypts
-	gotAlice, err := DecryptRevokePQ(aliceMaster, revokeReq, bobPartyNo, consent, contractAddr, chainId)
+	gotAlice, err := DecryptRevokePQ(aliceWallet, revokeReq, bobPartyNo, consent, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("Alice DecryptRevokePQ() failed: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestEncryptSignRevokePQ_RoundTrip(t *testing.T) {
 	}
 
 	// Bob decrypts directly
-	bobRevokePriv, _, _ := DerivePQKeyPair(bobMaster, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
+	bobRevokePriv, _, _ := DerivePQKeyPair(bobWallet, alicePartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
 	gotBob, err := key_encapsulate.DecryptPQ(&revokeReq.EncryptedData, &contractAddr, bobRevokePriv, purposes.PulseSymmetricRevoke, chainId, consent)
 	if err != nil {
 		t.Fatalf("Bob DecryptPQ() revoke failed: %v", err)
@@ -284,19 +284,19 @@ func TestEncryptSignRevokePQ_RoundTrip(t *testing.T) {
 }
 
 func TestEncryptSignRevokePQ_WrongKey(t *testing.T) {
-	aliceMaster := mustNewMasterKey(t)
+	aliceWallet := mustNewTestWallet(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const bobPartyNo, consent, chainId = uint32(2), uint32(0), uint32(137)
 
-	_, aliceRevokePub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
+	_, aliceRevokePub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
 
-	revokeReq, err := EncryptSignRevokePQ(aliceMaster, []byte("revoke"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceRevokePub}, contractAddr, chainId, "bafyfake")
+	revokeReq, err := EncryptSignRevokePQ(aliceWallet, []byte("revoke"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceRevokePub}, contractAddr, chainId, "bafyfake")
 	if err != nil {
 		t.Fatalf("EncryptSignRevokePQ() failed: %v", err)
 	}
 
-	_, err = DecryptRevokePQ(aliceMaster, revokeReq, bobPartyNo, consent+1, contractAddr, chainId)
+	_, err = DecryptRevokePQ(aliceWallet, revokeReq, bobPartyNo, consent+1, contractAddr, chainId)
 	if err == nil {
 		t.Error("expected error for wrong consent number, got nil")
 	}
@@ -305,14 +305,14 @@ func TestEncryptSignRevokePQ_WrongKey(t *testing.T) {
 // ── CBOR round-trip for PQ wire types ─────────────────────────────────────────
 
 func TestPulseConsentRequestPQ_CBORRoundTrip(t *testing.T) {
-	aliceMaster := mustNewMasterKey(t)
+	aliceWallet := mustNewTestWallet(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const bobPartyNo, consent, chainId = uint32(2), uint32(0), uint32(137)
 
-	_, alicePub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	_, alicePub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
 
-	req, err := EncryptSignConsentPQ(aliceMaster, []byte("cbor test"), bobPartyNo, consent, []*kyberKEM.PublicKey{alicePub}, contractAddr, chainId)
+	req, err := EncryptSignConsentPQ(aliceWallet, []byte("cbor test"), bobPartyNo, consent, []*kyberKEM.PublicKey{alicePub}, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
@@ -339,15 +339,15 @@ func TestPulseConsentRequestPQ_CBORRoundTrip(t *testing.T) {
 }
 
 func TestPulseRevokeRequestPQ_CBORRoundTrip(t *testing.T) {
-	aliceMaster := mustNewMasterKey(t)
+	aliceWallet := mustNewTestWallet(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const bobPartyNo, consent, chainId = uint32(2), uint32(0), uint32(137)
 	const fakeConsentCid = "bafyreifepiu23okd26ixpwptj76hjnbkk6nofql7pojk5bxjyb6c74gbly"
 
-	_, aliceRevokePub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
+	_, aliceRevokePub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
 
-	req, err := EncryptSignRevokePQ(aliceMaster, []byte("revoke cbor"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceRevokePub}, contractAddr, chainId, fakeConsentCid)
+	req, err := EncryptSignRevokePQ(aliceWallet, []byte("revoke cbor"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceRevokePub}, contractAddr, chainId, fakeConsentCid)
 	if err != nil {
 		t.Fatalf("EncryptSignRevokePQ() failed: %v", err)
 	}
@@ -390,13 +390,13 @@ func TestRevokeSignerWasConsentSigner_PQ(t *testing.T) {
 	 *
 	 * This test uses PQ consent + PQ revoke requests to exercise the PQ wire types.
 	 */
-	aliceMaster := mustNewMasterKey(t)
+	aliceWallet := mustNewTestWallet(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
 	const bobPartyNo, consent, chainId = uint32(2), uint32(0), uint32(137)
 
-	_, aliceConsentPub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
-	consentReq, err := EncryptSignConsentPQ(aliceMaster, []byte("consent"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceConsentPub}, contractAddr, chainId)
+	_, aliceConsentPub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveConsent)
+	consentReq, err := EncryptSignConsentPQ(aliceWallet, []byte("consent"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceConsentPub}, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
@@ -404,8 +404,8 @@ func TestRevokeSignerWasConsentSigner_PQ(t *testing.T) {
 	consentCBOR, _ := ipfs.MarshalConsentPQ(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
 
-	_, aliceRevokePub, _ := DerivePQKeyPair(aliceMaster, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
-	revokeReq, err := EncryptSignRevokePQ(aliceMaster, []byte("revoke"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceRevokePub}, contractAddr, chainId, consentCid.String())
+	_, aliceRevokePub, _ := DerivePQKeyPair(aliceWallet, bobPartyNo, consent, chainId, purposes.PulsePurposePQDeriveRevoke)
+	revokeReq, err := EncryptSignRevokePQ(aliceWallet, []byte("revoke"), bobPartyNo, consent, []*kyberKEM.PublicKey{aliceRevokePub}, contractAddr, chainId, consentCid.String())
 	if err != nil {
 		t.Fatalf("EncryptSignRevokePQ() failed: %v", err)
 	}

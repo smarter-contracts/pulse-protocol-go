@@ -25,6 +25,7 @@ package crypto
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"testing"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -59,6 +60,22 @@ func mustNewMasterKey(t *testing.T) *bip32.Key {
 		t.Fatalf("NewMasterKey() failed: %v", err)
 	}
 	return key
+}
+
+// testWalletStore is an in-memory WalletStore for use in tests only.
+type testWalletStore struct {
+	key *bip32.Key
+	err error
+}
+
+func (s *testWalletStore) GetMasterKey() (*bip32.Key, error) {
+	return s.key, s.err
+}
+
+// mustNewTestWallet returns a testWalletStore backed by BIP-32 Test Vector 1.
+func mustNewTestWallet(t *testing.T) *testWalletStore {
+	t.Helper()
+	return &testWalletStore{key: mustNewMasterKey(t)}
 }
 
 // mustNewOtherPartyKey generates a fresh random secp256k1 key pair representing a
@@ -234,21 +251,21 @@ func TestPulseHDPath_String_KnownValues(t *testing.T) {
 func TestDeriveOtherPartyGenerator_Errors(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
 
-	if _, err := DeriveOtherPartyGenerator(nil, 2); err == nil {
-		t.Error("expected error for nil masterKey")
+	if _, err := DeriveOtherPartyGenerator(&testWalletStore{err: errors.New("key unavailable")}, 2); err == nil {
+		t.Error("expected error for wallet error")
 	}
-	if _, err := DeriveOtherPartyGenerator(masterKey, 0x80000000); err == nil {
+	if _, err := DeriveOtherPartyGenerator(&testWalletStore{key: masterKey}, 0x80000000); err == nil {
 		t.Error("expected error for hardened otherParty index")
 	}
-	if _, err := DeriveOtherPartyGenerator(masterKey, 0xffffffff); err == nil {
+	if _, err := DeriveOtherPartyGenerator(&testWalletStore{key: masterKey}, 0xffffffff); err == nil {
 		t.Error("expected error for max uint32 otherParty")
 	}
 }
 
 func TestDeriveOtherPartyGenerator_ReturnValue(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 
-	gen, err := DeriveOtherPartyGenerator(masterKey, 2)
+	gen, err := DeriveOtherPartyGenerator(wallet, 2)
 	if err != nil {
 		t.Fatalf("DeriveOtherPartyGenerator() failed: %v", err)
 	}
@@ -271,8 +288,8 @@ func TestDerivePublicKeyFromParent_ConsistencyWithPrivate(t *testing.T) {
 	 *     → secp256k1 private key → .PubKey()
 	 *
 	 *   Route B (public path):
-	 *     DeriveOtherPartyGenerator(masterKey, 2)          → extended public key at m/protocol'/2
-	 *     derivePublicKeyFromParent(generator, 1, 62, 1)   → public key at m/protocol'/2/1/62/1
+	 *     DeriveOtherPartyGenerator(wallet, 2)              → extended public key at m/protocol'/2
+	 *     derivePublicKeyFromParent(generator, 1, 62, 1)    → public key at m/protocol'/2/1/62/1
 	 *
 	 * Both routes must produce the same compressed public key.
 	 */
@@ -292,7 +309,7 @@ func TestDerivePublicKeyFromParent_ConsistencyWithPrivate(t *testing.T) {
 	pubFromPriv := privKey.PubKey().SerializeCompressed()
 
 	// Route B
-	gen, err := DeriveOtherPartyGenerator(masterKey, otherParty)
+	gen, err := DeriveOtherPartyGenerator(&testWalletStore{key: masterKey}, otherParty)
 	if err != nil {
 		t.Fatalf("DeriveOtherPartyGenerator() failed: %v", err)
 	}
@@ -325,7 +342,7 @@ func TestDeriveKeyFromMaster_Errors(t *testing.T) {
 
 func TestDerivePublicKeyFromParent_Errors(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
-	gen, err := DeriveOtherPartyGenerator(masterKey, 2)
+	gen, err := DeriveOtherPartyGenerator(&testWalletStore{key: masterKey}, 2)
 	if err != nil {
 		t.Fatalf("DeriveOtherPartyGenerator() failed: %v", err)
 	}
@@ -444,12 +461,13 @@ func TestDeriveKeyFromMaster_DifferentPaths(t *testing.T) {
 
 func TestEncryptConsentNotaryEC_RoundTrip(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
+	wallet := &testWalletStore{key: masterKey}
 	notaryPriv, notaryPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	plaintext := []byte("consent notary record")
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
-	result, err := EncryptConsentNotaryEC(masterKey, plaintext, otherParty, consent, notaryPub, *addr, chainId)
+	result, err := EncryptConsentNotaryEC(wallet, plaintext, otherParty, consent, notaryPub, *addr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptConsentNotaryEC() failed: %v", err)
 	}
@@ -458,7 +476,7 @@ func TestEncryptConsentNotaryEC_RoundTrip(t *testing.T) {
 	}
 
 	// Alice (HD wallet holder) decrypts via DecryptConsentNotaryEC
-	gotAlice, err := DecryptConsentNotaryEC(masterKey, result, otherParty, consent, *addr, chainId)
+	gotAlice, err := DecryptConsentNotaryEC(wallet, result, otherParty, consent, *addr, chainId)
 	if err != nil {
 		t.Fatalf("DecryptConsentNotaryEC() failed: %v", err)
 	}
@@ -478,12 +496,13 @@ func TestEncryptConsentNotaryEC_RoundTrip(t *testing.T) {
 
 func TestEncryptRevokeNotaryEC_RoundTrip(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
+	wallet := &testWalletStore{key: masterKey}
 	notaryPriv, notaryPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	plaintext := []byte("revoke notary record")
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
-	result, err := EncryptRevokeNotaryEC(masterKey, plaintext, otherParty, consent, notaryPub, *addr, chainId)
+	result, err := EncryptRevokeNotaryEC(wallet, plaintext, otherParty, consent, notaryPub, *addr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptRevokeNotaryEC() failed: %v", err)
 	}
@@ -492,7 +511,7 @@ func TestEncryptRevokeNotaryEC_RoundTrip(t *testing.T) {
 	}
 
 	// Alice (HD wallet holder) decrypts via DecryptRevokeNotaryEC
-	gotAlice, err := DecryptRevokeNotaryEC(masterKey, result, otherParty, consent, *addr, chainId)
+	gotAlice, err := DecryptRevokeNotaryEC(wallet, result, otherParty, consent, *addr, chainId)
 	if err != nil {
 		t.Fatalf("DecryptRevokeNotaryEC() failed: %v", err)
 	}
@@ -525,6 +544,7 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 	 *   5. A second call to SignConsentEC appends an additional signature (grantor counter-signs)
 	 */
 	masterKey := mustNewMasterKey(t)
+	wallet := &testWalletStore{key: masterKey}
 	bobPriv, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
@@ -532,7 +552,7 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
 
 	// Step 1 & 2: encrypt + sign
-	request, err := EncryptSignConsentEC(masterKey, plaintext, otherParty, consent, bobPub, contractAddr, chainId)
+	request, err := EncryptSignConsentEC(wallet, plaintext, otherParty, consent, bobPub, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
@@ -568,7 +588,7 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 	t.Logf("Recovered signing address: %s", hex.EncodeToString(recoveredAddr[:]))
 
 	// Step 5: A second party counter-signs (appends a second signature)
-	if err = SignConsentRequest(masterKey, request, signingCBOR, otherParty, consent, contractAddr, chainId); err != nil {
+	if err = SignConsentRequest(wallet, request, signingCBOR, otherParty, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("second SignConsentRequest() failed: %v", err)
 	}
 	if len(request.Signatures) != 2 {
@@ -580,6 +600,7 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 
 func TestSignConsentRequest_OnExistingRequest(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
+	wallet := &testWalletStore{key: masterKey}
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	contractAddr := *addr
@@ -588,7 +609,7 @@ func TestSignConsentRequest_OnExistingRequest(t *testing.T) {
 	request := &types.PulseConsentRequestEC{}
 
 	// Build a request with only encrypted data (no signature yet)
-	result, err := EncryptConsentNotaryEC(masterKey, []byte("data"), otherParty, consent, bobPub, contractAddr, chainId)
+	result, err := EncryptConsentNotaryEC(wallet, []byte("data"), otherParty, consent, bobPub, contractAddr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptConsentNotaryEC() failed: %v", err)
 	}
@@ -599,7 +620,7 @@ func TestSignConsentRequest_OnExistingRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarshalConsentEC() failed: %v", err)
 	}
-	if err = SignConsentRequest(masterKey, request, reqCBOR, otherParty, consent, contractAddr, chainId); err != nil {
+	if err = SignConsentRequest(wallet, request, reqCBOR, otherParty, consent, contractAddr, chainId); err != nil {
 		t.Fatalf("SignConsentRequest() failed: %v", err)
 	}
 	if len(request.Signatures) != 1 {
