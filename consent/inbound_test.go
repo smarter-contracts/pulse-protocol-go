@@ -28,8 +28,8 @@ var inboundTestSenderSeed = []byte{
 // sealPayload encrypts payload to the engine wallet's consent structure key and
 // returns an InboundConsentRequest suitable for HandleInboundConsent.
 //
-// The engine's cpDir stub always returns otherpartyId=0, so the engine decrypts
-// using the key at m/4410704'/0/{chainId}/{consentNo}/3.  A fixed sender wallet
+// The engine's cpDir stub always returns otherpartyId=1, so the engine decrypts
+// using the key at m/4410704'/1/{chainId}/{consentNo}/3.  A fixed sender wallet
 // (inboundTestSenderSeed) is used to keep tests deterministic.
 func sealPayload(t *testing.T, payload *feedpermission.FeedPermissionPayload, engineWallet *stubWalletStore) InboundConsentRequest {
 	t.Helper()
@@ -40,8 +40,8 @@ func sealPayload(t *testing.T, payload *feedpermission.FeedPermissionPayload, en
 	}
 
 	// Derive the engine's consent structure encryption public key.
-	// Path: m/4410704'/0/{chainId}/{consentNo}/3 (otherpartyId=0, chainId=1).
-	engineXpub, err := ppcrypto.DeriveOtherPartyXpub(engineWallet, 0)
+	// Path: m/4410704'/1/{chainId}/{consentNo}/3 (otherpartyId=1, chainId=1).
+	engineXpub, err := ppcrypto.DeriveOtherPartyXpub(engineWallet, 1)
 	if err != nil {
 		t.Fatalf("DeriveOtherPartyXpub: %v", err)
 	}

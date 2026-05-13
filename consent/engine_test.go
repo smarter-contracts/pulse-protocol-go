@@ -167,7 +167,7 @@ type stubCounterpartyDirectory struct {
 	xpub string // if non-empty, returned by GetXpub (found=true)
 }
 
-func (s *stubCounterpartyDirectory) GetOrAssignIndex(_ string) (int, error) { return 0, nil }
+func (s *stubCounterpartyDirectory) GetOrAssignIndex(_ string) (int, error) { return 1, nil }
 func (s *stubCounterpartyDirectory) GetXpub(_ string) (string, bool, error) {
 	if s.xpub == "" {
 		return "", false, nil

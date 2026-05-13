@@ -135,6 +135,10 @@ func deriveKeyFromMaster(masterKey *bip32.Key, path *pulseHDPath) (*secp.Private
 // deriveOtherPartyKey derives the extended public key at m/4410704'/otherParty.
 // This key can be shared with the counterparty so they can derive all child public
 // keys for this slot without access to private key material.
+//
+// otherParty == 0 is a sentinel: the function returns the root protocol xpub at
+// m/4410704' without an additional child derivation. This root xpub is passed to
+// mid-tier for consent lookup via address enumeration (Synchronize flow).
 func deriveOtherPartyKey(masterKey *bip32.Key, otherParty uint32) (*bip32.Key, error) {
 	if masterKey == nil {
 		return nil, errors.New("masterKey cannot be nil")
@@ -146,6 +150,9 @@ func deriveOtherPartyKey(masterKey *bip32.Key, otherParty uint32) (*bip32.Key, e
 	key, err := masterKey.NewChildKey(pulseProtocolIdentifier)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive protocol key: %w", err)
+	}
+	if otherParty == 0 {
+		return key.PublicKey(), nil
 	}
 	key, err = key.NewChildKey(otherParty)
 	if err != nil {

@@ -2,8 +2,6 @@ package consent
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -59,9 +57,14 @@ func (e *ConsentEngine) HandleInboundConsent(ctx context.Context, req InboundCon
 		return InboundConsentResponse{}, fmt.Errorf("consent: marshal sealed record: %w", err)
 	}
 
+	cid, err := ipfs.ComputeCID(sealedBytes)
+	if err != nil {
+		return InboundConsentResponse{}, fmt.Errorf("consent: compute CID: %w", err)
+	}
+
 	now := time.Now().UTC()
 	record := &ConsentRecord{
-		ID:          newConsentID(),
+		ID:          cid,
 		PartyKey:    req.PartyKey,
 		FeedType:    payload.FeedType,
 		ConsentNo:   req.ConsentNo,
@@ -162,10 +165,3 @@ func marshalSealedRecord(req InboundConsentRequest) ([]byte, error) {
 	return b, nil
 }
 
-// newConsentID returns a random 16-byte hex string suitable for use as a
-// ConsentRecord.ID within a single node's store.
-func newConsentID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}

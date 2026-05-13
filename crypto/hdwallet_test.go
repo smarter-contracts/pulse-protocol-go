@@ -598,6 +598,57 @@ func TestEncryptSignConsentEC_RoundTrip(t *testing.T) {
 
 // ── SignConsentRequest on pre-built request ───────────────────────────────────────────
 
+// ── DeriveOtherPartyXpub ─────────────────────────────────────────────────────
+
+func TestDeriveOtherPartyXpub_ZeroIsSentinel(t *testing.T) {
+	// otherParty==0 is a sentinel: returns xpub at m/CMP' without an extra child
+	// derivation. Deriving child(1) from it must equal DeriveOtherPartyXpub(wallet,1).
+	wallet := mustNewTestWallet(t)
+
+	rootXpub, err := DeriveOtherPartyXpub(wallet, 0)
+	if err != nil {
+		t.Fatalf("DeriveOtherPartyXpub(0) failed: %v", err)
+	}
+	xpub1, err := DeriveOtherPartyXpub(wallet, 1)
+	if err != nil {
+		t.Fatalf("DeriveOtherPartyXpub(1) failed: %v", err)
+	}
+
+	root, err := bip32.B58Deserialize(rootXpub)
+	if err != nil {
+		t.Fatalf("B58Deserialize(root) failed: %v", err)
+	}
+	child1, err := root.NewChildKey(1)
+	if err != nil {
+		t.Fatalf("root.NewChildKey(1) failed: %v", err)
+	}
+	key1, err := bip32.B58Deserialize(xpub1)
+	if err != nil {
+		t.Fatalf("B58Deserialize(xpub1) failed: %v", err)
+	}
+
+	if !bytes.Equal(child1.PublicKey().Key, key1.Key) {
+		t.Error("child(1) derived from sentinel xpub does not match DeriveOtherPartyXpub(wallet, 1)")
+	}
+}
+
+func TestDeriveOtherPartyXpub_NonZeroUnchanged(t *testing.T) {
+	// Non-zero indices should still produce distinct xpubs.
+	wallet := mustNewTestWallet(t)
+
+	xpub1, err := DeriveOtherPartyXpub(wallet, 1)
+	if err != nil {
+		t.Fatalf("DeriveOtherPartyXpub(1): %v", err)
+	}
+	xpub2, err := DeriveOtherPartyXpub(wallet, 2)
+	if err != nil {
+		t.Fatalf("DeriveOtherPartyXpub(2): %v", err)
+	}
+	if xpub1 == xpub2 {
+		t.Error("different otherParty indices must produce different xpubs")
+	}
+}
+
 func TestSignConsentRequest_OnExistingRequest(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
 	wallet := &testWalletStore{key: masterKey}

@@ -29,12 +29,13 @@ type ConsentStructure struct {
 	Key2    string `json:"key2"`    // Base64-encoded second party public key
 }
 
-// MarshalJSON and UnmarshalJSON use the struct tags directly.
+// MarshalJSON serialises ConsentStructure to JSON using struct field tags.
 func (c *ConsentStructure) MarshalJSON() ([]byte, error) {
 	type Alias ConsentStructure
 	return json.Marshal((*Alias)(c))
 }
 
+// UnmarshalJSON deserialises JSON into ConsentStructure using struct field tags.
 func (c *ConsentStructure) UnmarshalJSON(data []byte) error {
 	type Alias ConsentStructure
 	return json.Unmarshal(data, (*Alias)(c))
@@ -54,11 +55,13 @@ type RevokeStructure struct {
 	GrantRef string `json:"grant_ref"`  // CID of the original consent being revoked
 }
 
+// MarshalJSON serialises RevokeStructure to JSON using struct field tags.
 func (r *RevokeStructure) MarshalJSON() ([]byte, error) {
 	type Alias RevokeStructure
 	return json.Marshal((*Alias)(r))
 }
 
+// UnmarshalJSON deserialises JSON into RevokeStructure using struct field tags.
 func (r *RevokeStructure) UnmarshalJSON(data []byte) error {
 	type Alias RevokeStructure
 	return json.Unmarshal(data, (*Alias)(r))
@@ -81,11 +84,13 @@ type ConsentStructureMulti struct {
 	Keys    []string `json:"keys"`    // Base64-encoded encapsulated keys, one per recipient
 }
 
+// MarshalJSON serialises ConsentStructureMulti to JSON using struct field tags.
 func (c *ConsentStructureMulti) MarshalJSON() ([]byte, error) {
 	type Alias ConsentStructureMulti
 	return json.Marshal((*Alias)(c))
 }
 
+// UnmarshalJSON deserialises JSON into ConsentStructureMulti using struct field tags.
 func (c *ConsentStructureMulti) UnmarshalJSON(data []byte) error {
 	type Alias ConsentStructureMulti
 	return json.Unmarshal(data, (*Alias)(c))
@@ -104,11 +109,13 @@ type RevokeStructureMulti struct {
 	GrantRef string   `json:"grant_ref"` // CID of the original consent being revoked
 }
 
+// MarshalJSON serialises RevokeStructureMulti to JSON using struct field tags.
 func (r *RevokeStructureMulti) MarshalJSON() ([]byte, error) {
 	type Alias RevokeStructureMulti
 	return json.Marshal((*Alias)(r))
 }
 
+// UnmarshalJSON deserialises JSON into RevokeStructureMulti using struct field tags.
 func (r *RevokeStructureMulti) UnmarshalJSON(data []byte) error {
 	type Alias RevokeStructureMulti
 	return json.Unmarshal(data, (*Alias)(r))
