@@ -5,6 +5,26 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-05-13
+
+### Changed
+
+- **Breaking (call signatures):** All HD wallet functions that previously accepted a `*bip32.Key`
+  master key now accept a `WalletStore` interface instead. Callers must implement `WalletStore`
+  (single method `GetMasterKey() (*bip32.Key, error)`) rather than constructing and passing a raw
+  key. Affected functions include `EncryptSignConsentEC`, `DecryptConsentEC`,
+  `EncryptSignConsentPQ`, `DecryptConsentPQ`, `EncryptSignRevokeEC`, `DecryptRevokeEC`,
+  `EncryptSignRevokePQ`, `DecryptRevokePQ`, `SignConsentRequest`, `SignRevokeRequest`, and the
+  `DerivePQ*` family. This change enables wallet implementations that derive keys on demand
+  (e.g. from a vault or HSM) without exposing the master key material to call sites.
+
+- **Breaking (`DeriveOtherPartyXpub` sentinel):** `DeriveOtherPartyXpub(wallet, 0)` previously
+  derived the child key at unhardened index 0 (`m/CMP'/0`). It now treats `otherParty == 0` as a
+  sentinel and returns the root protocol xpub at `m/CMP'` without an additional child derivation.
+  This root xpub is passed to mid-tier for consent lookup via HD address enumeration (used in the
+  `Synchronize` flow of `pulse-consent-core`). Callers using real counterparty indices (≥ 1) are
+  unaffected.
+
 ## [1.1.0] - 2026-04-09
 
 ### Changed
