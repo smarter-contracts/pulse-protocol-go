@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto"
+	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 	"github.com/smarter-contracts/pulse-protocol-go/types"
 )

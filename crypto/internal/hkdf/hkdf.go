@@ -9,10 +9,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/wipe"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/hash"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/symmetric"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/textformat"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/wipe"
 
 	"golang.org/x/crypto/hkdf"
 	"golang.org/x/crypto/sha3"

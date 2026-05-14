@@ -27,8 +27,8 @@ import (
 	"log"
 
 	bip32 "github.com/jamesradley/go-bip32"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 )
 

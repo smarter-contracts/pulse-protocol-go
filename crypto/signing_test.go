@@ -8,8 +8,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/symmetric"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/symmetric"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/textformat"
 )
 
 /* Test pack for the signing code. This consists of a set of known value tests which can be copied to other

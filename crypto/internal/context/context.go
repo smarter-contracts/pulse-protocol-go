@@ -7,7 +7,7 @@ package context
 import (
 	"fmt"
 
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/hash"
 )
 
 // ContextString builds a human-readable string representing the encryption context.

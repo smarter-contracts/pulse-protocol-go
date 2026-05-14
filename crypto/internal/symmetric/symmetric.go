@@ -16,10 +16,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/randutil"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/hash"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/randutil"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/textformat"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
 )
 
 const (

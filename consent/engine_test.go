@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	bip32 "github.com/jamesradley/go-bip32"
-	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto"
+	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 )
 
 // ── NewConsentEngine ──────────────────────────────────────────────────────────
