@@ -87,16 +87,12 @@ func main() {
 
 	alice, err := newWallet("Alice")
 	must("create Alice's wallet", err)
-	aliceMasterKey, err := alice.GetMasterKey()
-	must("get Alice's master key", err)
 
 	// ── Step 2: Create Bob's wallet ───────────────────────────────────────────
 	section("2. Create Bob's wallet")
 
 	bob, err := newWallet("Bob")
 	must("create Bob's wallet", err)
-	bobMasterKey, err := bob.GetMasterKey()
-	must("get Bob's master key", err)
 
 	// ── Step 3: Each party derives and shares their ML-KEM consent public key ─
 	//
@@ -113,7 +109,7 @@ func main() {
 	// She uses bobPartyNo here because she is deriving her own key in her own wallet
 	// (Alice identifies Bob as party #2 in her wallet).
 	aliceConsentPriv, aliceConsentPub, err := crypto.DerivePQKeyPair(
-		aliceMasterKey, bobPartyNo, consentNumber, chainId,
+		alice, bobPartyNo, consentNumber, chainId,
 		purposes.PulsePurposePQDeriveConsent,
 	)
 	must("Alice: DerivePQKeyPair (consent)", err)
@@ -121,7 +117,7 @@ func main() {
 
 	// Bob derives his consent ML-KEM key pair
 	_, bobConsentPub, err := crypto.DerivePQKeyPair(
-		bobMasterKey, alicePartyNo, consentNumber, chainId,
+		bob, alicePartyNo, consentNumber, chainId,
 		purposes.PulsePurposePQDeriveConsent,
 	)
 	must("Bob: DerivePQKeyPair (consent)", err)
@@ -140,7 +136,7 @@ func main() {
 	fmt.Printf("  Plaintext (%d bytes): %s\n", len(consentData), consentData)
 
 	consentRequest, err := crypto.EncryptSignConsentPQ(
-		aliceMasterKey,
+		alice,
 		consentData,
 		bobPartyNo,
 		consentNumber,
@@ -168,7 +164,7 @@ func main() {
 	section("5. Bob counter-signs the consent record")
 
 	must("Bob: SignConsentRequest", crypto.SignConsentRequest(
-		bobMasterKey,
+		bob,
 		consentRequest,
 		consentCBOR,
 		alicePartyNo,
@@ -186,7 +182,7 @@ func main() {
 	section("6. Both parties decrypt the consent record")
 
 	decryptedByAlice, err := crypto.DecryptConsentPQ(
-		aliceMasterKey,
+		alice,
 		consentRequest,
 		bobPartyNo,
 		consentNumber,
@@ -197,7 +193,7 @@ func main() {
 	fmt.Printf("  [Alice] Decrypted: %s\n", decryptedByAlice)
 
 	decryptedByBob, err := crypto.DecryptConsentPQ(
-		bobMasterKey,
+		bob,
 		consentRequest,
 		alicePartyNo,
 		consentNumber,
@@ -229,12 +225,12 @@ func main() {
 	section("8. Both parties derive their ML-KEM revoke public keys")
 
 	_, aliceRevokePub, err := crypto.DerivePQKeyPair(
-		aliceMasterKey, bobPartyNo, consentNumber, chainId,
+		alice, bobPartyNo, consentNumber, chainId,
 		purposes.PulsePurposePQDeriveRevoke,
 	)
 	must("Alice: DerivePQKeyPair (revoke)", err)
 	_, bobRevokePub, err := crypto.DerivePQKeyPair(
-		bobMasterKey, alicePartyNo, consentNumber, chainId,
+		bob, alicePartyNo, consentNumber, chainId,
 		purposes.PulsePurposePQDeriveRevoke,
 	)
 	must("Bob: DerivePQKeyPair (revoke)", err)
@@ -248,7 +244,7 @@ func main() {
 	fmt.Printf("  Revoke data (%d bytes): %s\n", len(revokeData), revokeData)
 
 	revokeRequest, err := crypto.EncryptSignRevokePQ(
-		aliceMasterKey,
+		alice,
 		revokeData,
 		bobPartyNo,
 		consentNumber,

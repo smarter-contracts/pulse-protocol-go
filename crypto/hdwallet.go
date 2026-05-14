@@ -132,6 +132,35 @@ func deriveKeyFromMaster(masterKey *bip32.Key, path *pulseHDPath) (*secp.Private
 	return privKey, nil
 }
 
+// deriveOtherPartyKey derives the extended public key at m/4410704'/otherParty.
+// This key can be shared with the counterparty so they can derive all child public
+// keys for this slot without access to private key material.
+//
+// otherParty == 0 is a sentinel: the function returns the root protocol xpub at
+// m/4410704' without an additional child derivation. This root xpub is passed to
+// mid-tier for consent lookup via address enumeration (Synchronize flow).
+func deriveOtherPartyKey(masterKey *bip32.Key, otherParty uint32) (*bip32.Key, error) {
+	if masterKey == nil {
+		return nil, errors.New("masterKey cannot be nil")
+	}
+	if otherParty >= 0x80000000 {
+		return nil, errors.New("otherParty must be a normal (non-hardened) key index")
+	}
+
+	key, err := masterKey.NewChildKey(pulseProtocolIdentifier)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive protocol key: %w", err)
+	}
+	if otherParty == 0 {
+		return key.PublicKey(), nil
+	}
+	key, err = key.NewChildKey(otherParty)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive otherparty key: %w", err)
+	}
+	return key.PublicKey(), nil
+}
+
 // DerivePublicKeyFromParent derives a public key from an extended public key returned
 // by DeriveOtherPartyGenerator.  It follows the non-hardened portion of the Pulse HD
 // path (chain/consent/purpose), allowing one party to compute the other party's
@@ -186,33 +215,34 @@ func derivePublicKeyFromParent(parentKey *bip32.Key, chain uint32, consent uint3
 	return pubKey, nil
 }
 
-// DeriveOtherPartyGenerator derives the public key generator for a specific other party.
-// This is the key at path m/protocol'/otherparty which can be used to derive
-// public keys for that party without knowing their private keys.
-func DeriveOtherPartyGenerator(masterKey *bip32.Key, otherParty uint32) (*bip32.Key, error) {
-	if masterKey == nil {
-		return nil, errors.New("masterKey cannot be nil")
-	}
-	if otherParty >= 0x80000000 {
-		return nil, errors.New("otherParty must be a normal (non-hardened) key index")
-	}
-
-	// Derive: m/protocol'
-	key, err := masterKey.NewChildKey(pulseProtocolIdentifier)
+// DeriveOtherPartyGenerator derives the extended public key at m/4410704'/otherParty.
+// This key can be shared with the counterparty to allow them to derive all child public
+// keys for this slot without access to private key material.
+func DeriveOtherPartyGenerator(wallet WalletStore, otherParty uint32) (*bip32.Key, error) {
+	masterKey, err := wallet.GetMasterKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive protocol key: %w", err)
+		return nil, fmt.Errorf("DeriveOtherPartyGenerator: get master key: %w", err)
 	}
-
-	// Derive: m/protocol'/otherparty
-	key, err = key.NewChildKey(otherParty)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive otherparty key: %w", err)
-	}
-
-	return key.PublicKey(), nil
+	return deriveOtherPartyKey(masterKey, otherParty)
 }
 
-// DerivePQKeyPair deterministically derives an ML-KEM-768 key pair from a BIP-32
+// DeriveOtherPartyXpub returns the base58-encoded extended public key at
+// m/4410704'/otherParty.  This xpub is shared during counterparty pairing so
+// the other party can derive all child public keys for this slot without access
+// to private key material.  otherParty 0 is the root index used for mid-tier routing.
+func DeriveOtherPartyXpub(wallet WalletStore, otherParty uint32) (string, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return "", fmt.Errorf("DeriveOtherPartyXpub: get master key: %w", err)
+	}
+	gen, err := deriveOtherPartyKey(masterKey, otherParty)
+	if err != nil {
+		return "", fmt.Errorf("DeriveOtherPartyXpub: %w", err)
+	}
+	return gen.String(), nil
+}
+
+// DerivePQKeyPair deterministically derives an ML-KEM-768 key pair from the wallet's
 // master key.  The derivation follows the standard Pulse HD path:
 //
 //	m/4410704'/otherPartyNo/chainId/consentNumber/purpose
@@ -230,6 +260,21 @@ func DeriveOtherPartyGenerator(masterKey *bip32.Key, otherParty uint32) (*bip32.
 // key).  The private key must be kept secret; the public key may be shared with
 // other parties so they can encrypt to this wallet.
 func DerivePQKeyPair(
+	wallet WalletStore,
+	otherPartyNo uint32,
+	consentNumber uint32,
+	chainId uint32,
+	purpose purposes.PulsePurpose,
+) (*kyberKEM.PrivateKey, *kyberKEM.PublicKey, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, nil, fmt.Errorf("DerivePQKeyPair: get master key: %w", err)
+	}
+	return derivePQKeyPair(masterKey, otherPartyNo, consentNumber, chainId, purpose)
+}
+
+// derivePQKeyPair is the internal implementation of DerivePQKeyPair.
+func derivePQKeyPair(
 	masterKey *bip32.Key,
 	otherPartyNo uint32,
 	consentNumber uint32,
@@ -279,7 +324,7 @@ func DerivePQKeyPair(
 
 // EncryptSignConsentEC encrypts consent data to the other party using ECDH and
 // appends an EIP-191 signature over the CID of the encrypted payload.
-func EncryptSignConsentEC(masterKey *bip32.Key,
+func EncryptSignConsentEC(wallet WalletStore,
 	consentData []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
@@ -287,6 +332,10 @@ func EncryptSignConsentEC(masterKey *bip32.Key,
 	contractAddress string,
 	chainId uint32,
 ) (*types.PulseConsentRequestEC, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("EncryptSignConsentEC: get master key: %w", err)
+	}
 	encryptedConsentData, err := encryptEC(masterKey, consentData, otherPartyNo, consentNumber, otherPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
 	if err != nil {
 		return nil, errors.New("failed to encrypt consent data: " + err.Error())
@@ -298,7 +347,7 @@ func EncryptSignConsentEC(masterKey *bip32.Key,
 	}
 
 	returnValue := &types.PulseConsentRequestEC{EncryptedData: *encryptedConsentData}
-	if err := SignConsentRequest(masterKey, returnValue, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignConsentRequest(wallet, returnValue, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
 		return nil, err
 	}
 	return returnValue, nil
@@ -307,7 +356,7 @@ func EncryptSignConsentEC(masterKey *bip32.Key,
 // EncryptConsentNotaryEC encrypts consent notary data to the notary's public key
 // using ECDH at purpose 2 (EncryptConsentNotaryBlock).
 func EncryptConsentNotaryEC(
-	masterKey *bip32.Key,
+	wallet WalletStore,
 	notaryData []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
@@ -315,31 +364,43 @@ func EncryptConsentNotaryEC(
 	contractAddress string,
 	chainId uint32,
 ) (*types.PulseECEncryptionResult, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("EncryptConsentNotaryEC: get master key: %w", err)
+	}
 	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptConsentNotaryBlock)
 }
 
 // DecryptConsentNotaryEC derives the consent notary encryption key from the HD wallet
 // and decrypts a notary block produced by EncryptConsentNotaryEC.
-func DecryptConsentNotaryEC(masterKey *bip32.Key,
+func DecryptConsentNotaryEC(wallet WalletStore,
 	encryptedData *types.PulseECEncryptionResult,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
 ) ([]byte, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("DecryptConsentNotaryEC: get master key: %w", err)
+	}
 	return decryptHDEC(masterKey, encryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptConsentNotaryBlock)
 }
 
 // DecryptConsentEC derives the consent encryption key from the HD wallet and decrypts
 // the consent payload.  The caller must have been one of the two parties to the
 // original encryption (Key1 or Key2 in the EncryptedData).
-func DecryptConsentEC(masterKey *bip32.Key,
+func DecryptConsentEC(wallet WalletStore,
 	request *types.PulseConsentRequestEC,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
 ) ([]byte, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("DecryptConsentEC: get master key: %w", err)
+	}
 	return decryptHDEC(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptConsentStructure)
 }
 
@@ -355,7 +416,7 @@ func DecryptConsentEC(masterKey *bip32.Key,
 // that should be able to decrypt the record.  Typically this is [alicePubKey,
 // bobPubKey] derived via DerivePQKeyPair on each wallet.
 func EncryptSignConsentPQ(
-	masterKey *bip32.Key,
+	wallet WalletStore,
 	consentData []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
@@ -374,7 +435,7 @@ func EncryptSignConsentPQ(
 	}
 
 	req := &types.PulseConsentRequestPQ{EncryptedData: *encryptedData}
-	if err := SignConsentRequest(masterKey, req, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignConsentRequest(wallet, req, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
 		return nil, err
 	}
 	return req, nil
@@ -383,13 +444,17 @@ func EncryptSignConsentPQ(
 // DecryptConsentPQ derives the caller's ML-KEM private key from the HD wallet
 // and decrypts the consent payload.
 func DecryptConsentPQ(
-	masterKey *bip32.Key,
+	wallet WalletStore,
 	request *types.PulseConsentRequestPQ,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
 ) ([]byte, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("DecryptConsentPQ: get master key: %w", err)
+	}
 	return decryptHDPQ(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposePQDeriveConsent, purposes.PulseSymmetricConsent)
 }
 
@@ -398,7 +463,7 @@ func DecryptConsentPQ(
 // EncryptSignRevokeEC encrypts revoke data and produces a signed PulseRevokeRequestEC.
 // consentCid is the CID of the original consent's encrypted-data CBOR (stored in
 // PulseConsentRequestEC.EncryptedData after marshalling).
-func EncryptSignRevokeEC(masterKey *bip32.Key,
+func EncryptSignRevokeEC(wallet WalletStore,
 	revokeData []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
@@ -407,6 +472,10 @@ func EncryptSignRevokeEC(masterKey *bip32.Key,
 	chainId uint32,
 	consentCid string,
 ) (*types.PulseRevokeRequestEC, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("EncryptSignRevokeEC: get master key: %w", err)
+	}
 	encryptedRevokeData, err := encryptEC(masterKey, revokeData, otherPartyNo, consentNumber, otherPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
 	if err != nil {
 		return nil, errors.New("failed to encrypt revoke data: " + err.Error())
@@ -421,7 +490,7 @@ func EncryptSignRevokeEC(masterKey *bip32.Key,
 		ConsentCid:    consentCid,
 		EncryptedData: *encryptedRevokeData,
 	}
-	if err := SignRevokeRequest(masterKey, returnValue, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignRevokeRequest(wallet, returnValue, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
 		return nil, err
 	}
 	return returnValue, nil
@@ -430,7 +499,7 @@ func EncryptSignRevokeEC(masterKey *bip32.Key,
 // EncryptRevokeNotaryEC encrypts revoke notary data to the notary's public key
 // using ECDH at purpose 4 (EncryptRevokeNotaryBlock).
 func EncryptRevokeNotaryEC(
-	masterKey *bip32.Key,
+	wallet WalletStore,
 	notaryData []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
@@ -438,30 +507,42 @@ func EncryptRevokeNotaryEC(
 	contractAddress string,
 	chainId uint32,
 ) (*types.PulseECEncryptionResult, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("EncryptRevokeNotaryEC: get master key: %w", err)
+	}
 	return encryptEC(masterKey, notaryData, otherPartyNo, consentNumber, notaryPubKey, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeNotaryBlock)
 }
 
 // DecryptRevokeNotaryEC derives the revoke notary encryption key from the HD wallet
 // and decrypts a notary block produced by EncryptRevokeNotaryEC.
-func DecryptRevokeNotaryEC(masterKey *bip32.Key,
+func DecryptRevokeNotaryEC(wallet WalletStore,
 	encryptedData *types.PulseECEncryptionResult,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
 ) ([]byte, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("DecryptRevokeNotaryEC: get master key: %w", err)
+	}
 	return decryptHDEC(masterKey, encryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeNotaryBlock)
 }
 
 // DecryptRevokeEC derives the revoke encryption key from the HD wallet and decrypts
 // the revoke payload.
-func DecryptRevokeEC(masterKey *bip32.Key,
+func DecryptRevokeEC(wallet WalletStore,
 	request *types.PulseRevokeRequestEC,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
 ) ([]byte, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("DecryptRevokeEC: get master key: %w", err)
+	}
 	return decryptHDEC(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptRevokeStructure)
 }
 
@@ -471,7 +552,7 @@ func DecryptRevokeEC(masterKey *bip32.Key,
 // recipients, then appends an EIP-191 secp256k1 signature that binds the
 // revoke to the original consent CID.
 func EncryptSignRevokePQ(
-	masterKey *bip32.Key,
+	wallet WalletStore,
 	revokeData []byte,
 	otherPartyNo uint32,
 	consentNumber uint32,
@@ -494,7 +575,7 @@ func EncryptSignRevokePQ(
 		ConsentCid:    consentCid,
 		EncryptedData: *encryptedData,
 	}
-	if err := SignRevokeRequest(masterKey, req, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
+	if err := SignRevokeRequest(wallet, req, cbor, otherPartyNo, consentNumber, contractAddress, chainId); err != nil {
 		return nil, err
 	}
 	return req, nil
@@ -503,13 +584,17 @@ func EncryptSignRevokePQ(
 // DecryptRevokePQ derives the caller's ML-KEM private key from the HD wallet
 // and decrypts the revoke payload.
 func DecryptRevokePQ(
-	masterKey *bip32.Key,
+	wallet WalletStore,
 	request *types.PulseRevokeRequestPQ,
 	otherPartyNo uint32,
 	consentNumber uint32,
 	contractAddress string,
 	chainId uint32,
 ) ([]byte, error) {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("DecryptRevokePQ: get master key: %w", err)
+	}
 	return decryptHDPQ(masterKey, &request.EncryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposePQDeriveRevoke, purposes.PulseSymmetricRevoke)
 }
 
@@ -519,7 +604,7 @@ func DecryptRevokePQ(
 // consent request type (EC or PQ).  encryptedDataCBOR must be the DAG-CBOR
 // encoding of the encrypted payload (e.g. from ipfs.MarshalConsentEC); its CID
 // is what gets signed.
-func SignConsentRequest(masterKey *bip32.Key,
+func SignConsentRequest(wallet WalletStore,
 	request SignableConsent,
 	encryptedDataCBOR []byte,
 	otherPartyNo uint32,
@@ -527,6 +612,10 @@ func SignConsentRequest(masterKey *bip32.Key,
 	contractAddress string,
 	chainId uint32,
 ) error {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return fmt.Errorf("SignConsentRequest: get master key: %w", err)
+	}
 	cid, err := ipfs.GetCid(encryptedDataCBOR)
 	if err != nil {
 		return errors.New("failed to get cid: " + err.Error())
@@ -553,7 +642,7 @@ func SignConsentRequest(masterKey *bip32.Key,
 // encoding of the revoke structure (e.g. from ipfs.MarshalRevokeEC); its CID,
 // together with the original consent CID from request.GetConsentCid(), is what
 // gets signed, binding the revocation cryptographically to both records.
-func SignRevokeRequest(masterKey *bip32.Key,
+func SignRevokeRequest(wallet WalletStore,
 	request SignableRevoke,
 	encryptedDataCBOR []byte,
 	otherPartyNo uint32,
@@ -561,6 +650,10 @@ func SignRevokeRequest(masterKey *bip32.Key,
 	contractAddress string,
 	chainId uint32,
 ) error {
+	masterKey, err := wallet.GetMasterKey()
+	if err != nil {
+		return fmt.Errorf("SignRevokeRequest: get master key: %w", err)
+	}
 	revokeCid, err := ipfs.GetCid(encryptedDataCBOR)
 	if err != nil {
 		return errors.New("failed to get revoke cid: " + err.Error())
@@ -639,7 +732,7 @@ func decryptHDPQ(
 	derivePurpose purposes.PulsePurpose,
 	symPurpose purposes.PulsePurpose,
 ) ([]byte, error) {
-	privKey, _, err := DerivePQKeyPair(masterKey, otherPartyNo, consentNumber, chainId, derivePurpose)
+	privKey, _, err := derivePQKeyPair(masterKey, otherPartyNo, consentNumber, chainId, derivePurpose)
 	if err != nil {
 		return nil, errors.New("failed to derive PQ decryption key: " + err.Error())
 	}

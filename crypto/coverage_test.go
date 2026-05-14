@@ -26,7 +26,7 @@ import (
 
 func TestDerivePublicKeyFromParent_Success(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
-	gen, err := DeriveOtherPartyGenerator(masterKey, 2)
+	gen, err := DeriveOtherPartyGenerator(&testWalletStore{key: masterKey}, 2)
 	if err != nil {
 		t.Fatalf("DeriveOtherPartyGenerator() failed: %v", err)
 	}
@@ -58,9 +58,9 @@ func TestEncryptSignConsentEC_NilMasterKey(t *testing.T) {
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	_, err := EncryptSignConsentEC(nil, []byte("data"), 2, 62, bobPub, *addr, 1)
+	_, err := EncryptSignConsentEC(&testWalletStore{err: errors.New("key unavailable")}, []byte("data"), 2, 62, bobPub, *addr, 1)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
@@ -70,9 +70,9 @@ func TestEncryptSignRevokeEC_NilMasterKey(t *testing.T) {
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	_, err := EncryptSignRevokeEC(nil, []byte("data"), 2, 62, bobPub, *addr, 1, "bafyfake")
+	_, err := EncryptSignRevokeEC(&testWalletStore{err: errors.New("key unavailable")}, []byte("data"), 2, 62, bobPub, *addr, 1, "bafyfake")
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
@@ -80,17 +80,17 @@ func TestEncryptSignRevokeEC_NilMasterKey(t *testing.T) {
 
 func TestDecryptConsentEC_NilMasterKey(t *testing.T) {
 	req := &types.PulseConsentRequestEC{}
-	_, err := DecryptConsentEC(nil, req, 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
+	_, err := DecryptConsentEC(&testWalletStore{err: errors.New("key unavailable")}, req, 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
 func TestDecryptRevokeEC_NilMasterKey(t *testing.T) {
 	req := &types.PulseRevokeRequestEC{}
-	_, err := DecryptRevokeEC(nil, req, 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
+	_, err := DecryptRevokeEC(&testWalletStore{err: errors.New("key unavailable")}, req, 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
@@ -104,9 +104,9 @@ func TestSignConsentRequest_NilMasterKey(t *testing.T) {
 			Key2:       make([]byte, 33),
 		},
 	}
-	err := SignConsentRequest(nil, req, []byte("fake-cbor"), 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
+	err := SignConsentRequest(&testWalletStore{err: errors.New("key unavailable")}, req, []byte("fake-cbor"), 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
@@ -121,33 +121,33 @@ func TestSignRevokeRequest_NilMasterKey(t *testing.T) {
 			Key2:       make([]byte, 33),
 		},
 	}
-	err := SignRevokeRequest(nil, req, []byte("fake-cbor"), 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
+	err := SignRevokeRequest(&testWalletStore{err: errors.New("key unavailable")}, req, []byte("fake-cbor"), 2, 62, "0x0102030405060708090a0b0c0d0e0f1011121314", 1)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
 // ── EncryptSignConsentPQ error paths ──────────────────────────────────────────
 
 func TestEncryptSignConsentPQ_NilMasterKey(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 
-	_, err := EncryptSignConsentPQ(nil, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, "0x0102030405060708090a0b0c0d0e0f1011121314", 137)
+	_, err := EncryptSignConsentPQ(&testWalletStore{err: errors.New("key unavailable")}, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, "0x0102030405060708090a0b0c0d0e0f1011121314", 137)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
 // ── EncryptSignRevokePQ error paths ───────────────────────────────────────────
 
 func TestEncryptSignRevokePQ_NilMasterKey(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveRevoke)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveRevoke)
 
-	_, err := EncryptSignRevokePQ(nil, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, "0x0102030405060708090a0b0c0d0e0f1011121314", 137, "bafyfake")
+	_, err := EncryptSignRevokePQ(&testWalletStore{err: errors.New("key unavailable")}, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, "0x0102030405060708090a0b0c0d0e0f1011121314", 137, "bafyfake")
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
@@ -155,26 +155,26 @@ func TestEncryptSignRevokePQ_NilMasterKey(t *testing.T) {
 
 func TestDecryptConsentPQ_NilMasterKey(t *testing.T) {
 	req := &types.PulseConsentRequestPQ{}
-	_, err := DecryptConsentPQ(nil, req, 2, 0, "0x0102030405060708090a0b0c0d0e0f1011121314", 137)
+	_, err := DecryptConsentPQ(&testWalletStore{err: errors.New("key unavailable")}, req, 2, 0, "0x0102030405060708090a0b0c0d0e0f1011121314", 137)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
 func TestDecryptRevokePQ_NilMasterKey(t *testing.T) {
 	req := &types.PulseRevokeRequestPQ{}
-	_, err := DecryptRevokePQ(nil, req, 2, 0, "0x0102030405060708090a0b0c0d0e0f1011121314", 137)
+	_, err := DecryptRevokePQ(&testWalletStore{err: errors.New("key unavailable")}, req, 2, 0, "0x0102030405060708090a0b0c0d0e0f1011121314", 137)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
 // ── DerivePQKeyPair error paths ───────────────────────────────────────────────
 
 func TestDerivePQKeyPair_NilMasterKey(t *testing.T) {
-	_, _, err := DerivePQKeyPair(nil, 2, 0, 1, purposes.PulsePurposePQDeriveConsent)
+	_, _, err := DerivePQKeyPair(&testWalletStore{err: errors.New("key unavailable")}, 2, 0, 1, purposes.PulsePurposePQDeriveConsent)
 	if err == nil {
-		t.Error("expected error for nil masterKey")
+		t.Error("expected error for wallet error")
 	}
 }
 
@@ -201,13 +201,13 @@ func TestDecryptEC_NilPrivateKey(t *testing.T) {
 // ── DeriveOtherPartyGenerator success path ────────────────────────────────────
 
 func TestDeriveOtherPartyGenerator_DifferentParties(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 
-	gen1, err := DeriveOtherPartyGenerator(masterKey, 1)
+	gen1, err := DeriveOtherPartyGenerator(wallet, 1)
 	if err != nil {
 		t.Fatalf("DeriveOtherPartyGenerator(1) failed: %v", err)
 	}
-	gen2, err := DeriveOtherPartyGenerator(masterKey, 2)
+	gen2, err := DeriveOtherPartyGenerator(wallet, 2)
 	if err != nil {
 		t.Fatalf("DeriveOtherPartyGenerator(2) failed: %v", err)
 	}
@@ -226,37 +226,37 @@ func TestEncryptSignConsentPQ_SignFailure(t *testing.T) {
 	// We can't easily split these since EncryptSignConsentPQ calls both, but
 	// the nil masterKey will fail at the encrypt stage since it tries to pass
 	// nil to EncryptPQ's entropy. Instead test with an invalid signing path.
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	addr := helperContractAddress()
 
-	// Encrypt with valid master key — this exercises the full happy path
-	req, err := EncryptSignConsentPQ(masterKey, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, *addr, 137)
+	// Encrypt with valid wallet — this exercises the full happy path
+	req, err := EncryptSignConsentPQ(wallet, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, *addr, 137)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
 
-	// Counter-sign with nil masterKey should fail at signing stage
-	err = SignConsentRequest(nil, req, []byte("fake-cbor"), 2, 0, *addr, 137)
+	// Counter-sign with error wallet should fail at signing stage
+	err = SignConsentRequest(&testWalletStore{err: errors.New("key unavailable")}, req, []byte("fake-cbor"), 2, 0, *addr, 137)
 	if err == nil {
-		t.Error("expected error for nil masterKey in SignConsentRequest")
+		t.Error("expected error for wallet error in SignConsentRequest")
 	}
 }
 
 func TestEncryptSignRevokePQ_SignFailure(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveRevoke)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveRevoke)
 	addr := helperContractAddress()
 
-	req, err := EncryptSignRevokePQ(masterKey, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, *addr, 137, "bafyfake")
+	req, err := EncryptSignRevokePQ(wallet, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, *addr, 137, "bafyfake")
 	if err != nil {
 		t.Fatalf("EncryptSignRevokePQ() failed: %v", err)
 	}
 
-	// Attempt to re-sign with nil master key
-	err = SignRevokeRequest(nil, req, []byte("fake-cbor"), 2, 0, *addr, 137)
+	// Attempt to re-sign with error wallet
+	err = SignRevokeRequest(&testWalletStore{err: errors.New("key unavailable")}, req, []byte("fake-cbor"), 2, 0, *addr, 137)
 	if err == nil {
-		t.Error("expected error for nil masterKey in SignRevokeRequest")
+		t.Error("expected error for wallet error in SignRevokeRequest")
 	}
 }
 
@@ -274,17 +274,17 @@ func TestEncryptECDH_BothKeysNil(t *testing.T) {
 
 func TestDecryptConsentPQ_InvalidPurpose(t *testing.T) {
 	// Exercise the DerivePQKeyPair purpose validation inside decryptHDPQ
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	addr := helperContractAddress()
 
-	req, err := EncryptSignConsentPQ(masterKey, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, *addr, 137)
+	req, err := EncryptSignConsentPQ(wallet, []byte("data"), 2, 0, []*kyberKEM.PublicKey{pub}, *addr, 137)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentPQ() failed: %v", err)
 	}
 
 	// DecryptConsentPQ uses PulsePurposePQDeriveConsent internally — test it works
-	plaintext, err := DecryptConsentPQ(masterKey, req, 2, 0, *addr, 137)
+	plaintext, err := DecryptConsentPQ(wallet, req, 2, 0, *addr, 137)
 	if err != nil {
 		t.Fatalf("DecryptConsentPQ() failed: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestDecryptConsentPQ_InvalidPurpose(t *testing.T) {
 
 func TestDerivePublicKeyFromParent_AllPurposes(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
-	gen, err := DeriveOtherPartyGenerator(masterKey, 2)
+	gen, err := DeriveOtherPartyGenerator(&testWalletStore{key: masterKey}, 2)
 	if err != nil {
 		t.Fatalf("DeriveOtherPartyGenerator() failed: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestDecryptEC_NoMatchingKey(t *testing.T) {
 	carolPriv, _ := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	result, err := EncryptConsentNotaryEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	result, err := EncryptConsentNotaryEC(&testWalletStore{key: masterKey}, []byte("data"), 2, 62, bobPub, *addr, 1)
 	if err != nil {
 		t.Fatalf("EncryptConsentNotaryEC() failed: %v", err)
 	}
@@ -391,12 +391,12 @@ func TestDecryptConsentEC_RoundTripHDWallet(t *testing.T) {
 	bobPriv, _ := deriveKeyFromMaster(masterKeyBob, bobPath)
 	bobPub := bobPriv.PubKey()
 
-	req, err := EncryptSignConsentEC(masterKeyAlice, plaintext, otherParty, consent, bobPub, *addr, chainId)
+	req, err := EncryptSignConsentEC(&testWalletStore{key: masterKeyAlice}, plaintext, otherParty, consent, bobPub, *addr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
 
-	decrypted, err := DecryptConsentEC(masterKeyBob, req, otherParty, consent, *addr, chainId)
+	decrypted, err := DecryptConsentEC(&testWalletStore{key: masterKeyBob}, req, otherParty, consent, *addr, chainId)
 	if err != nil {
 		t.Fatalf("DecryptConsentEC() failed: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestDecryptRevokeEC_RoundTripHDWallet(t *testing.T) {
 	// Build consent first to get a CID
 	bobPathConsent, _ := newpulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeEncryptConsentStructure)
 	bobPrivConsent, _ := deriveKeyFromMaster(masterKeyBob, bobPathConsent)
-	consentReq, err := EncryptSignConsentEC(masterKeyAlice, []byte("consent"), otherParty, consent, bobPrivConsent.PubKey(), *addr, chainId)
+	consentReq, err := EncryptSignConsentEC(&testWalletStore{key: masterKeyAlice}, []byte("consent"), otherParty, consent, bobPrivConsent.PubKey(), *addr, chainId)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
@@ -426,12 +426,12 @@ func TestDecryptRevokeEC_RoundTripHDWallet(t *testing.T) {
 	bobPrivRevoke, _ := deriveKeyFromMaster(masterKeyBob, bobPathRevoke)
 
 	revokeData := []byte("revoke for HD decrypt")
-	revokeReq, err := EncryptSignRevokeEC(masterKeyAlice, revokeData, otherParty, consent, bobPrivRevoke.PubKey(), *addr, chainId, consentCid.String())
+	revokeReq, err := EncryptSignRevokeEC(&testWalletStore{key: masterKeyAlice}, revokeData, otherParty, consent, bobPrivRevoke.PubKey(), *addr, chainId, consentCid.String())
 	if err != nil {
 		t.Fatalf("EncryptSignRevokeEC() failed: %v", err)
 	}
 
-	decrypted, err := DecryptRevokeEC(masterKeyBob, revokeReq, otherParty, consent, *addr, chainId)
+	decrypted, err := DecryptRevokeEC(&testWalletStore{key: masterKeyBob}, revokeReq, otherParty, consent, *addr, chainId)
 	if err != nil {
 		t.Fatalf("DecryptRevokeEC() failed: %v", err)
 	}
@@ -443,8 +443,8 @@ func TestDecryptRevokeEC_RoundTripHDWallet(t *testing.T) {
 // ── DerivePQKeyPair invalid purpose ─────────────────────────────────────────
 
 func TestDerivePQKeyPair_InvalidPurpose_SignTx(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, _, err := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposeSignTx)
+	wallet := mustNewTestWallet(t)
+	_, _, err := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposeSignTx)
 	if err == nil {
 		t.Error("expected error for non-PQ purpose")
 	}
@@ -455,8 +455,8 @@ func TestDerivePQKeyPair_InvalidPurpose_SignTx(t *testing.T) {
 // ── EncryptPQ with deterministic entropy ────────────────────────────────────
 
 func TestEncryptPQ_DeterministicEntropy(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	addr := helperContractAddress()
 	plaintext := []byte("deterministic PQ encrypt")
 
@@ -468,7 +468,7 @@ func TestEncryptPQ_DeterministicEntropy(t *testing.T) {
 	}
 
 	// Decrypt to verify correctness
-	priv, _, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	priv, _, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	decrypted, err := key_encapsulate.DecryptPQ(result, addr, priv, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
 		t.Fatalf("key_encapsulate.DecryptPQ() failed: %v", err)
@@ -496,8 +496,8 @@ func (r *deterministicReader) Read(p []byte) (int, error) {
 // ── DecryptPQ no matching key ───────────────────────────────────────────────
 
 func TestDecryptPQ_NoMatchingKey(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pubAlice, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	wallet := mustNewTestWallet(t)
+	_, pubAlice, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	addr := helperContractAddress()
 
 	result, err := key_encapsulate.EncryptPQ(nil, []byte("data"), addr, []*kyberKEM.PublicKey{pubAlice}, purposes.PulseSymmetricConsent, 137, 0)
@@ -506,7 +506,7 @@ func TestDecryptPQ_NoMatchingKey(t *testing.T) {
 	}
 
 	// Try to decrypt with a different party's key
-	privBob, _, _ := DerivePQKeyPair(masterKey, 3, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	privBob, _, _ := DerivePQKeyPair(wallet, 3, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	_, err = key_encapsulate.DecryptPQ(result, addr, privBob, purposes.PulseSymmetricConsent, 137, 0)
 	if err == nil {
 		t.Error("expected error for non-matching key")
@@ -516,17 +516,17 @@ func TestDecryptPQ_NoMatchingKey(t *testing.T) {
 // ── DecryptRevokePQ full round-trip ─────────────────────────────────────────
 
 func TestDecryptRevokePQ_RoundTrip(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveRevoke)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveRevoke)
 	addr := helperContractAddress()
 	revokeData := []byte("revoke PQ round-trip")
 
-	req, err := EncryptSignRevokePQ(masterKey, revokeData, 2, 0, []*kyberKEM.PublicKey{pub}, *addr, 137, "bafyfake")
+	req, err := EncryptSignRevokePQ(wallet, revokeData, 2, 0, []*kyberKEM.PublicKey{pub}, *addr, 137, "bafyfake")
 	if err != nil {
 		t.Fatalf("EncryptSignRevokePQ() failed: %v", err)
 	}
 
-	decrypted, err := DecryptRevokePQ(masterKey, req, 2, 0, *addr, 137)
+	decrypted, err := DecryptRevokePQ(wallet, req, 2, 0, *addr, 137)
 	if err != nil {
 		t.Fatalf("DecryptRevokePQ() failed: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestDecryptEC_MalformedKey2(t *testing.T) {
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	result, err := EncryptConsentNotaryEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	result, err := EncryptConsentNotaryEC(&testWalletStore{key: masterKey}, []byte("data"), 2, 62, bobPub, *addr, 1)
 	if err != nil {
 		t.Fatalf("EncryptConsentNotaryEC() failed: %v", err)
 	}
@@ -565,7 +565,7 @@ func TestDecryptEC_MalformedKey1(t *testing.T) {
 	bobPriv, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	result, err := EncryptConsentNotaryEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	result, err := EncryptConsentNotaryEC(&testWalletStore{key: masterKey}, []byte("data"), 2, 62, bobPub, *addr, 1)
 	if err != nil {
 		t.Fatalf("EncryptConsentNotaryEC() failed: %v", err)
 	}
@@ -590,11 +590,11 @@ func TestGetConsentAddress_MalformedSignature(t *testing.T) {
 // ── ConsentSigners with corrupted signature ─────────────────────────────────
 
 func TestConsentSigners_CorruptedSignature(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	req, err := EncryptSignConsentEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	req, err := EncryptSignConsentEC(wallet, []byte("data"), 2, 62, bobPub, *addr, 1)
 	if err != nil {
 		t.Fatalf("EncryptSignConsentEC() failed: %v", err)
 	}
@@ -610,14 +610,14 @@ func TestConsentSigners_CorruptedSignature(t *testing.T) {
 // ── RevokeSignerWasConsentSigner with corrupted revoke signature ────────────
 
 func TestRevokeSignerWasConsentSigner_CorruptedRevokeSignature(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	consentReq, _ := EncryptSignConsentEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	consentReq, _ := EncryptSignConsentEC(wallet, []byte("data"), 2, 62, bobPub, *addr, 1)
 	consentCBOR, _ := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
-	revokeReq, _ := EncryptSignRevokeEC(masterKey, []byte("revoke"), 2, 62, bobPub, *addr, 1, consentCid.String())
+	revokeReq, _ := EncryptSignRevokeEC(wallet, []byte("revoke"), 2, 62, bobPub, *addr, 1, consentCid.String())
 
 	// Corrupt the revoke signature
 	revokeReq.Signature = make([]byte, 65)
@@ -652,9 +652,9 @@ func TestEncryptECDH_FullRoundTrip(t *testing.T) {
 // ── EncryptPQ multiple recipients ───────────────────────────────────────────
 
 func TestEncryptPQ_MultipleRecipients(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pub1, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
-	_, pub2, _ := DerivePQKeyPair(masterKey, 3, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	wallet := mustNewTestWallet(t)
+	_, pub1, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	_, pub2, _ := DerivePQKeyPair(wallet, 3, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	addr := helperContractAddress()
 	plaintext := []byte("multi-recipient PQ data")
 
@@ -667,7 +667,7 @@ func TestEncryptPQ_MultipleRecipients(t *testing.T) {
 	}
 
 	// Both recipients can decrypt
-	priv1, _, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	priv1, _, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	d1, err := key_encapsulate.DecryptPQ(result, addr, priv1, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
 		t.Fatalf("key_encapsulate.DecryptPQ(recipient1) failed: %v", err)
@@ -676,7 +676,7 @@ func TestEncryptPQ_MultipleRecipients(t *testing.T) {
 		t.Errorf("recipient1 plaintext mismatch")
 	}
 
-	priv2, _, _ := DerivePQKeyPair(masterKey, 3, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	priv2, _, _ := DerivePQKeyPair(wallet, 3, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	d2, err := key_encapsulate.DecryptPQ(result, addr, priv2, purposes.PulseSymmetricConsent, 137, 0)
 	if err != nil {
 		t.Fatalf("key_encapsulate.DecryptPQ(recipient2) failed: %v", err)
@@ -706,7 +706,7 @@ func TestDeriveOtherPartyGenerator_PublicKeyFails(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
 	pubKey := masterKey.PublicKey()
 
-	_, err := DeriveOtherPartyGenerator(pubKey, 2)
+	_, err := DeriveOtherPartyGenerator(&testWalletStore{key: pubKey}, 2)
 	if err == nil {
 		t.Error("expected error when deriving hardened child from public key")
 	}
@@ -715,14 +715,14 @@ func TestDeriveOtherPartyGenerator_PublicKeyFails(t *testing.T) {
 // ── RevokeSignerWasConsentSigner with consent having no signatures ──────────
 
 func TestRevokeSignerWasConsentSigner_ConsentNoSignatures(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	consentReq, _ := EncryptSignConsentEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	consentReq, _ := EncryptSignConsentEC(wallet, []byte("data"), 2, 62, bobPub, *addr, 1)
 	consentCBOR, _ := ipfs.MarshalConsentEC(&consentReq.EncryptedData)
 	consentCid, _ := ipfs.GetCid(consentCBOR)
-	revokeReq, _ := EncryptSignRevokeEC(masterKey, []byte("revoke"), 2, 62, bobPub, *addr, 1, consentCid.String())
+	revokeReq, _ := EncryptSignRevokeEC(wallet, []byte("revoke"), 2, 62, bobPub, *addr, 1, consentCid.String())
 
 	// Clear the consent signatures to trigger ConsentSigners error
 	consentReq.Signatures = nil
@@ -735,18 +735,18 @@ func TestRevokeSignerWasConsentSigner_ConsentNoSignatures(t *testing.T) {
 // ── encryptEC with valid data but different purposes (covers more encryptEC lines) ─
 
 func TestEncryptRevokeNotaryEC_RoundTripCoverage(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	notaryPriv, notaryPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 	plaintext := []byte("revoke notary additional coverage")
 
-	result, err := EncryptRevokeNotaryEC(masterKey, plaintext, 2, 62, notaryPub, *addr, 1)
+	result, err := EncryptRevokeNotaryEC(wallet, plaintext, 2, 62, notaryPub, *addr, 1)
 	if err != nil {
 		t.Fatalf("EncryptRevokeNotaryEC() failed: %v", err)
 	}
 
 	// HD wallet holder decrypts via DecryptRevokeNotaryEC
-	decrypted, err := DecryptRevokeNotaryEC(masterKey, result, 2, 62, *addr, 1)
+	decrypted, err := DecryptRevokeNotaryEC(wallet, result, 2, 62, *addr, 1)
 	if err != nil {
 		t.Fatalf("DecryptRevokeNotaryEC() failed: %v", err)
 	}
@@ -767,19 +767,19 @@ func TestEncryptRevokeNotaryEC_RoundTripCoverage(t *testing.T) {
 // ── SignConsentRequest exercises CID computation path ────────────────────────
 
 func TestSignConsentRequest_ThenVerify(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
+	wallet := mustNewTestWallet(t)
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
 	// Create a consent and verify the signing address is deterministic
-	req1, _ := EncryptSignConsentEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	req1, _ := EncryptSignConsentEC(wallet, []byte("data"), 2, 62, bobPub, *addr, 1)
 	addrs1, err := ConsentSigners(req1, *addr)
 	if err != nil {
 		t.Fatalf("ConsentSigners() failed: %v", err)
 	}
 
 	// Sign again with same key — address must be stable
-	req2, _ := EncryptSignConsentEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	req2, _ := EncryptSignConsentEC(wallet, []byte("data"), 2, 62, bobPub, *addr, 1)
 	addrs2, _ := ConsentSigners(req2, *addr)
 	if addrs1[0] != addrs2[0] {
 		t.Errorf("signing address not deterministic: %s vs %s", addrs1[0].Hex(), addrs2[0].Hex())
@@ -794,7 +794,7 @@ func TestSignConsentRequest_PublicKeyFails(t *testing.T) {
 	addr := helperContractAddress()
 
 	// Build a valid encrypted request first
-	result, err := EncryptConsentNotaryEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	result, err := EncryptConsentNotaryEC(&testWalletStore{key: masterKey}, []byte("data"), 2, 62, bobPub, *addr, 1)
 	if err != nil {
 		t.Fatalf("EncryptConsentNotaryEC() failed: %v", err)
 	}
@@ -802,7 +802,7 @@ func TestSignConsentRequest_PublicKeyFails(t *testing.T) {
 
 	// Sign with a public key instead of a private key
 	pubKey := masterKey.PublicKey()
-	err = SignConsentRequest(pubKey, req, []byte("fake-cbor"), 2, 62, *addr, 1)
+	err = SignConsentRequest(&testWalletStore{key: pubKey}, req, []byte("fake-cbor"), 2, 62, *addr, 1)
 	if err == nil {
 		t.Error("expected error when signing with public key")
 	}
@@ -816,14 +816,14 @@ func TestSignRevokeRequest_PublicKeyFails(t *testing.T) {
 	addr := helperContractAddress()
 
 	// Build valid encrypted data
-	result, err := EncryptRevokeNotaryEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	result, err := EncryptRevokeNotaryEC(&testWalletStore{key: masterKey}, []byte("data"), 2, 62, bobPub, *addr, 1)
 	if err != nil {
 		t.Fatalf("EncryptRevokeNotaryEC() failed: %v", err)
 	}
 	req := &types.PulseRevokeRequestEC{ConsentCid: "bafyfake", EncryptedData: *result}
 
 	pubKey := masterKey.PublicKey()
-	err = SignRevokeRequest(pubKey, req, []byte("fake-cbor"), 2, 62, *addr, 1)
+	err = SignRevokeRequest(&testWalletStore{key: pubKey}, req, []byte("fake-cbor"), 2, 62, *addr, 1)
 	if err == nil {
 		t.Error("expected error when signing with public key")
 	}
@@ -850,10 +850,10 @@ func TestDecryptConsentEC_PublicKeyFails(t *testing.T) {
 	_, bobPub := mustNewOtherPartyKey(t)
 	addr := helperContractAddress()
 
-	req, _ := EncryptSignConsentEC(masterKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	req, _ := EncryptSignConsentEC(&testWalletStore{key: masterKey}, []byte("data"), 2, 62, bobPub, *addr, 1)
 
 	pubKey := masterKey.PublicKey()
-	_, err := DecryptConsentEC(pubKey, req, 2, 62, *addr, 1)
+	_, err := DecryptConsentEC(&testWalletStore{key: pubKey}, req, 2, 62, *addr, 1)
 	if err == nil {
 		t.Error("expected error when decrypting with public key")
 	}
@@ -865,7 +865,7 @@ func TestDerivePQKeyPair_PublicKeyFails(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
 	pubKey := masterKey.PublicKey()
 
-	_, _, err := DerivePQKeyPair(pubKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	_, _, err := DerivePQKeyPair(&testWalletStore{key: pubKey}, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	if err == nil {
 		t.Error("expected error when deriving PQ key from public key")
 	}
@@ -879,7 +879,7 @@ func TestEncryptSignConsentEC_PublicKeySigningFails(t *testing.T) {
 	addr := helperContractAddress()
 
 	pubKey := masterKey.PublicKey()
-	_, err := EncryptSignConsentEC(pubKey, []byte("data"), 2, 62, bobPub, *addr, 1)
+	_, err := EncryptSignConsentEC(&testWalletStore{key: pubKey}, []byte("data"), 2, 62, bobPub, *addr, 1)
 	if err == nil {
 		t.Error("expected error when signing with public key")
 	}
@@ -893,7 +893,7 @@ func TestEncryptSignRevokeEC_PublicKeySigningFails(t *testing.T) {
 	addr := helperContractAddress()
 
 	pubKey := masterKey.PublicKey()
-	_, err := EncryptSignRevokeEC(pubKey, []byte("data"), 2, 62, bobPub, *addr, 1, "bafyfake")
+	_, err := EncryptSignRevokeEC(&testWalletStore{key: pubKey}, []byte("data"), 2, 62, bobPub, *addr, 1, "bafyfake")
 	if err == nil {
 		t.Error("expected error when signing with public key")
 	}
@@ -902,8 +902,8 @@ func TestEncryptSignRevokeEC_PublicKeySigningFails(t *testing.T) {
 // ── EncryptPQ with failing entropy reader ───────────────────────────────────
 
 func TestEncryptPQ_EntropyError(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	addr := helperContractAddress()
 
 	// errReader fails after returning some bytes — enough for PulseSealWithNewKey
@@ -915,8 +915,8 @@ func TestEncryptPQ_EntropyError(t *testing.T) {
 }
 
 func TestEncryptPQ_EntropyErrorDuringSeal(t *testing.T) {
-	masterKey := mustNewMasterKey(t)
-	_, pub, _ := DerivePQKeyPair(masterKey, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
+	wallet := mustNewTestWallet(t)
+	_, pub, _ := DerivePQKeyPair(wallet, 2, 0, 137, purposes.PulsePurposePQDeriveConsent)
 	addr := helperContractAddress()
 
 	// Fail during seal phase (needs 44 bytes for key+nonce)
