@@ -48,9 +48,9 @@ import (
 	"testing"
 
 	kyberKEM "github.com/cloudflare/circl/kem/mlkem/mlkem768"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/textformat"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/purposes"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/hash"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/textformat"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
 )
 

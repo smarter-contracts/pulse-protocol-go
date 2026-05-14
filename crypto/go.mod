@@ -1,4 +1,4 @@
-module github.com/smarter-contracts/pulse-protocol-go/crypto
+module github.com/smarter-contracts/pulse-protocol-go/crypto/v2
 
 go 1.25.7
 

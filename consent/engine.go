@@ -3,7 +3,7 @@ package consent
 import (
 	"context"
 
-	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto"
+	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 )
 
 // ConsentEngine orchestrates the consent lifecycle on the grantee side.

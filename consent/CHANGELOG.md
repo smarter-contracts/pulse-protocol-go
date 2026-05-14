@@ -5,6 +5,19 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-05-14
+
+### Changed
+
+- `consent/go.mod`: corrected dependency version pins to match the versions the consent code
+  actually requires outside the Go workspace:
+  - `github.com/smarter-contracts/pulse-protocol-go/crypto` updated to `v2.0.0` — the
+    `WalletStore` interface, which all consent engine functions depend on, was introduced in v2.0.0
+  - `github.com/smarter-contracts/pulse-protocol-go/ipfs` updated to `v1.2.0` — required for
+    `MarshalFeedRevocation` used in `RevokeConsent`
+  - `github.com/smarter-contracts/pulse-protocol-go/types` updated to `v1.2.0` — required for
+    `feedrevocation.FeedRevocationPayload` used in `RevokeConsent`
+
 ## [0.1.0] - 2026-05-13
 
 ### Added

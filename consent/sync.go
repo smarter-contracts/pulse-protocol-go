@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto"
+	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 )
 
 // Synchronize fetches consent events from mid-tier since the last saved cursor

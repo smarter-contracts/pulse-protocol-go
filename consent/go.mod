@@ -4,9 +4,9 @@ go 1.25.7
 
 require (
 	github.com/jamesradley/go-bip32 v1.0.1
-	github.com/smarter-contracts/pulse-protocol-go/crypto v1.1.0
-	github.com/smarter-contracts/pulse-protocol-go/ipfs v1.1.0
-	github.com/smarter-contracts/pulse-protocol-go/types v1.1.0
+	github.com/smarter-contracts/pulse-protocol-go/crypto/v2 v2.0.0
+	github.com/smarter-contracts/pulse-protocol-go/ipfs v1.2.0
+	github.com/smarter-contracts/pulse-protocol-go/types v1.2.0
 )
 
 require (

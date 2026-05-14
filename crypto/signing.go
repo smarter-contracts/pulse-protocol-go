@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/smarter-contracts/pulse-protocol-go/crypto/internal/hash"
+	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/hash"
 )
 
 // SignConsent signs a consent request for a given CID and contract address using the provided private key.
