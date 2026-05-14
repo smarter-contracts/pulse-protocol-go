@@ -5,6 +5,24 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-14
+
+### Added
+
+- `types/payloads/feedrevocation` package: new `FeedRevocationPayload` struct representing the
+  unencrypted revocation payload for Feed Permission consents. Contains 6 data fields: `GrantCID`
+  (IPFS CID of the original grant, binding the revocation to a specific consent), `RevokerId`
+  (DID or WebID of the revoking party), `IssuedAt` (Unix timestamp in seconds), `EncryptedNotary`
+  (AES-256-GCM sealed `NotaryBlock`), `NotaryKey1` (grantee's compressed secp256k1 purpose-4
+  public key), and `NotaryKey2` (Mid-Tier notary compressed public key).
+- `feedrevocation.Type` constant (`"feed-revocation"`) — the CBOR type discriminator for this payload.
+
+### Changed
+
+- `consent_structures.go`: added godoc to the `MarshalJSON` and `UnmarshalJSON` methods on
+  `ConsentStructure`, `RevokeStructure`, and `ConsentStructureMulti`. No struct or tag changes —
+  fully backwards compatible.
+
 ## [1.1.0] - 2026-05-06
 
 ### Added
