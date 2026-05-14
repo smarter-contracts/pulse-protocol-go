@@ -3,6 +3,7 @@ module github.com/smarter-contracts/pulse-protocol-go/consent
 go 1.25.7
 
 require (
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
 	github.com/jamesradley/go-bip32 v1.0.1
 	github.com/smarter-contracts/pulse-protocol-go/crypto/v2 v2.0.0
 	github.com/smarter-contracts/pulse-protocol-go/ipfs v1.2.0
@@ -17,7 +18,6 @@ require (
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/consensys/gnark-crypto v0.20.1 // indirect
 	github.com/crate-crypto/go-eth-kzg v1.5.0 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.7 // indirect
 	github.com/ethereum/go-ethereum v1.17.3 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
