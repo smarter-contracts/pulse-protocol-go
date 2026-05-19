@@ -135,6 +135,62 @@ func TestSubmitGrant_CallsPutGrant(t *testing.T) {
 	}
 }
 
+func TestSubmitGrant_SendsCallbackURLHeader(t *testing.T) {
+	var gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Callback-URL")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"OK","cid":"bafycid001"}`))
+	}))
+	defer srv.Close()
+
+	client := midtierclient.New(srv.URL)
+	rec := consent.ConsentRecord{SealedBytes: []byte("fake-sealed")}
+	err := client.SubmitGrant(context.Background(), rec, "https://pulsepro.example.com/api/v1/callback/tok", nil)
+	if err != nil {
+		t.Fatalf("SubmitGrant: %v", err)
+	}
+	if gotHeader != "https://pulsepro.example.com/api/v1/callback/tok" {
+		t.Errorf("X-Callback-URL: got %q", gotHeader)
+	}
+}
+
+func TestSubmitGrant_EmptyCallbackURL_NoHeader(t *testing.T) {
+	var hasHeader bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hasHeader = r.Header.Get("X-Callback-URL") != ""
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"OK"}`))
+	}))
+	defer srv.Close()
+
+	client := midtierclient.New(srv.URL)
+	_ = client.SubmitGrant(context.Background(), consent.ConsentRecord{SealedBytes: []byte("x")}, "", nil)
+	if hasHeader {
+		t.Error("expected no X-Callback-URL header when callbackURL is empty")
+	}
+}
+
+func TestSubmitRevoke_SendsCallbackURLHeader(t *testing.T) {
+	var gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Callback-URL")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"OK"}`))
+	}))
+	defer srv.Close()
+
+	client := midtierclient.New(srv.URL)
+	rec := consent.RevokeRecord{GrantCID: "bafycid001", SealedBytes: []byte("x"), Signature: []byte("s")}
+	err := client.SubmitRevoke(context.Background(), rec, "https://pulsepro.example.com/api/v1/callback/tok", nil)
+	if err != nil {
+		t.Fatalf("SubmitRevoke: %v", err)
+	}
+	if gotHeader != "https://pulsepro.example.com/api/v1/callback/tok" {
+		t.Errorf("X-Callback-URL: got %q", gotHeader)
+	}
+}
+
 func TestSubmitRevoke_CallsDeleteGrant(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

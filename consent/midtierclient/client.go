@@ -100,8 +100,8 @@ type grantConsentWire struct {
 
 // SubmitGrant implements consent.MidTierClient.
 // record.SealedBytes must be the CBOR-encoded ConsentEC structure.
-// callbackURL and metadata are forwarded as request headers/body extensions
-// when non-empty; the basic implementation ignores them.
+// callbackURL is forwarded as X-Callback-URL so mid-tier can route lifecycle
+// callbacks back to PulsePro.
 func (c *Client) SubmitGrant(ctx context.Context, record consent.ConsentRecord, callbackURL string, metadata map[string]any) error {
 	body := grantRequestWire{
 		Consent: grantConsentWire{
@@ -109,7 +109,11 @@ func (c *Client) SubmitGrant(ctx context.Context, record consent.ConsentRecord, 
 		},
 	}
 
-	return c.doJSON(ctx, http.MethodPut, "/api/v3/grant", body)
+	var extra map[string]string
+	if callbackURL != "" {
+		extra = map[string]string{"X-Callback-URL": callbackURL}
+	}
+	return c.doJSON(ctx, http.MethodPut, "/api/v3/grant", body, extra)
 }
 
 // ── SubmitRevoke ──────────────────────────────────────────────────────────────
@@ -135,12 +139,16 @@ func (c *Client) SubmitRevoke(ctx context.Context, record consent.RevokeRecord, 
 		Signature: hex.EncodeToString(record.Signature),
 	}
 
-	return c.doJSON(ctx, http.MethodDelete, "/api/v3/grant", body)
+	var extra map[string]string
+	if callbackURL != "" {
+		extra = map[string]string{"X-Callback-URL": callbackURL}
+	}
+	return c.doJSON(ctx, http.MethodDelete, "/api/v3/grant", body, extra)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-func (c *Client) doJSON(ctx context.Context, method, path string, body any) error {
+func (c *Client) doJSON(ctx context.Context, method, path string, body any, extraHeaders map[string]string) error {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("midtierclient: marshal request: %w", err)
@@ -151,6 +159,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any) erro
 		return fmt.Errorf("midtierclient: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
