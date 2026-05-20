@@ -76,6 +76,7 @@ func sealPayload(t *testing.T, payload *feedpermission.FeedPermissionPayload, en
 		SealedData: consentReq.EncryptedData.SealedData,
 		Key1:       consentReq.EncryptedData.Key1,
 		Key2:       consentReq.EncryptedData.Key2,
+		Signatures: consentReq.Signatures,
 	}
 }
 
@@ -276,28 +277,75 @@ func TestHandleInboundConsent_StoredRecord_HasPayloadAndSealedBytes(t *testing.T
 	}
 }
 
+func TestHandleInboundConsent_StoredRecord_HasSealedDataKeysAndSignatures(t *testing.T) {
+	engineWallet := makeTestWallet(t)
+	payload := validPayload()
+
+	store := &stubConsentStore{}
+	engine := NewConsentEngine(
+		engineWallet,
+		&stubCounterpartyDirectory{},
+		store, &stubMidTierClient{},
+		WithContractAddress(testContractAddress),
+	)
+	req := sealPayload(t, payload, engineWallet)
+	_, err := engine.HandleInboundConsent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(store.lastSet.SealedData) == 0 {
+		t.Error("stored record SealedData should not be empty")
+	}
+	if len(store.lastSet.Keys) != 2 {
+		t.Errorf("stored record Keys: got %d, want 2", len(store.lastSet.Keys))
+	}
+	if len(store.lastSet.Signatures) == 0 {
+		t.Error("stored record Signatures should not be empty (sender must sign)")
+	}
+}
+
 // ── ApproveConsent ────────────────────────────────────────────────────────────
 
-func TestApproveConsent_PendingReview_SubmitsGrant(t *testing.T) {
-	record := &ConsentRecord{
-		ID:       "c1",
-		Status:   ConsentStatusPendingReview,
-		PartyKey: "did:web:bank.example",
-		FeedType: "open-banking",
-	}
-	store := &stubConsentStore{records: map[string]*ConsentRecord{"c1": record}}
-	mt := &stubMidTierClient{}
+// TestApproveConsent_DeferThenApprove_CounterSignsAndSubmits exercises the full
+// deferred-approval flow: inbound consent is stored as pending-review, then the
+// engine counter-signs and submits when ApproveConsent is called.
+func TestApproveConsent_DeferThenApprove_CounterSignsAndSubmits(t *testing.T) {
+	engineWallet := makeTestWallet(t)
+	payload := validPayload()
 
-	engine := NewConsentEngine(&stubWalletStore{}, &stubCounterpartyDirectory{}, store, mt)
-	if err := engine.ApproveConsent(context.Background(), "c1"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	store := &stubConsentStore{}
+	mt := &stubMidTierClient{}
+	engine := NewConsentEngine(
+		engineWallet,
+		&stubCounterpartyDirectory{},
+		store, mt,
+		WithContractAddress(testContractAddress),
+		WithReviewer(&stubReviewer{decision: ReviewDecisionDefer}),
+	)
+
+	req := sealPayload(t, payload, engineWallet)
+	resp, err := engine.HandleInboundConsent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("HandleInboundConsent: %v", err)
+	}
+	if mt.submitGrantCalled {
+		t.Fatal("SubmitGrant must NOT be called during Defer")
+	}
+
+	if err := engine.ApproveConsent(context.Background(), resp.ConsentID); err != nil {
+		t.Fatalf("ApproveConsent: %v", err)
 	}
 
 	if store.lastSet.Status != ConsentStatusPending {
 		t.Errorf("status after approval: got %q, want pending", store.lastSet.Status)
 	}
 	if !mt.submitGrantCalled {
-		t.Error("MidTierClient.SubmitGrant should be called on approval")
+		t.Fatal("SubmitGrant should be called after approval")
+	}
+	// Submitted record must have ≥ 2 signatures: sender's + engine's counter-signature.
+	if len(mt.lastGrantRecord.Signatures) < 2 {
+		t.Errorf("expected ≥ 2 signatures on submitted record, got %d", len(mt.lastGrantRecord.Signatures))
 	}
 }
 

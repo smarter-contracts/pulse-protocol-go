@@ -71,6 +71,9 @@ func (e *ConsentEngine) HandleInboundConsent(ctx context.Context, req InboundCon
 		ChainID:     req.ChainID,
 		Payload:     payload,
 		SealedBytes: sealedBytes,
+		SealedData:  req.SealedData,
+		Keys:        [][]byte{req.Key1, req.Key2},
+		Signatures:  req.Signatures,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -82,6 +85,11 @@ func (e *ConsentEngine) HandleInboundConsent(ctx context.Context, req InboundCon
 	switch decision {
 	case ReviewDecisionAccept:
 		record.Status = ConsentStatusPending
+		// Counter-sign before storing and submitting so the record in the store
+		// already carries the engine's signature.
+		if err := e.counterSign(record, uint32(otherpartyId)); err != nil {
+			return InboundConsentResponse{}, fmt.Errorf("consent: counter-sign: %w", err)
+		}
 	case ReviewDecisionReject:
 		record.Status = ConsentStatusRejected
 	case ReviewDecisionDefer:
@@ -117,6 +125,14 @@ func (e *ConsentEngine) ApproveConsent(ctx context.Context, consentID string) er
 		return fmt.Errorf("consent: ApproveConsent: expected pending-review, got %q", record.Status)
 	}
 
+	otherPartyNo, err := e.cpDir.GetOrAssignIndex(record.PartyKey)
+	if err != nil {
+		return fmt.Errorf("consent: ApproveConsent GetOrAssignIndex: %w", err)
+	}
+	if err := e.counterSign(record, uint32(otherPartyNo)); err != nil {
+		return fmt.Errorf("consent: ApproveConsent sign: %w", err)
+	}
+
 	record.Status = ConsentStatusPending
 	record.UpdatedAt = time.Now().UTC()
 	if err := e.store.Set(record); err != nil {
@@ -124,6 +140,37 @@ func (e *ConsentEngine) ApproveConsent(ctx context.Context, consentID string) er
 	}
 	if err := e.mt.SubmitGrant(ctx, *record, "", nil); err != nil {
 		return fmt.Errorf("consent: ApproveConsent SubmitGrant: %w", err)
+	}
+	return nil
+}
+
+// counterSign appends the engine's EIP-191 signature over the consent CID to
+// record.Signatures. The CBOR bytes in record.SealedBytes are used to compute
+// the CID (they are the canonical DAG-CBOR encoding of the consent structure).
+func (e *ConsentEngine) counterSign(record *ConsentRecord, otherPartyNo uint32) error {
+	consentReq := &types.PulseConsentRequestEC{
+		EncryptedData: types.PulseECEncryptionResult{
+			SealedData: record.SealedData,
+			Key1:       keyAt(record.Keys, 0),
+			Key2:       keyAt(record.Keys, 1),
+		},
+		Signatures: record.Signatures,
+	}
+	if err := ppcrypto.SignConsentRequest(
+		e.wallet, consentReq, record.SealedBytes,
+		otherPartyNo, uint32(record.ConsentNo),
+		e.config.contractAddress, uint32(record.ChainID),
+	); err != nil {
+		return err
+	}
+	record.Signatures = consentReq.Signatures
+	return nil
+}
+
+// keyAt returns keys[i] or nil if i is out of range.
+func keyAt(keys [][]byte, i int) []byte {
+	if i < len(keys) {
+		return keys[i]
 	}
 	return nil
 }
