@@ -52,6 +52,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
+	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
 // ── Known values (populated from first run with -v) ─────────────────────────
@@ -390,7 +391,10 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	}
 
 	// Revoke signature recovery
-	revokeCBOR, _ := ipfs.MarshalConsentPQ(&revokeReq.EncryptedData)
+	revokeCBOR, _ := ipfs.MarshalRevokePQ(&types.RevokeStructureMulti{
+		PulsePQEncryptionResult: revokeReq.EncryptedData,
+		Grant:                   consentCid.String(),
+	})
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 	t.Logf("PQ revoke CID (rcid):        %s", revokeCid.String())
 

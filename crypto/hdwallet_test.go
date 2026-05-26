@@ -494,6 +494,28 @@ func TestEncryptConsentNotaryEC_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestDecryptConsentNotaryECAsNotary_RoundTrip(t *testing.T) {
+	masterKey := mustNewMasterKey(t)
+	wallet := &testWalletStore{key: masterKey}
+	notaryPriv, notaryPub := mustNewOtherPartyKey(t)
+	addr := helperContractAddress()
+	plaintext := []byte("consent notary record – notary-side decrypt")
+	const otherParty, consent, chainId = uint32(3), uint32(7), uint32(1)
+
+	result, err := EncryptConsentNotaryEC(wallet, plaintext, otherParty, consent, notaryPub, *addr, chainId)
+	if err != nil {
+		t.Fatalf("EncryptConsentNotaryEC() failed: %v", err)
+	}
+
+	got, err := DecryptConsentNotaryECAsNotary(notaryPriv, result, *addr, chainId, consent)
+	if err != nil {
+		t.Fatalf("DecryptConsentNotaryECAsNotary() failed: %v", err)
+	}
+	if !bytes.Equal(plaintext, got) {
+		t.Errorf("plaintext mismatch: got %q, want %q", got, plaintext)
+	}
+}
+
 func TestEncryptRevokeNotaryEC_RoundTrip(t *testing.T) {
 	masterKey := mustNewMasterKey(t)
 	wallet := &testWalletStore{key: masterKey}
@@ -647,6 +669,92 @@ func TestDeriveOtherPartyXpub_NonZeroUnchanged(t *testing.T) {
 	if xpub1 == xpub2 {
 		t.Error("different otherParty indices must produce different xpubs")
 	}
+}
+
+// TestEncryptSignRevokeEC_SignsRevokeStructureIncludingGrantRef verifies that the
+// revoke signature is computed over the CID of the full RevokeStructure (which
+// includes the GrantRef / consentCid), matching what the mid-tier verifies via
+// ppipfs.MarshalRevoke. A signature over only the EC encryption result (no GrantRef)
+// produces a different CID and causes the server to reject the signature.
+func TestEncryptSignRevokeEC_SignsRevokeStructureIncludingGrantRef(t *testing.T) {
+	masterKey := mustNewMasterKey(t)
+	wallet := &testWalletStore{key: masterKey}
+	_, bobPub := mustNewOtherPartyKey(t)
+	addr := helperContractAddress()
+	contractAddr := *addr
+	const otherParty, consent, chainId = uint32(2), uint32(62), uint32(1)
+	consentCid := "bafyreifakeconsentcidfortesting000000"
+
+	req, err := EncryptSignRevokeEC(wallet, []byte("revoke payload"), otherParty, consent, bobPub, contractAddr, chainId, consentCid)
+	if err != nil {
+		t.Fatalf("EncryptSignRevokeEC() failed: %v", err)
+	}
+	if len(req.Signature) == 0 {
+		t.Fatal("Signature is empty")
+	}
+
+	// The correct revoke CID: includes the GrantRef, matching what mid-tier computes.
+	revokeStructCBOR, err := ipfs.MarshalRevokeEC(&types.RevokeStructure{
+		PulseECEncryptionResult: req.EncryptedData,
+		Grant:                   consentCid,
+	})
+	if err != nil {
+		t.Fatalf("MarshalRevokeEC() failed: %v", err)
+	}
+	correctRevokeCid, err := ipfs.GetCid(revokeStructCBOR)
+	if err != nil {
+		t.Fatalf("GetCid(revokeStructCBOR) failed: %v", err)
+	}
+
+	// The wrong revoke CID: no GrantRef (what the client signed if the bug is present).
+	consentECCBOR, err := ipfs.MarshalConsentEC(&req.EncryptedData)
+	if err != nil {
+		t.Fatalf("MarshalConsentEC() failed: %v", err)
+	}
+	wrongRevokeCid, err := ipfs.GetCid(consentECCBOR)
+	if err != nil {
+		t.Fatalf("GetCid(consentECCBOR) failed: %v", err)
+	}
+
+	// Sanity: GrantRef must change the CBOR, so the CIDs must differ.
+	if correctRevokeCid.String() == wrongRevokeCid.String() {
+		t.Fatal("test setup error: MarshalRevokeEC and MarshalConsentEC produce the same CID")
+	}
+
+	// Independently derive the signing key and produce our own signature over
+	// the correct revoke CID, then recover the expected signing address.
+	path, err := newpulseHDPath(otherParty, chainId, consent, purposes.PulsePurposeSignTx)
+	if err != nil {
+		t.Fatalf("newpulseHDPath() failed: %v", err)
+	}
+	signingKey, err := deriveKeyFromMaster(masterKey, path)
+	if err != nil {
+		t.Fatalf("deriveKeyFromMaster() failed: %v", err)
+	}
+	referenceSig, err := SignRevoke(signingKey.ToECDSA(), contractAddr, consentCid, correctRevokeCid.String())
+	if err != nil {
+		t.Fatalf("SignRevoke() failed: %v", err)
+	}
+	expectedAddr, err := GetRevokeAddress(referenceSig, contractAddr, consentCid, correctRevokeCid.String())
+	if err != nil {
+		t.Fatalf("GetRevokeAddress(reference) failed: %v", err)
+	}
+
+	// The signature from EncryptSignRevokeEC, recovered using the correct (with-GrantRef) CID,
+	// must match the wallet's signing address. If the implementation signed over the wrong CID
+	// (MarshalConsentEC, no GrantRef), the recovered address will differ.
+	gotAddr, err := GetRevokeAddress(req.Signature, contractAddr, consentCid, correctRevokeCid.String())
+	if err != nil {
+		t.Fatalf("GetRevokeAddress(req) failed: %v", err)
+	}
+	if gotAddr != expectedAddr {
+		t.Errorf("revoke signature was not made over the full RevokeStructure CID (with GrantRef):\n"+
+			"  recovered (correct CID):  %x\n"+
+			"  expected (wallet addr):   %x\n"+
+			"  EncryptSignRevokeEC must use MarshalRevokeEC, not MarshalConsentEC",
+			gotAddr, expectedAddr)
+	}
+	t.Logf("Recovered revoker address: %s", hex.EncodeToString(gotAddr[:]))
 }
 
 func TestSignConsentRequest_OnExistingRequest(t *testing.T) {
