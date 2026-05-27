@@ -5,7 +5,6 @@ package midtierclient
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/smarter-contracts/pulse-protocol-go/consent"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
 // Client is an HTTP implementation of consent.MidTierClient.
@@ -86,61 +86,63 @@ func (c *Client) GetConsentsSince(ctx context.Context, xpub, cursor string) ([]c
 
 // ── SubmitGrant ───────────────────────────────────────────────────────────────
 
-// grantRequestWire is the JSON body sent to PUT /api/v3/grant.
-// SealedBytes from ConsentRecord are base64-encoded as the sealedData field.
-// Signatures and keys are included if present in the record.
-type grantRequestWire struct {
-	Consent    grantConsentWire `json:"consent"`
-	Signatures []string         `json:"signatures"`
-}
-
-type grantConsentWire struct {
-	SealedData string `json:"sealedData"`
-}
-
 // SubmitGrant implements consent.MidTierClient.
-// record.SealedBytes must be the CBOR-encoded ConsentEC structure.
-// callbackURL and metadata are forwarded as request headers/body extensions
-// when non-empty; the basic implementation ignores them.
+// record.SealedData holds the raw AES-256-GCM ciphertext; record.Keys holds the
+// EC public keys [Key1, Key2]; record.Signatures holds the ordered EIP-191 sigs.
+// callbackURL is forwarded as X-Callback-URL so mid-tier can route lifecycle
+// callbacks back to PulsePro.
 func (c *Client) SubmitGrant(ctx context.Context, record consent.ConsentRecord, callbackURL string, metadata map[string]any) error {
-	body := grantRequestWire{
-		Consent: grantConsentWire{
-			SealedData: base64.StdEncoding.EncodeToString(record.SealedBytes),
-		},
+	sigs := make([]string, len(record.Signatures))
+	for i, sig := range record.Signatures {
+		sigs[i] = hex.EncodeToString(sig)
 	}
 
-	return c.doJSON(ctx, http.MethodPut, "/api/v3/grant", body)
+	body := pptypes.PulseGrantRequest{
+		Consent: pptypes.PulseConsentPayload{
+			SealedData: record.SealedData,
+			Key1:       keyAt(record.Keys, 0),
+			Key2:       keyAt(record.Keys, 1),
+		},
+		Signatures: sigs,
+	}
+
+	var extra map[string]string
+	if callbackURL != "" {
+		extra = map[string]string{"X-Callback-URL": callbackURL}
+	}
+	return c.doJSON(ctx, http.MethodPut, "/api/v3/grant", body, extra)
+}
+
+// keyAt returns keys[i] or nil when i is out of range.
+func keyAt(keys [][]byte, i int) []byte {
+	if i < len(keys) {
+		return keys[i]
+	}
+	return nil
 }
 
 // ── SubmitRevoke ──────────────────────────────────────────────────────────────
 
-// revokeRequestWire is the JSON body sent to DELETE /api/v3/grant.
-type revokeRequestWire struct {
-	Revoke    revokePayloadWire `json:"revoke"`
-	Signature string            `json:"signature"`
-}
-
-type revokePayloadWire struct {
-	SealedData string `json:"sealedData"`
-	GrantRef   string `json:"grantRef"`
-}
-
 // SubmitRevoke implements consent.MidTierClient.
 func (c *Client) SubmitRevoke(ctx context.Context, record consent.RevokeRecord, callbackURL string, metadata map[string]any) error {
-	body := revokeRequestWire{
-		Revoke: revokePayloadWire{
-			SealedData: base64.StdEncoding.EncodeToString(record.SealedBytes),
+	body := pptypes.PulseRevokeRequest{
+		Revoke: pptypes.PulseRevokePayload{
+			SealedData: record.SealedBytes,
 			GrantRef:   record.GrantCID,
 		},
 		Signature: hex.EncodeToString(record.Signature),
 	}
 
-	return c.doJSON(ctx, http.MethodDelete, "/api/v3/grant", body)
+	var extra map[string]string
+	if callbackURL != "" {
+		extra = map[string]string{"X-Callback-URL": callbackURL}
+	}
+	return c.doJSON(ctx, http.MethodDelete, "/api/v3/grant", body, extra)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-func (c *Client) doJSON(ctx context.Context, method, path string, body any) error {
+func (c *Client) doJSON(ctx context.Context, method, path string, body any, extraHeaders map[string]string) error {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("midtierclient: marshal request: %w", err)
@@ -151,6 +153,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any) erro
 		return fmt.Errorf("midtierclient: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

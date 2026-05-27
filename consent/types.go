@@ -88,7 +88,10 @@ type ConsentRecord struct {
 	RevokeCID   string     // revoke IPFS CID; empty until rev_ipfs_live callback
 	ExpiresAt   *time.Time // nil means no expiry
 	Payload     *feedpermission.FeedPermissionPayload // decrypted; nil until ingest succeeds
-	SealedBytes []byte     // outer-encrypted record for IPFS submission
+	SealedBytes []byte   // DAG-CBOR wrapper of {SealedData, Key1, Key2}; used for CID computation
+	SealedData  []byte   // raw AES-256-GCM ciphertext sent to mid-tier in the grant body
+	Keys        [][]byte // EC: [Key1, Key2]; ordered for correct array reconstruction
+	Signatures  [][]byte // EIP-191 signatures over the consent CID; ordered by signer
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -142,12 +145,13 @@ type ConsentCheckResult struct {
 // InboundConsentRequest carries the sealed record received from the network
 // alongside the routing context required to locate the correct decryption keys.
 type InboundConsentRequest struct {
-	PartyKey   string // counterparty identifier
+	PartyKey   string   // counterparty identifier
 	ChainID    int
 	ConsentNo  int
-	SealedData []byte // outer-encrypted FeedPermissionPayload
-	Key1       []byte // grantor ephemeral public key (purpose 3)
-	Key2       []byte // recipient public key (purpose 3)
+	SealedData []byte   // raw AES-256-GCM ciphertext
+	Key1       []byte   // grantor ephemeral public key (purpose 3)
+	Key2       []byte   // recipient public key (purpose 3)
+	Signatures [][]byte // EIP-191 signatures from the initiating party
 }
 
 // InboundConsentResponse is returned by ConsentEngine.HandleInboundConsent.

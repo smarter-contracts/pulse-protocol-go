@@ -50,6 +50,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
+	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
 // ── Fixed seeds ──────────────────────────────────────────────────────────────
@@ -115,10 +116,10 @@ const (
 	kvRevokeAlicePriv = "e36c8f883748b24f1ce6c2202c0f9eea257b7d8e6ddb334130dd2878b7c74731"
 	kvRevokeAlicePub  = "03ee864493c54357eefca45c3531d444650cc30dd1e15e82c990f069b11ad07993"
 	kvRevokeSealedHex = "53e53faaabf5c36457e1a4a36cff83fe517728e32f7f526ac05991355b4c1f6dfa98cafa9f6bd652439a911d11e12bbef2290cbb7e6c39bac36e65c3b85fc206bee68360ac82f9eeffe09b12b24a4cdf07c28894c2b56dfd0eedc173499183af5cbe45cde0e24146306bbe8bc18598663bdb38452268966fd02261cc5c57c90c27fe0d4f80c7e4624d442f82b2bdc9453189bc077111bad6df3b466bc4b97888444daac402976a31690888e463b44ef3b35af0abdac2b399d969f3eb"
-	kvRevokeCid       = "bafyreicugoorid62wdueq6fjj5elgrd3az2zeyp6nws353g4kh3km7tqy4"
+	kvRevokeCid       = "bafyreidjuyvb2sa5hy6guoow2cxiy6w7s52jtegwmetmc3d755vf4kgwgy"
 
 	// Revoke signature
-	kvRevokeAliceSigHex = "1124ea27c9eca5072fbfb2a45156b72a3692e0b1c0a8ab3791579d12e5120127474a8bbddbf488dce638ad3cfba31589ec1f99fae4d687979a3f9aed5d97bb091c"
+	kvRevokeAliceSigHex = "1a5f0dfc10d7e40c45f39efbc2792664ca405ffca248dbc25896abfaeaa1cb1d7ec0f71d19484118d9f7343729c75338915823072b948c4b1a40f0c940e9ffdd1c"
 	kvRevokeAliceAddr   = "1147b934b5c0fcabbaed2cf128a3db1eb71ef2c0"
 )
 
@@ -316,7 +317,10 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 		t.Fatalf("EncryptSignRevokeEC: %v", err)
 	}
 
-	revokeCBOR, _ := ipfs.MarshalConsentEC(&revokeReq.EncryptedData)
+	revokeCBOR, _ := ipfs.MarshalRevokeEC(&types.RevokeStructure{
+		PulseECEncryptionResult: revokeReq.EncryptedData,
+		Grant:                   consentCid.String(),
+	})
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 
 	t.Logf("Revoke path:            %s", revokePath.String())

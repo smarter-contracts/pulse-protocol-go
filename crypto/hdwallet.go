@@ -387,6 +387,20 @@ func DecryptConsentNotaryEC(wallet WalletStore,
 	return decryptHDEC(masterKey, encryptedData, otherPartyNo, consentNumber, contractAddress, chainId, purposes.PulsePurposeEncryptConsentNotaryBlock)
 }
 
+// DecryptConsentNotaryECAsNotary decrypts the consent notary block using the
+// notary's raw secp256k1 private key.  This is the counterpart to
+// DecryptConsentNotaryEC for callers who hold the notary key directly rather
+// than deriving it from an HD wallet.
+func DecryptConsentNotaryECAsNotary(
+	notaryPrivKey *secp.PrivateKey,
+	encryptedData *types.PulseECEncryptionResult,
+	contractAddress string,
+	chainId uint32,
+	consentNumber uint32,
+) ([]byte, error) {
+	return key_exchange.DecryptEC(encryptedData, &contractAddress, notaryPrivKey, purposes.PulsePurposeEncryptConsentNotaryBlock, chainId, consentNumber)
+}
+
 // DecryptConsentEC derives the consent encryption key from the HD wallet and decrypts
 // the consent payload.  The caller must have been one of the two parties to the
 // original encryption (Key1 or Key2 in the EncryptedData).
@@ -481,7 +495,12 @@ func EncryptSignRevokeEC(wallet WalletStore,
 		return nil, errors.New("failed to encrypt revoke data: " + err.Error())
 	}
 
-	cbor, err := ipfs.MarshalConsentEC(encryptedRevokeData)
+	// The revoke CID must be computed from the full RevokeStructure (including the GrantRef)
+	// so that the signed message matches what the mid-tier verifies via MarshalRevoke.
+	cbor, err := ipfs.MarshalRevokeEC(&types.RevokeStructure{
+		PulseECEncryptionResult: *encryptedRevokeData,
+		Grant:                   consentCid,
+	})
 	if err != nil {
 		return nil, errors.New("failed to marshal revoke CBOR: " + err.Error())
 	}
@@ -566,7 +585,12 @@ func EncryptSignRevokePQ(
 		return nil, errors.New("failed to PQ-encrypt revoke data: " + err.Error())
 	}
 
-	cbor, err := ipfs.MarshalConsentPQ(encryptedData)
+	// The revoke CID must be computed from the full RevokeStructureMulti (including the GrantRef)
+	// so that the signed message matches what the mid-tier verifies via MarshalRevoke.
+	cbor, err := ipfs.MarshalRevokePQ(&types.RevokeStructureMulti{
+		PulsePQEncryptionResult: *encryptedData,
+		Grant:                   consentCid,
+	})
 	if err != nil {
 		return nil, errors.New("failed to marshal PQ revoke CBOR: " + err.Error())
 	}

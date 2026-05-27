@@ -214,16 +214,18 @@ func (s *stubConsentStore) SetSyncCursor(c string) error   { s.cursor = c; retur
 type stubMidTierClient struct {
 	submitGrantCalled  bool
 	submitRevokeCalled bool
+	lastGrantRecord    *ConsentRecord
 	lastRevoke         *RevokeRecord
 	// GetConsentsSince config
-	sinceEvents   []ConsentEvent
-	sinceErr      error
-	capturedXpub  string
+	sinceEvents    []ConsentEvent
+	sinceErr       error
+	capturedXpub   string
 	capturedCursor string
 }
 
-func (s *stubMidTierClient) SubmitGrant(_ context.Context, _ ConsentRecord, _ string, _ map[string]any) error {
+func (s *stubMidTierClient) SubmitGrant(_ context.Context, r ConsentRecord, _ string, _ map[string]any) error {
 	s.submitGrantCalled = true
+	s.lastGrantRecord = &r
 	return nil
 }
 func (s *stubMidTierClient) SubmitRevoke(_ context.Context, r RevokeRecord, _ string, _ map[string]any) error {

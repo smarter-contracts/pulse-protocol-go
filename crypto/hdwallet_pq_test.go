@@ -16,6 +16,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/key_encapsulate"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
 	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
+	"github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
 // ── DerivePQKeyPair ───────────────────────────────────────────────────────────
@@ -419,7 +420,10 @@ func TestRevokeSignerWasConsentSigner_PQ(t *testing.T) {
 		t.Fatalf("GetConsentAddress() failed: %v", err)
 	}
 
-	revokeCBOR, _ := ipfs.MarshalConsentPQ(&revokeReq.EncryptedData)
+	revokeCBOR, _ := ipfs.MarshalRevokePQ(&types.RevokeStructureMulti{
+		PulsePQEncryptionResult: revokeReq.EncryptedData,
+		Grant:                   revokeReq.ConsentCid,
+	})
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 	revokeSignerAddr, err := GetRevokeAddress(revokeReq.Signature, contractAddr, revokeReq.ConsentCid, revokeCid.String())
 	if err != nil {

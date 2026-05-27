@@ -1,7 +1,9 @@
 package midtierclient_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/smarter-contracts/pulse-protocol-go/consent"
 	"github.com/smarter-contracts/pulse-protocol-go/consent/midtierclient"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
 )
 
 // ── GetConsentsSince ──────────────────────────────────────────────────────────
@@ -132,6 +135,111 @@ func TestSubmitGrant_CallsPutGrant(t *testing.T) {
 	}
 	if !called {
 		t.Error("PUT /api/v3/grant was not called")
+	}
+}
+
+func TestSubmitGrant_SendsCallbackURLHeader(t *testing.T) {
+	var gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Callback-URL")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"OK","cid":"bafycid001"}`))
+	}))
+	defer srv.Close()
+
+	client := midtierclient.New(srv.URL)
+	rec := consent.ConsentRecord{SealedBytes: []byte("fake-sealed")}
+	err := client.SubmitGrant(context.Background(), rec, "https://pulsepro.example.com/api/v1/callback/tok", nil)
+	if err != nil {
+		t.Fatalf("SubmitGrant: %v", err)
+	}
+	if gotHeader != "https://pulsepro.example.com/api/v1/callback/tok" {
+		t.Errorf("X-Callback-URL: got %q", gotHeader)
+	}
+}
+
+func TestSubmitGrant_EmptyCallbackURL_NoHeader(t *testing.T) {
+	var hasHeader bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hasHeader = r.Header.Get("X-Callback-URL") != ""
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"OK"}`))
+	}))
+	defer srv.Close()
+
+	client := midtierclient.New(srv.URL)
+	_ = client.SubmitGrant(context.Background(), consent.ConsentRecord{SealedBytes: []byte("x")}, "", nil)
+	if hasHeader {
+		t.Error("expected no X-Callback-URL header when callbackURL is empty")
+	}
+}
+
+func TestSubmitGrant_SendsSealedDataKeysAndSignatures(t *testing.T) {
+	var gotBody pptypes.PulseGrantRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"OK","cid":"bafy"}`))
+	}))
+	defer srv.Close()
+
+	sealedData := []byte("raw-aes-gcm-ciphertext")
+	key1 := []byte{0x02, 0xab, 0xcd}
+	key2 := []byte{0x03, 0xef, 0x01}
+	sig1 := []byte{0xaa, 0xbb, 0xcc}
+	sig2 := []byte{0xdd, 0xee, 0xff}
+
+	rec := consent.ConsentRecord{
+		CID:        "bafycid001",
+		SealedData: sealedData,
+		Keys:       [][]byte{key1, key2},
+		Signatures: [][]byte{sig1, sig2},
+	}
+
+	client := midtierclient.New(srv.URL)
+	if err := client.SubmitGrant(context.Background(), rec, "", nil); err != nil {
+		t.Fatalf("SubmitGrant: %v", err)
+	}
+
+	if !bytes.Equal(gotBody.Consent.SealedData, sealedData) {
+		t.Errorf("SealedData: got %x, want %x", gotBody.Consent.SealedData, sealedData)
+	}
+	if !bytes.Equal(gotBody.Consent.Key1, key1) {
+		t.Errorf("Key1: got %x, want %x", gotBody.Consent.Key1, key1)
+	}
+	if !bytes.Equal(gotBody.Consent.Key2, key2) {
+		t.Errorf("Key2: got %x, want %x", gotBody.Consent.Key2, key2)
+	}
+	if len(gotBody.Signatures) != 2 {
+		t.Fatalf("Signatures: got %d, want 2", len(gotBody.Signatures))
+	}
+	if gotBody.Signatures[0] != hex.EncodeToString(sig1) {
+		t.Errorf("Signatures[0]: got %q, want %q", gotBody.Signatures[0], hex.EncodeToString(sig1))
+	}
+	if gotBody.Signatures[1] != hex.EncodeToString(sig2) {
+		t.Errorf("Signatures[1]: got %q, want %q", gotBody.Signatures[1], hex.EncodeToString(sig2))
+	}
+}
+
+func TestSubmitRevoke_SendsCallbackURLHeader(t *testing.T) {
+	var gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Callback-URL")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"OK"}`))
+	}))
+	defer srv.Close()
+
+	client := midtierclient.New(srv.URL)
+	rec := consent.RevokeRecord{GrantCID: "bafycid001", SealedBytes: []byte("x"), Signature: []byte("s")}
+	err := client.SubmitRevoke(context.Background(), rec, "https://pulsepro.example.com/api/v1/callback/tok", nil)
+	if err != nil {
+		t.Fatalf("SubmitRevoke: %v", err)
+	}
+	if gotHeader != "https://pulsepro.example.com/api/v1/callback/tok" {
+		t.Errorf("X-Callback-URL: got %q", gotHeader)
 	}
 }
 
