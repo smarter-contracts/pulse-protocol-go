@@ -293,8 +293,8 @@ github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749/go.mod h1:ZY1cvUeJ
 github.com/shurcooL/sanitized_anchor_name v1.0.0/go.mod h1:1NzhyTcUVG4SuEtjjoZeVRXNmyL/1OwPU0+IJeTBvfc=
 github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546/go.mod h1:TrYk7fJVaAttu97ZZKrO9UbRa8izdowaMIZcxYMbVaw=
 github.com/sirupsen/logrus v1.8.1/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
-github.com/smarter-contracts/pulse-protocol-go/crypto/v2 v2.0.0 h1:cgMxCKgSmwh2T9eGfjSKyWnLSAaLkR0vZx4IoTrWsCU=
-github.com/smarter-contracts/pulse-protocol-go/crypto/v2 v2.0.0/go.mod h1:21XH3B8p2l+Ot/4bW19RNWmpJSZJL5CmBPUa08mvXSQ=
+github.com/smarter-contracts/pulse-protocol-go/crypto/v2 v2.0.1 h1:cXYggWLqeVpl26+2QIE9qflQZiKseh7u1K37EEyB12g=
+github.com/smarter-contracts/pulse-protocol-go/crypto/v2 v2.0.1/go.mod h1:21XH3B8p2l+Ot/4bW19RNWmpJSZJL5CmBPUa08mvXSQ=
 github.com/smarter-contracts/pulse-protocol-go/ipfs v1.2.0 h1:J5jNML4COlLQgZ+0+E+OnF7VNgbMWs38SogYeCTVOdc=
 github.com/smarter-contracts/pulse-protocol-go/ipfs v1.2.0/go.mod h1:CLIeVoFOvgwSoP2sOdmVeOOyIToCxeRwlHGRHDVc0pY=
 github.com/smarter-contracts/pulse-protocol-go/types v1.2.0 h1:7fxPEHtsB168U6nJUBGKssDPJR7z/5R0TubjwNxGNAs=
