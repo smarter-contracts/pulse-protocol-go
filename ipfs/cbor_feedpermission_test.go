@@ -90,3 +90,61 @@ func TestUnmarshalFeedPermission_WrongType(t *testing.T) {
 	_, err = UnmarshalFeedPermission(ecBlock)
 	assert.ErrorContains(t, err, "unexpected structure type")
 }
+
+func TestMarshalFeedPermission_WithGrantorXpub_RoundTrip(t *testing.T) {
+	orig := &feedpermission.FeedPermissionPayload{
+		ConsentNo:        7,
+		WalletId:         "wlt-gx",
+		GrantorWebId:     "https://pod.example/alice/profile/card#me",
+		CounterpartyDid:  "did:key:zPULSEPRO",
+		FeedType:         "open-banking",
+		PodContainerPath: "pulse/feeds/open-banking/",
+		Permissions:      []string{"read"},
+		DataCategories:   []string{"transactions"},
+		IssuedAt:         1_700_000_000,
+		ExpiresAt:        0,
+		EncryptedNotary:  []byte("notary"),
+		NotaryKey1:       make([]byte, 33),
+		NotaryKey2:       make([]byte, 33),
+		GrantorXpub:      "xpub661MyMwAqRbcGRandomTestXpubValue",
+	}
+
+	block, err := MarshalFeedPermission(orig)
+	require.NoError(t, err)
+	require.NotEmpty(t, block)
+
+	got, err := UnmarshalFeedPermission(block)
+	require.NoError(t, err)
+
+	assert.Equal(t, orig.GrantorXpub, got.GrantorXpub)
+	assert.Equal(t, orig.FeedType, got.FeedType)
+	assert.Equal(t, orig.ConsentNo, got.ConsentNo)
+}
+
+func TestMarshalFeedPermission_WithoutGrantorXpub_FieldAbsent(t *testing.T) {
+	orig := &feedpermission.FeedPermissionPayload{
+		ConsentNo:        1,
+		WalletId:         "wlt-nogx",
+		GrantorWebId:     "https://pod.example/bob/profile/card#me",
+		CounterpartyDid:  "did:example:counterparty",
+		FeedType:         "health",
+		PodContainerPath: "pulse/feeds/health/",
+		Permissions:      []string{"read"},
+		DataCategories:   []string{"records"},
+		IssuedAt:         1_700_000_000,
+		ExpiresAt:        0,
+		EncryptedNotary:  []byte("notary"),
+		NotaryKey1:       make([]byte, 33),
+		NotaryKey2:       make([]byte, 33),
+		// GrantorXpub intentionally absent
+	}
+
+	block, err := MarshalFeedPermission(orig)
+	require.NoError(t, err)
+
+	got, err := UnmarshalFeedPermission(block)
+	require.NoError(t, err)
+
+	assert.Empty(t, got.GrantorXpub, "GrantorXpub should be empty when not set")
+	assert.Equal(t, orig.FeedType, got.FeedType)
+}

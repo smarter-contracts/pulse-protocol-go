@@ -10,14 +10,17 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedpermission"
 )
 
-// MarshalFeedPermission encodes a FeedPermissionPayload as a DAG-CBOR map with 15 fields:
-// {"t":"feed-permission","v":1,"cn":<int>,"dc":[...],"en":<bytes>,"ft":<string>,
-//  "pm":[...],"cpd":<string>,"exp":<int>,"iat":<int>,"nk1":<bytes>,"nk2":<bytes>,
-//  "pcp":<string>,"wid":<string>,"gwid":<string>}
+// MarshalFeedPermission encodes a FeedPermissionPayload as a DAG-CBOR map.
+// The map contains 15 mandatory fields plus an optional "gx" field (GrantorXpub)
+// when non-empty, giving 15 or 16 entries total.
 // (Keys appear in DAG-CBOR canonical order: length ascending, then lexicographic.)
 func MarshalFeedPermission(p *feedpermission.FeedPermissionPayload) ([]byte, error) {
 	nb := basicnode.Prototype.Map.NewBuilder()
-	ma, err := nb.BeginMap(15)
+	mapSize := int64(15)
+	if p.GrantorXpub != "" {
+		mapSize = 16
+	}
+	ma, err := nb.BeginMap(mapSize)
 	if err != nil {
 		return nil, err
 	}
@@ -35,6 +38,11 @@ func MarshalFeedPermission(p *feedpermission.FeedPermissionPayload) ([]byte, err
 	_ = ma.AssembleValue().AssignBytes(p.EncryptedNotary)
 	_ = ma.AssembleKey().AssignString("ft")
 	_ = ma.AssembleValue().AssignString(p.FeedType)
+	// "gx" (GrantorXpub) is optional; when present it sorts between "ft" and "pm".
+	if p.GrantorXpub != "" {
+		_ = ma.AssembleKey().AssignString("gx")
+		_ = ma.AssembleValue().AssignString(p.GrantorXpub)
+	}
 	_ = ma.AssembleKey().AssignString("pm")
 	if err := encodeStringSlice(ma.AssembleValue(), p.Permissions); err != nil {
 		return nil, fmt.Errorf("pm: %w", err)
@@ -139,6 +147,10 @@ func UnmarshalFeedPermission(block []byte) (*feedpermission.FeedPermissionPayloa
 	if err != nil {
 		return nil, fmt.Errorf("nk2: %w", err)
 	}
+	gx, err := OptString(node, "gx")
+	if err != nil {
+		return nil, fmt.Errorf("gx: %w", err)
+	}
 	return &feedpermission.FeedPermissionPayload{
 		ConsentNo:        uint32(cn),
 		WalletId:         wid,
@@ -153,6 +165,7 @@ func UnmarshalFeedPermission(block []byte) (*feedpermission.FeedPermissionPayloa
 		EncryptedNotary:  en,
 		NotaryKey1:       nk1,
 		NotaryKey2:       nk2,
+		GrantorXpub:      gx,
 	}, nil
 }
 
