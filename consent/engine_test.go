@@ -3,11 +3,60 @@ package consent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	bip32 "github.com/jamesradley/go-bip32"
 	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 )
+
+// ── CounterpartyDirectory.NextConsentNo ──────────────────────────────────────
+
+func TestStubCounterpartyDirectory_NextConsentNo_StartsAtZero(t *testing.T) {
+	dir := &stubCounterpartyDirectory{}
+	n, err := dir.NextConsentNo("did:key:zBOB", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("want 0, got %d", n)
+	}
+}
+
+func TestStubCounterpartyDirectory_NextConsentNo_Increments(t *testing.T) {
+	dir := &stubCounterpartyDirectory{}
+	for want := 0; want < 5; want++ {
+		got, err := dir.NextConsentNo("did:key:zBOB", 1)
+		if err != nil {
+			t.Fatalf("call %d: unexpected error: %v", want, err)
+		}
+		if got != want {
+			t.Fatalf("call %d: want %d, got %d", want, want, got)
+		}
+	}
+}
+
+func TestStubCounterpartyDirectory_NextConsentNo_IndependentPerPartyAndChain(t *testing.T) {
+	dir := &stubCounterpartyDirectory{}
+	// Advance alice/chain-1 twice
+	dir.NextConsentNo("did:key:zALICE", 1) //nolint:errcheck
+	dir.NextConsentNo("did:key:zALICE", 1) //nolint:errcheck
+	// bob/chain-1 and alice/chain-2 start fresh
+	bobN, _ := dir.NextConsentNo("did:key:zBOB", 1)
+	aliceChain2N, _ := dir.NextConsentNo("did:key:zALICE", 2)
+	if bobN != 0 {
+		t.Fatalf("bob chain-1: want 0, got %d", bobN)
+	}
+	if aliceChain2N != 0 {
+		t.Fatalf("alice chain-2: want 0, got %d", aliceChain2N)
+	}
+	// alice/chain-1 should be at 2
+	aliceNext, _ := dir.NextConsentNo("did:key:zALICE", 1)
+	if aliceNext != 2 {
+		t.Fatalf("alice chain-1: want 2, got %d", aliceNext)
+	}
+}
 
 // ── NewConsentEngine ──────────────────────────────────────────────────────────
 
@@ -163,8 +212,17 @@ func makeTestXpub(t *testing.T, otherPartyId uint32) string {
 	return xpub
 }
 
+type storeXpubCall struct {
+	partyKey string
+	xpub     string
+}
+
 type stubCounterpartyDirectory struct {
-	xpub string // if non-empty, returned by GetXpub (found=true)
+	xpub           string         // if non-empty, returned by GetXpub (found=true)
+	counters       map[string]int // key: "partyKey:chainId", value: next consent number
+	storeXpubCalls []storeXpubCall
+	storeXpubErr   error
+	mu             sync.Mutex
 }
 
 func (s *stubCounterpartyDirectory) GetOrAssignIndex(_ string) (int, error) { return 1, nil }
@@ -174,7 +232,23 @@ func (s *stubCounterpartyDirectory) GetXpub(_ string) (string, bool, error) {
 	}
 	return s.xpub, true, nil
 }
-func (s *stubCounterpartyDirectory) StoreXpub(_, _ string) error { return nil }
+func (s *stubCounterpartyDirectory) StoreXpub(partyKey, xpub string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.storeXpubCalls = append(s.storeXpubCalls, storeXpubCall{partyKey: partyKey, xpub: xpub})
+	return s.storeXpubErr
+}
+func (s *stubCounterpartyDirectory) NextConsentNo(partyKey string, chainId int) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counters == nil {
+		s.counters = make(map[string]int)
+	}
+	key := fmt.Sprintf("%s:%d", partyKey, chainId)
+	n := s.counters[key]
+	s.counters[key] = n + 1
+	return n, nil
+}
 
 type stubConsentStore struct {
 	records       map[string]*ConsentRecord // pre-seeded records for Get
