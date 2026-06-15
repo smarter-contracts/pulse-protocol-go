@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -127,8 +128,10 @@ func keyAt(keys [][]byte, i int) []byte {
 func (c *Client) SubmitRevoke(ctx context.Context, record consent.RevokeRecord, callbackURL string, metadata map[string]any) error {
 	body := pptypes.PulseRevokeRequest{
 		Revoke: pptypes.PulseRevokePayload{
-			SealedData: record.SealedBytes,
+			SealedData: record.SealedData,
 			GrantRef:   record.GrantCID,
+			Key1:       record.Key1,
+			Key2:       record.Key2,
 		},
 		Signature: hex.EncodeToString(record.Signature),
 	}
@@ -164,7 +167,8 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, extr
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("midtierclient: %s %s: status %d", method, path, resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("midtierclient: %s %s: status %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 	return nil
 }
