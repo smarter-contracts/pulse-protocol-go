@@ -10,7 +10,7 @@ import (
 // ── DecodeConsent ─────────────────────────────────────────────────────────────
 
 func TestDecodeConsent_V2EC(t *testing.T) {
-	orig := &pptypes.ConsentStructure{
+	orig := &pptypes.PulseECEncryptionResult{
 		SealedData: []byte("sealed"),
 		Key1:       []byte("key1data"),
 		Key2:       []byte("key2data"),
@@ -44,7 +44,7 @@ func TestDecodeConsent_V2EC(t *testing.T) {
 func TestDecodeConsent_V2PQ(t *testing.T) {
 	var fp [32]byte
 	fp[0] = 0xAB
-	orig := &pptypes.ConsentStructureMulti{
+	orig := &pptypes.PulsePQEncryptionResult{
 		SealedData: []byte("sealed-pq"),
 		Keys: []*pptypes.PulsePQEncryptionKey{
 			{KeyFingerPrint: fp, EncapsulatedKeyKey: []byte("ekk"), EncapsulatedDataKey: []byte("edk")},
@@ -131,17 +131,15 @@ func TestDecodeConsent_InvalidBytes(t *testing.T) {
 // ── DecodeRevoke ──────────────────────────────────────────────────────────────
 
 func TestDecodeRevoke_V2EC(t *testing.T) {
-	orig := &pptypes.RevokeStructure{
-		PulseECEncryptionResult: pptypes.PulseECEncryptionResult{
-			SealedData: []byte("revoke-sealed"),
-			Key1:       []byte("key1"),
-			Key2:       []byte("key2"),
-		},
-		Grant: "bafy...",
+	orig := &pptypes.PulseRevokePayload{
+		SealedData: []byte("revoke-sealed"),
+		Key1:       []byte("key1"),
+		Key2:       []byte("key2"),
+		GrantRef:   "bafy...",
 	}
-	block, err := MarshalRevokeEC(orig)
+	block, err := MarshalRevoke(orig)
 	if err != nil {
-		t.Fatalf("MarshalRevokeEC: %v", err)
+		t.Fatalf("MarshalRevoke: %v", err)
 	}
 
 	got, err := DecodeRevoke(block)
@@ -154,26 +152,24 @@ func TestDecodeRevoke_V2EC(t *testing.T) {
 	if got.V2EC == nil {
 		t.Fatal("V2EC is nil")
 	}
-	if got.V2EC.Grant != orig.Grant {
-		t.Errorf("Grant mismatch: got %q, want %q", got.V2EC.Grant, orig.Grant)
+	if got.V2EC.GrantRef != orig.GrantRef {
+		t.Errorf("GrantRef mismatch: got %q, want %q", got.V2EC.GrantRef, orig.GrantRef)
 	}
 }
 
 func TestDecodeRevoke_V2PQ(t *testing.T) {
 	var fp [32]byte
 	fp[1] = 0xCD
-	orig := &pptypes.RevokeStructureMulti{
-		PulsePQEncryptionResult: pptypes.PulsePQEncryptionResult{
-			SealedData: []byte("revoke-pq"),
-			Keys: []*pptypes.PulsePQEncryptionKey{
-				{KeyFingerPrint: fp, EncapsulatedKeyKey: []byte("ekk"), EncapsulatedDataKey: []byte("edk")},
-			},
+	orig := &pptypes.PulseRevokePayload{
+		SealedData: []byte("revoke-pq"),
+		Keys: []*pptypes.PulsePQEncryptionKey{
+			{KeyFingerPrint: fp, EncapsulatedKeyKey: []byte("ekk"), EncapsulatedDataKey: []byte("edk")},
 		},
-		Grant: "bafy...",
+		GrantRef: "bafy...",
 	}
-	block, err := MarshalRevokePQ(orig)
+	block, err := MarshalRevoke(orig)
 	if err != nil {
-		t.Fatalf("MarshalRevokePQ: %v", err)
+		t.Fatalf("MarshalRevoke: %v", err)
 	}
 
 	got, err := DecodeRevoke(block)
@@ -186,8 +182,8 @@ func TestDecodeRevoke_V2PQ(t *testing.T) {
 	if got.V2PQ == nil {
 		t.Fatal("V2PQ is nil")
 	}
-	if got.V2PQ.Grant != orig.Grant {
-		t.Errorf("Grant mismatch")
+	if got.V2PQ.GrantRef != orig.GrantRef {
+		t.Errorf("GrantRef mismatch")
 	}
 }
 
@@ -251,7 +247,7 @@ func TestDecodeRevoke_InvalidBytes(t *testing.T) {
 // ── ComputeCID ────────────────────────────────────────────────────────────────
 
 func TestComputeCID_V2EC_Deterministic(t *testing.T) {
-	record := &pptypes.ConsentStructure{
+	record := &pptypes.PulseECEncryptionResult{
 		SealedData: []byte("sealed"),
 		Key1:       []byte("key1"),
 		Key2:       []byte("key2"),

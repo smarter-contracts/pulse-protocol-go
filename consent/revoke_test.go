@@ -121,8 +121,8 @@ func TestRevokeConsent_SealedBytesNonEmpty(t *testing.T) {
 	if err := engine.RevokeConsent(context.Background(), "c1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(mt.lastRevoke.SealedBytes) == 0 {
-		t.Error("RevokeRecord.SealedBytes should not be empty")
+	if len(mt.lastRevoke.SealedData) == 0 {
+		t.Error("RevokeRecord.SealedData should not be empty")
 	}
 }
 

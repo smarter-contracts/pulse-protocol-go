@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	bip32 "github.com/jamesradley/go-bip32"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/key_exchange"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/textformat"
@@ -694,12 +695,14 @@ func TestEncryptSignRevokeEC_SignsRevokeStructureIncludingGrantRef(t *testing.T)
 	}
 
 	// The correct revoke CID: includes the GrantRef, matching what mid-tier computes.
-	revokeStructCBOR, err := ipfs.MarshalRevokeEC(&types.RevokeStructure{
-		PulseECEncryptionResult: req.EncryptedData,
-		Grant:                   consentCid,
+	revokeStructCBOR, err := ipfs.MarshalRevoke(&types.PulseRevokePayload{
+		SealedData: req.EncryptedData.SealedData,
+		Key1:       req.EncryptedData.Key1,
+		Key2:       req.EncryptedData.Key2,
+		GrantRef:   consentCid,
 	})
 	if err != nil {
-		t.Fatalf("MarshalRevokeEC() failed: %v", err)
+		t.Fatalf("MarshalRevoke() failed: %v", err)
 	}
 	correctRevokeCid, err := ipfs.GetCid(revokeStructCBOR)
 	if err != nil {
@@ -718,7 +721,7 @@ func TestEncryptSignRevokeEC_SignsRevokeStructureIncludingGrantRef(t *testing.T)
 
 	// Sanity: GrantRef must change the CBOR, so the CIDs must differ.
 	if correctRevokeCid.String() == wrongRevokeCid.String() {
-		t.Fatal("test setup error: MarshalRevokeEC and MarshalConsentEC produce the same CID")
+		t.Fatal("test setup error: MarshalRevoke and MarshalConsentEC produce the same CID")
 	}
 
 	// Independently derive the signing key and produce our own signature over
@@ -731,7 +734,11 @@ func TestEncryptSignRevokeEC_SignsRevokeStructureIncludingGrantRef(t *testing.T)
 	if err != nil {
 		t.Fatalf("deriveKeyFromMaster() failed: %v", err)
 	}
-	referenceSig, err := SignRevoke(signingKey.ToECDSA(), contractAddr, consentCid, correctRevokeCid.String())
+	ecdsaSigningKey, err := gethcrypto.ToECDSA(signingKey.Serialize())
+	if err != nil {
+		t.Fatalf("ToECDSA() failed: %v", err)
+	}
+	referenceSig, err := SignRevoke(ecdsaSigningKey, contractAddr, consentCid, correctRevokeCid.String())
 	if err != nil {
 		t.Fatalf("SignRevoke() failed: %v", err)
 	}
@@ -748,10 +755,10 @@ func TestEncryptSignRevokeEC_SignsRevokeStructureIncludingGrantRef(t *testing.T)
 		t.Fatalf("GetRevokeAddress(req) failed: %v", err)
 	}
 	if gotAddr != expectedAddr {
-		t.Errorf("revoke signature was not made over the full RevokeStructure CID (with GrantRef):\n"+
+		t.Errorf("revoke signature was not made over the full PulseRevokePayload CID (with GrantRef):\n"+
 			"  recovered (correct CID):  %x\n"+
 			"  expected (wallet addr):   %x\n"+
-			"  EncryptSignRevokeEC must use MarshalRevokeEC, not MarshalConsentEC",
+			"  EncryptSignRevokeEC must use MarshalRevoke, not MarshalConsentEC",
 			gotAddr, expectedAddr)
 	}
 	t.Logf("Recovered revoker address: %s", hex.EncodeToString(gotAddr[:]))

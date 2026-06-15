@@ -177,6 +177,51 @@ func TestHandleXpubRequest_DifferentIdsDifferentXpubs(t *testing.T) {
 	}
 }
 
+// ── HandleXpubRequestByDID ────────────────────────────────────────────────────
+
+func TestHandleXpubRequestByDID_AssignsSlotAndReturnsXpub(t *testing.T) {
+	wallet := makeTestWallet(t)
+	cpDir := &stubCounterpartyDirectory{}
+	engine := NewConsentEngine(wallet, cpDir, &stubConsentStore{}, &stubMidTierClient{})
+
+	resp, err := engine.HandleXpubRequestByDID(context.Background(), "did:key:zALICE")
+	if err != nil {
+		t.Fatalf("HandleXpubRequestByDID: %v", err)
+	}
+	// stubCounterpartyDirectory.GetOrAssignIndex always returns 1.
+	wantXpub, err := ppcrypto.DeriveOtherPartyXpub(wallet, 1)
+	if err != nil {
+		t.Fatalf("DeriveOtherPartyXpub: %v", err)
+	}
+	if resp.Xpub != wantXpub {
+		t.Errorf("xpub mismatch: got %q want %q", resp.Xpub, wantXpub)
+	}
+	if resp.OtherpartyId != 1 {
+		t.Errorf("OtherpartyId: got %d want 1", resp.OtherpartyId)
+	}
+}
+
+func TestHandleXpubRequestByDID_DifferentDIDsDifferentSlots(t *testing.T) {
+	wallet := makeTestWallet(t)
+	cpDir := &sequentialCounterpartyDirectory{}
+	engine := NewConsentEngine(wallet, cpDir, &stubConsentStore{}, &stubMidTierClient{})
+
+	resp1, err := engine.HandleXpubRequestByDID(context.Background(), "did:key:zALICE")
+	if err != nil {
+		t.Fatalf("alice: %v", err)
+	}
+	resp2, err := engine.HandleXpubRequestByDID(context.Background(), "did:key:zBOB")
+	if err != nil {
+		t.Fatalf("bob: %v", err)
+	}
+	if resp1.Xpub == resp2.Xpub {
+		t.Error("different DIDs must produce different xpubs")
+	}
+	if resp1.OtherpartyId == resp2.OtherpartyId {
+		t.Error("different DIDs must get different slot numbers")
+	}
+}
+
 // ── stub implementations ──────────────────────────────────────────────────────
 
 // stubWalletStore is an in-memory WalletStore for use in consent package tests only.
@@ -248,6 +293,32 @@ func (s *stubCounterpartyDirectory) NextConsentNo(partyKey string, chainId int) 
 	n := s.counters[key]
 	s.counters[key] = n + 1
 	return n, nil
+}
+
+// sequentialCounterpartyDirectory assigns incrementing slots per unique DID.
+type sequentialCounterpartyDirectory struct {
+	mu      sync.Mutex
+	slots   map[string]int
+	nextIdx int
+}
+
+func (d *sequentialCounterpartyDirectory) GetOrAssignIndex(did string) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.slots == nil {
+		d.slots = make(map[string]int)
+	}
+	if idx, ok := d.slots[did]; ok {
+		return idx, nil
+	}
+	d.nextIdx++
+	d.slots[did] = d.nextIdx
+	return d.nextIdx, nil
+}
+func (d *sequentialCounterpartyDirectory) GetXpub(_ string) (string, bool, error) { return "", false, nil }
+func (d *sequentialCounterpartyDirectory) StoreXpub(_, _ string) error            { return nil }
+func (d *sequentialCounterpartyDirectory) NextConsentNo(_ string, _ int) (int, error) {
+	return 0, nil
 }
 
 type stubConsentStore struct {

@@ -420,9 +420,10 @@ func TestRevokeSignerWasConsentSigner_PQ(t *testing.T) {
 		t.Fatalf("GetConsentAddress() failed: %v", err)
 	}
 
-	revokeCBOR, _ := ipfs.MarshalRevokePQ(&types.RevokeStructureMulti{
-		PulsePQEncryptionResult: revokeReq.EncryptedData,
-		Grant:                   revokeReq.ConsentCid,
+	revokeCBOR, _ := ipfs.MarshalRevoke(&types.PulseRevokePayload{
+		SealedData: revokeReq.EncryptedData.SealedData,
+		Keys:       revokeReq.EncryptedData.Keys,
+		GrantRef:   revokeReq.ConsentCid,
 	})
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 	revokeSignerAddr, err := GetRevokeAddress(revokeReq.Signature, contractAddr, revokeReq.ConsentCid, revokeCid.String())

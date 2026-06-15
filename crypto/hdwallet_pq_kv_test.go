@@ -391,9 +391,10 @@ func TestHDWalletPQ_KnownValues(t *testing.T) {
 	}
 
 	// Revoke signature recovery
-	revokeCBOR, _ := ipfs.MarshalRevokePQ(&types.RevokeStructureMulti{
-		PulsePQEncryptionResult: revokeReq.EncryptedData,
-		Grant:                   consentCid.String(),
+	revokeCBOR, _ := ipfs.MarshalRevoke(&types.PulseRevokePayload{
+		SealedData: revokeReq.EncryptedData.SealedData,
+		Keys:       revokeReq.EncryptedData.Keys,
+		GrantRef:   consentCid.String(),
 	})
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 	t.Logf("PQ revoke CID (rcid):        %s", revokeCid.String())

@@ -65,9 +65,11 @@ func RevokeSignerWasConsentSigner(
 
 	// Recover the revoke signer — the CID must include the GrantRef so it
 	// matches what EncryptSignRevokeEC signs and what the mid-tier verifies.
-	revokeCBOR, err := ipfs.MarshalRevokeEC(&types.RevokeStructure{
-		PulseECEncryptionResult: revoke.EncryptedData,
-		Grant:                   revoke.ConsentCid,
+	revokeCBOR, err := ipfs.MarshalRevoke(&types.PulseRevokePayload{
+		SealedData: revoke.EncryptedData.SealedData,
+		Key1:       revoke.EncryptedData.Key1,
+		Key2:       revoke.EncryptedData.Key2,
+		GrantRef:   revoke.ConsentCid,
 	})
 	if err != nil {
 		return false, fmt.Errorf("marshalling revoke encrypted data: %w", err)

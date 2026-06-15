@@ -317,9 +317,11 @@ func TestHDWalletEC_KnownValues(t *testing.T) {
 		t.Fatalf("EncryptSignRevokeEC: %v", err)
 	}
 
-	revokeCBOR, _ := ipfs.MarshalRevokeEC(&types.RevokeStructure{
-		PulseECEncryptionResult: revokeReq.EncryptedData,
-		Grant:                   consentCid.String(),
+	revokeCBOR, _ := ipfs.MarshalRevoke(&types.PulseRevokePayload{
+		SealedData: revokeReq.EncryptedData.SealedData,
+		Key1:       revokeReq.EncryptedData.Key1,
+		Key2:       revokeReq.EncryptedData.Key2,
+		GrantRef:   consentCid.String(),
 	})
 	revokeCid, _ := ipfs.GetCid(revokeCBOR)
 

@@ -30,7 +30,8 @@ type CounterpartyDirectory interface {
 	// party is acting as grantor — the returned number is embedded in the HD
 	// derivation path and in the consent record's ConsentNo field.
 	//
-	// The first call for a (partyKey, chainId) pair returns 0.
+	// Sequence numbers start at 1; 0 is reserved as an "unset" sentinel in
+	// persisted storage.
 	NextConsentNo(partyKey string, chainId int) (int, error)
 }
 
