@@ -7,7 +7,7 @@ import (
 	ipld "github.com/ipld/go-ipld-prime"
 	"github.com/ipld/go-ipld-prime/codec/dagcbor"
 	"github.com/ipld/go-ipld-prime/node/basicnode"
-	v1 "github.com/smarter-contracts/pulse-protocol-go/types/v1"
+	v1 "github.com/smarter-contracts/pulse-protocol-go/types/v2/v1"
 )
 
 // ── V1 ConsentStructure (EC, two-party) ───────────────────────────────────────

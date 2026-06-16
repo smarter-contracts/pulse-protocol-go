@@ -3,8 +3,8 @@ package ipfs
 import (
 	"fmt"
 
-	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
-	v1 "github.com/smarter-contracts/pulse-protocol-go/types/v1"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types/v2"
+	v1 "github.com/smarter-contracts/pulse-protocol-go/types/v2/v1"
 )
 
 // RecordKind identifies the version and encryption scheme of a decoded block.

@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	v1 "github.com/smarter-contracts/pulse-protocol-go/types/v1"
+	v1 "github.com/smarter-contracts/pulse-protocol-go/types/v2/v1"
 )
 
 // Fixed inputs shared across all V1 canary tests.

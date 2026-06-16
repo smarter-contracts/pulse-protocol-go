@@ -1,4 +1,4 @@
-module github.com/smarter-contracts/pulse-protocol-go/types
+module github.com/smarter-contracts/pulse-protocol-go/types/v2
 
 go 1.25.3
 

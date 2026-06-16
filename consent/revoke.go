@@ -9,9 +9,9 @@ import (
 	bip32 "github.com/jamesradley/go-bip32"
 	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
-	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
-	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedrevocation"
+	"github.com/smarter-contracts/pulse-protocol-go/ipfs/v2"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types/v2"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedrevocation"
 )
 
 // RevokeConsent initiates a revocation for an existing consent. The consent must

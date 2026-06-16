@@ -11,7 +11,7 @@ import (
 
 	"github.com/smarter-contracts/pulse-protocol-go/consent"
 	"github.com/smarter-contracts/pulse-protocol-go/consent/midtierclient"
-	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 // ── GetConsentsSince ──────────────────────────────────────────────────────────

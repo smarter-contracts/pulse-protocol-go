@@ -6,7 +6,7 @@ import (
 
 	"github.com/ipld/go-ipld-prime/codec/dagcbor"
 	"github.com/ipld/go-ipld-prime/node/basicnode"
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedrevocation"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedrevocation"
 )
 
 // MarshalFeedRevocation encodes a FeedRevocationPayload as a DAG-CBOR map with 8 fields:

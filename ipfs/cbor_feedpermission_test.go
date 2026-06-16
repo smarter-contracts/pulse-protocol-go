@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedpermission"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types/v2"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedpermission"
 )
 
 func TestMarshalFeedPermission_RoundTrip(t *testing.T) {

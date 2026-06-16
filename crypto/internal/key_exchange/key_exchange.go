@@ -18,7 +18,7 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/textformat"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/wipe"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
-	"github.com/smarter-contracts/pulse-protocol-go/types"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 // ECDHCipherSuite is the cipher suite identifier included in HKDF info and AES

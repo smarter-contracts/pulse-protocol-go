@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedpermission"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedpermission"
 )
 
 // ── CheckConsent ──────────────────────────────────────────────────────────────
