@@ -5,6 +5,48 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-16
+
+### Breaking
+
+- **`CounterpartyDirectory` interface** — new required method:
+  ```go
+  NextConsentNo(partyKey string, chainId int) (int, error)
+  ```
+  Atomically returns and increments the consent sequence number for a counterparty on a
+  given chain. Sequence numbers start at 1; 0 is the "unset" sentinel. Implementations that
+  previously satisfied this interface must add this method.
+
+- **`RevokeRecord` fields restructured** — `SealedBytes []byte` is replaced by three separate
+  fields matching the EC encryption output: `SealedData []byte`, `Key1 []byte`, `Key2 []byte`.
+  This aligns `RevokeRecord` with the `PulseRevokePayload` wire format and removes the implicit
+  marshalling that previously combined these into a single field.
+
+### Added
+
+- **`ConsentEngine.HandleXpubRequestByDID(ctx, requestorDID string) (XpubResponse, error)`**
+  — resolves or assigns a counterparty slot for the given DID via `CounterpartyDirectory`,
+  then delegates to `HandleXpubRequest`. Callers no longer need to resolve the slot themselves
+  before requesting an xpub.
+
+### Fixed
+
+- **`RevokeConsent`**: falls back to `record.ID` as `GrantRef` when `record.CID` is empty.
+  `record.CID` is populated by the `ipfs_live` callback from mid-tier; if that callback was
+  never received (e.g. the service restarted before it arrived), `record.CID` is empty.
+  Both values are derived from the same DAG-CBOR bytes, so `record.ID` is a safe substitute.
+
+- **`midtierclient`**: non-2xx responses now include up to 1 KiB of the response body in the
+  returned error string. Previously the body was discarded, making transport-level rejections
+  from mid-tier opaque.
+
+### Changed
+
+- **`HandleInboundConsent`** now calls `CounterpartyDirectory.StoreXpub` when the inbound
+  `FeedPermissionPayload.GrantorXpub` field is non-empty. This caches the grantor's xpub
+  automatically on first contact, enabling future reverse grants without a separate xpub
+  round-trip.
+
 ## [0.1.1] - 2026-05-14
 
 ### Changed
