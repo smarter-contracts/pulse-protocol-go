@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/smarter-contracts/pulse-protocol-go/types"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 func TestPulseRevokePayload_EC_JSONRoundTrip(t *testing.T) {

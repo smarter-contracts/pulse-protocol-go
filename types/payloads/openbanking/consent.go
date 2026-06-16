@@ -1,7 +1,7 @@
 // Package openbanking defines consent payload types for Open Banking use cases.
 package openbanking
 
-import "github.com/smarter-contracts/pulse-protocol-go/types/payloads"
+import "github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads"
 
 // Type is the payload type discriminator for Open Banking consents.
 const Type = "openbanking"
