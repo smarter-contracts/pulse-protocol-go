@@ -80,9 +80,10 @@ func UnmarshalConsentPQ(block []byte) (*pptypes.PulsePQEncryptionResult, error) 
 	return &pptypes.PulsePQEncryptionResult{SealedData: sd, Keys: keys}, nil
 }
 
-// MarshalRevokePQ encodes a RevokeStructureMulti as a DAG-CBOR map:
+// marshalRevokePQ encodes a PulseRevokePayload (PQ variant) as a DAG-CBOR map:
 // {"t":"rev-pq","v":1,"sd":<bytes>,"keys":[...],"gr":<string>}
-func MarshalRevokePQ(r *pptypes.RevokeStructureMulti) ([]byte, error) {
+// Called internally by MarshalRevoke for PQ (multi-key) payloads.
+func marshalRevokePQ(p *pptypes.PulseRevokePayload) ([]byte, error) {
 	nb := basicnode.Prototype.Map.NewBuilder()
 	ma, err := nb.BeginMap(5)
 	if err != nil {
@@ -93,13 +94,13 @@ func MarshalRevokePQ(r *pptypes.RevokeStructureMulti) ([]byte, error) {
 	_ = ma.AssembleKey().AssignString("v")
 	_ = ma.AssembleValue().AssignInt(1)
 	_ = ma.AssembleKey().AssignString("sd")
-	_ = ma.AssembleValue().AssignBytes(r.SealedData)
+	_ = ma.AssembleValue().AssignBytes(p.SealedData)
 	_ = ma.AssembleKey().AssignString("keys")
-	la, err := ma.AssembleValue().BeginList(int64(len(r.Keys)))
+	la, err := ma.AssembleValue().BeginList(int64(len(p.Keys)))
 	if err != nil {
 		return nil, err
 	}
-	for _, k := range r.Keys {
+	for _, k := range p.Keys {
 		if err := appendPQKey(la, k); err != nil {
 			return nil, err
 		}
@@ -108,7 +109,7 @@ func MarshalRevokePQ(r *pptypes.RevokeStructureMulti) ([]byte, error) {
 		return nil, err
 	}
 	_ = ma.AssembleKey().AssignString("gr")
-	_ = ma.AssembleValue().AssignString(r.Grant)
+	_ = ma.AssembleValue().AssignString(p.GrantRef)
 	if err := ma.Finish(); err != nil {
 		return nil, err
 	}
@@ -119,8 +120,9 @@ func MarshalRevokePQ(r *pptypes.RevokeStructureMulti) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalRevokePQ decodes a DAG-CBOR block into a RevokeStructureMulti.
-func UnmarshalRevokePQ(block []byte) (*pptypes.RevokeStructureMulti, error) {
+// unmarshalRevokePQ decodes a DAG-CBOR block into a PulseRevokePayload (PQ variant).
+// Called internally by UnmarshalRevoke and DecodeRevoke.
+func unmarshalRevokePQ(block []byte) (*pptypes.PulseRevokePayload, error) {
 	na := basicnode.Prototype.Any.NewBuilder()
 	if err := dagcbor.Decode(na, bytes.NewReader(block)); err != nil {
 		return nil, fmt.Errorf("decoding CBOR: %w", err)
@@ -153,9 +155,10 @@ func UnmarshalRevokePQ(block []byte) (*pptypes.RevokeStructureMulti, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gr: %w", err)
 	}
-	return &pptypes.RevokeStructureMulti{
-		PulsePQEncryptionResult: pptypes.PulsePQEncryptionResult{SealedData: sd, Keys: keys},
-		Grant:                   gr,
+	return &pptypes.PulseRevokePayload{
+		SealedData: sd,
+		Keys:       keys,
+		GrantRef:   gr,
 	}, nil
 }
 

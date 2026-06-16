@@ -3,9 +3,11 @@
 package ipfs
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/ipld/go-ipld-prime"
+	ipld "github.com/ipld/go-ipld-prime"
+	"github.com/ipld/go-ipld-prime/datamodel"
 )
 
 // MustBytes looks up key in the IPLD node n and returns the value as a byte slice.
@@ -33,6 +35,20 @@ func MustInt(n ipld.Node, key string) (int64, error) {
 		return 0, err
 	}
 	return v.AsInt()
+}
+
+// OptString looks up key in the IPLD node n. If the key is absent it returns
+// ("", nil). If the key is present but not a string it returns an error.
+func OptString(n ipld.Node, key string) (string, error) {
+	v, err := n.LookupByString(key)
+	if err != nil {
+		var notExists datamodel.ErrNotExists
+		if errors.As(err, &notExists) {
+			return "", nil
+		}
+		return "", err
+	}
+	return v.AsString()
 }
 
 // MustStringList looks up key in the IPLD node n and returns the value as a

@@ -18,6 +18,7 @@ import (
 
 	kyberKEM "github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	bip32 "github.com/jamesradley/go-bip32"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/context"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/hkdf"
@@ -495,11 +496,13 @@ func EncryptSignRevokeEC(wallet WalletStore,
 		return nil, errors.New("failed to encrypt revoke data: " + err.Error())
 	}
 
-	// The revoke CID must be computed from the full RevokeStructure (including the GrantRef)
+	// The revoke CID must be computed from the full PulseRevokePayload (including the GrantRef)
 	// so that the signed message matches what the mid-tier verifies via MarshalRevoke.
-	cbor, err := ipfs.MarshalRevokeEC(&types.RevokeStructure{
-		PulseECEncryptionResult: *encryptedRevokeData,
-		Grant:                   consentCid,
+	cbor, err := ipfs.MarshalRevoke(&types.PulseRevokePayload{
+		SealedData: encryptedRevokeData.SealedData,
+		Key1:       encryptedRevokeData.Key1,
+		Key2:       encryptedRevokeData.Key2,
+		GrantRef:   consentCid,
 	})
 	if err != nil {
 		return nil, errors.New("failed to marshal revoke CBOR: " + err.Error())
@@ -585,11 +588,12 @@ func EncryptSignRevokePQ(
 		return nil, errors.New("failed to PQ-encrypt revoke data: " + err.Error())
 	}
 
-	// The revoke CID must be computed from the full RevokeStructureMulti (including the GrantRef)
+	// The revoke CID must be computed from the full PulseRevokePayload (including the GrantRef)
 	// so that the signed message matches what the mid-tier verifies via MarshalRevoke.
-	cbor, err := ipfs.MarshalRevokePQ(&types.RevokeStructureMulti{
-		PulsePQEncryptionResult: *encryptedData,
-		Grant:                   consentCid,
+	cbor, err := ipfs.MarshalRevoke(&types.PulseRevokePayload{
+		SealedData: encryptedData.SealedData,
+		Keys:       encryptedData.Keys,
+		GrantRef:   consentCid,
 	})
 	if err != nil {
 		return nil, errors.New("failed to marshal PQ revoke CBOR: " + err.Error())
@@ -653,7 +657,14 @@ func SignConsentRequest(wallet WalletStore,
 	if err != nil {
 		return errors.New("failed to derive signing key from master: " + err.Error())
 	}
-	signature, err := SignConsent(signingKey.ToECDSA(), contractAddress, cid.String())
+	// Use go-ethereum's ToECDSA so the ecdsa.PrivateKey carries go-ethereum's
+	// S256() curve (btCurve), not decred's bare *KoblitzCurve. The two types are
+	// pointer-incomparable and go-ethereum's nocgo Sign path rejects the latter.
+	ecdsaSigningKey, err := gethcrypto.ToECDSA(signingKey.Serialize())
+	if err != nil {
+		return errors.New("failed to convert signing key: " + err.Error())
+	}
+	signature, err := SignConsent(ecdsaSigningKey, contractAddress, cid.String())
 	if err != nil {
 		return errors.New("failed to sign consent: " + err.Error())
 	}
@@ -663,7 +674,7 @@ func SignConsentRequest(wallet WalletStore,
 
 // SignRevokeRequest derives the HD signing key and sets the signature on any
 // revoke request type (EC or PQ).  encryptedDataCBOR must be the DAG-CBOR
-// encoding of the revoke structure (e.g. from ipfs.MarshalRevokeEC); its CID,
+// encoding of the revoke structure (e.g. from ipfs.MarshalRevoke); its CID,
 // together with the original consent CID from request.GetConsentCid(), is what
 // gets signed, binding the revocation cryptographically to both records.
 func SignRevokeRequest(wallet WalletStore,
@@ -691,7 +702,11 @@ func SignRevokeRequest(wallet WalletStore,
 	if err != nil {
 		return errors.New("failed to derive signing key from master: " + err.Error())
 	}
-	signature, err := SignRevoke(signingKey.ToECDSA(), contractAddress, request.GetConsentCid(), revokeCid.String())
+	ecdsaSigningKey, err := gethcrypto.ToECDSA(signingKey.Serialize())
+	if err != nil {
+		return errors.New("failed to convert signing key: " + err.Error())
+	}
+	signature, err := SignRevoke(ecdsaSigningKey, contractAddress, request.GetConsentCid(), revokeCid.String())
 	if err != nil {
 		return errors.New("failed to sign revoke: " + err.Error())
 	}

@@ -43,6 +43,15 @@ func (e *ConsentEngine) HandleInboundConsent(ctx context.Context, req InboundCon
 		return InboundConsentResponse{}, fmt.Errorf("consent: unmarshal payload: %w", err)
 	}
 
+	// Store the grantor's xpub when provided so subsequent grants from this party
+	// can use it for per-consent key derivation without a round-trip.
+	if payload.GrantorXpub != "" {
+		if storeErr := e.cpDir.StoreXpub(req.PartyKey, payload.GrantorXpub); storeErr != nil {
+			// Non-fatal: failure to cache the xpub does not invalidate the consent.
+			_ = storeErr
+		}
+	}
+
 	if payload.ExpiresAt != 0 && time.Unix(payload.ExpiresAt, 0).Before(time.Now()) {
 		return InboundConsentResponse{}, fmt.Errorf("consent: payload has expired")
 	}

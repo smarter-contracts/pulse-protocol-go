@@ -74,9 +74,10 @@ func UnmarshalConsentEC(block []byte) (*pptypes.PulseECEncryptionResult, error) 
 	return &pptypes.PulseECEncryptionResult{SealedData: sd, Key1: k1, Key2: k2}, nil
 }
 
-// MarshalRevokeEC encodes a RevokeStructure as a DAG-CBOR map:
+// marshalRevokeEC encodes a PulseRevokePayload (EC variant) as a DAG-CBOR map:
 // {"t":"rev-ec","v":1,"sd":<bytes>,"k1":<bytes>,"k2":<bytes>,"gr":<string>}
-func MarshalRevokeEC(r *pptypes.RevokeStructure) ([]byte, error) {
+// Called internally by MarshalRevoke for EC payloads.
+func marshalRevokeEC(p *pptypes.PulseRevokePayload) ([]byte, error) {
 	nb := basicnode.Prototype.Map.NewBuilder()
 	ma, err := nb.BeginMap(6)
 	if err != nil {
@@ -87,13 +88,13 @@ func MarshalRevokeEC(r *pptypes.RevokeStructure) ([]byte, error) {
 	_ = ma.AssembleKey().AssignString("v")
 	_ = ma.AssembleValue().AssignInt(1)
 	_ = ma.AssembleKey().AssignString("sd")
-	_ = ma.AssembleValue().AssignBytes(r.SealedData)
+	_ = ma.AssembleValue().AssignBytes(p.SealedData)
 	_ = ma.AssembleKey().AssignString("k1")
-	_ = ma.AssembleValue().AssignBytes(r.Key1)
+	_ = ma.AssembleValue().AssignBytes(p.Key1)
 	_ = ma.AssembleKey().AssignString("k2")
-	_ = ma.AssembleValue().AssignBytes(r.Key2)
+	_ = ma.AssembleValue().AssignBytes(p.Key2)
 	_ = ma.AssembleKey().AssignString("gr")
-	_ = ma.AssembleValue().AssignString(r.Grant)
+	_ = ma.AssembleValue().AssignString(p.GrantRef)
 	if err := ma.Finish(); err != nil {
 		return nil, err
 	}
@@ -104,8 +105,9 @@ func MarshalRevokeEC(r *pptypes.RevokeStructure) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalRevokeEC decodes a DAG-CBOR block into a RevokeStructure.
-func UnmarshalRevokeEC(block []byte) (*pptypes.RevokeStructure, error) {
+// unmarshalRevokeEC decodes a DAG-CBOR block into a PulseRevokePayload (EC variant).
+// Called internally by UnmarshalRevoke and DecodeRevoke.
+func unmarshalRevokeEC(block []byte) (*pptypes.PulseRevokePayload, error) {
 	na := basicnode.Prototype.Any.NewBuilder()
 	if err := dagcbor.Decode(na, bytes.NewReader(block)); err != nil {
 		return nil, fmt.Errorf("decoding CBOR: %w", err)
@@ -142,8 +144,5 @@ func UnmarshalRevokeEC(block []byte) (*pptypes.RevokeStructure, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gr: %w", err)
 	}
-	return &pptypes.RevokeStructure{
-		PulseECEncryptionResult: pptypes.PulseECEncryptionResult{SealedData: sd, Key1: k1, Key2: k2},
-		Grant:                   gr,
-	}, nil
+	return &pptypes.PulseRevokePayload{SealedData: sd, Key1: k1, Key2: k2, GrantRef: gr}, nil
 }

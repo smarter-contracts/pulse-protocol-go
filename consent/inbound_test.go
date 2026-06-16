@@ -277,6 +277,66 @@ func TestHandleInboundConsent_StoredRecord_HasPayloadAndSealedBytes(t *testing.T
 	}
 }
 
+func TestHandleInboundConsent_GrantorXpubPresent_CallsStoreXpub(t *testing.T) {
+	engineWallet := makeTestWallet(t)
+	payload := validPayload()
+	payload.GrantorXpub = "xpub661MyMwAqRbcGTestGrantorXpubValue"
+
+	cpDir := &stubCounterpartyDirectory{}
+	engine := NewConsentEngine(
+		engineWallet, cpDir,
+		&stubConsentStore{}, &stubMidTierClient{},
+		WithContractAddress(testContractAddress),
+	)
+	req := sealPayload(t, payload, engineWallet)
+
+	_, err := engine.HandleInboundConsent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cpDir.mu.Lock()
+	calls := cpDir.storeXpubCalls
+	cpDir.mu.Unlock()
+
+	if len(calls) != 1 {
+		t.Fatalf("StoreXpub: expected 1 call, got %d", len(calls))
+	}
+	if calls[0].partyKey != payload.CounterpartyDid {
+		t.Errorf("StoreXpub partyKey: got %q, want %q", calls[0].partyKey, payload.CounterpartyDid)
+	}
+	if calls[0].xpub != payload.GrantorXpub {
+		t.Errorf("StoreXpub xpub: got %q, want %q", calls[0].xpub, payload.GrantorXpub)
+	}
+}
+
+func TestHandleInboundConsent_GrantorXpubAbsent_DoesNotCallStoreXpub(t *testing.T) {
+	engineWallet := makeTestWallet(t)
+	payload := validPayload()
+	// GrantorXpub intentionally not set
+
+	cpDir := &stubCounterpartyDirectory{}
+	engine := NewConsentEngine(
+		engineWallet, cpDir,
+		&stubConsentStore{}, &stubMidTierClient{},
+		WithContractAddress(testContractAddress),
+	)
+	req := sealPayload(t, payload, engineWallet)
+
+	_, err := engine.HandleInboundConsent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cpDir.mu.Lock()
+	calls := cpDir.storeXpubCalls
+	cpDir.mu.Unlock()
+
+	if len(calls) != 0 {
+		t.Errorf("StoreXpub: expected 0 calls when GrantorXpub absent, got %d", len(calls))
+	}
+}
+
 func TestHandleInboundConsent_StoredRecord_HasSealedDataKeysAndSignatures(t *testing.T) {
 	engineWallet := makeTestWallet(t)
 	payload := validPayload()

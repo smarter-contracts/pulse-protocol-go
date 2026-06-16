@@ -114,29 +114,34 @@ func (e *ConsentEngine) RevokeConsent(ctx context.Context, consentID string) err
 
 	// Encrypt the revoke payload to the grantor and sign, binding the revoke CID
 	// to the original grant CID.
+	// record.CID is populated by the ipfs_live callback from mid-tier. If that
+	// callback was never received (e.g. the pod restarted before it arrived),
+	// record.CID is empty. Both values are computed from the same DAG-CBOR, so
+	// they are identical and record.ID is a safe fallback.
+	grantCID := record.CID
+	if grantCID == "" {
+		grantCID = record.ID
+	}
+
 	revokeRequest, err := ppcrypto.EncryptSignRevokeEC(
 		e.wallet, revokeCBOR,
 		uint32(otherPartyIdx), uint32(record.ConsentNo),
 		grantorStructPub,
 		e.config.contractAddress, uint32(record.ChainID),
-		record.CID,
+		grantCID,
 	)
 	if err != nil {
 		return fmt.Errorf("consent: RevokeConsent EncryptSignRevokeEC: %w", err)
 	}
 
-	// Marshal the encrypted data CBOR for IPFS pinning by mid-tier.
-	sealedBytes, err := ipfs.MarshalConsentEC(&revokeRequest.EncryptedData)
-	if err != nil {
-		return fmt.Errorf("consent: RevokeConsent MarshalConsentEC: %w", err)
-	}
-
 	revokeRec := RevokeRecord{
-		ConsentID:   record.ID,
-		PartyKey:    record.PartyKey,
-		GrantCID:    record.CID,
-		SealedBytes: sealedBytes,
-		Signature:   revokeRequest.Signature,
+		ConsentID:  record.ID,
+		PartyKey:   record.PartyKey,
+		GrantCID:   grantCID,
+		SealedData: revokeRequest.EncryptedData.SealedData,
+		Key1:       revokeRequest.EncryptedData.Key1,
+		Key2:       revokeRequest.EncryptedData.Key2,
+		Signature:  revokeRequest.Signature,
 	}
 
 	if err := e.mt.SubmitRevoke(ctx, revokeRec, "", nil); err != nil {

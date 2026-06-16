@@ -25,21 +25,41 @@ func MarshalConsent(p *pptypes.PulseConsentPayload) ([]byte, error) {
 }
 
 // MarshalRevoke encodes a PulseRevokePayload to its V2 IPFS DAG-CBOR representation.
-// PQ payloads encode as RevokeStructureMulti; EC payloads encode as RevokeStructure.
+// PQ payloads (Keys non-empty) encode as rev-pq; EC payloads encode as rev-ec.
 func MarshalRevoke(p *pptypes.PulseRevokePayload) ([]byte, error) {
 	if p.IsMultiKey() {
-		return MarshalRevokePQ(&pptypes.RevokeStructureMulti{
-			PulsePQEncryptionResult: pptypes.PulsePQEncryptionResult{SealedData: p.SealedData, Keys: p.Keys},
-			Grant:                   p.GrantRef,
-		})
+		return marshalRevokePQ(p)
 	}
 	if len(p.Key1) == 0 || len(p.Key2) == 0 {
 		return nil, fmt.Errorf("EC revoke payload requires key1 and key2")
 	}
-	return MarshalRevokeEC(&pptypes.RevokeStructure{
-		PulseECEncryptionResult: pptypes.PulseECEncryptionResult{SealedData: p.SealedData, Key1: p.Key1, Key2: p.Key2},
-		Grant:                   p.GrantRef,
-	})
+	return marshalRevokeEC(p)
+}
+
+// UnmarshalRevoke decodes a V2 DAG-CBOR block into a PulseRevokePayload.
+// The EC fields (Key1, Key2) are populated for rev-ec blocks; the PQ field
+// (Keys) is populated for rev-pq blocks.
+func UnmarshalRevoke(block []byte) (*pptypes.PulseRevokePayload, error) {
+	if p, err := unmarshalRevokeEC(block); err == nil {
+		return p, nil
+	}
+	if p, err := unmarshalRevokePQ(block); err == nil {
+		return p, nil
+	}
+	return nil, fmt.Errorf("block does not match any known V2 revoke structure (rev-ec or rev-pq)")
+}
+
+// UnmarshalConsent decodes a V2 DAG-CBOR block into a PulseConsentPayload.
+// The EC fields (Key1, Key2) are populated for ec blocks; the PQ field (Keys)
+// is populated for pq blocks.
+func UnmarshalConsent(block []byte) (*pptypes.PulseConsentPayload, error) {
+	if ec, err := UnmarshalConsentEC(block); err == nil {
+		return &pptypes.PulseConsentPayload{SealedData: ec.SealedData, Key1: ec.Key1, Key2: ec.Key2}, nil
+	}
+	if pq, err := UnmarshalConsentPQ(block); err == nil {
+		return &pptypes.PulseConsentPayload{SealedData: pq.SealedData, Keys: pq.Keys}, nil
+	}
+	return nil, fmt.Errorf("block does not match any known V2 consent structure (ec or pq)")
 }
 
 // ── PulseConsentRequestEC ─────────────────────────────────────────────────────

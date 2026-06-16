@@ -97,12 +97,16 @@ type ConsentRecord struct {
 }
 
 // RevokeRecord carries the signed revocation payload for SubmitRevoke.
+// SealedData, Key1, Key2 are the raw EC encryption components from EncryptSignRevokeEC;
+// mid-tier combines them into the DAG-CBOR revoke structure for IPFS pinning.
 type RevokeRecord struct {
-	ConsentID   string
-	PartyKey    string
-	GrantCID    string // IPFS CID of the grant being revoked
-	SealedBytes []byte // outer-encrypted revoke record
-	Signature   []byte // EIP-191 signature over the revoke payload
+	ConsentID  string
+	PartyKey   string
+	GrantCID   string // IPFS CID of the grant being revoked
+	SealedData []byte // raw AES-256-GCM ciphertext from EncryptSignRevokeEC
+	Key1       []byte // grantor ephemeral public key (EC)
+	Key2       []byte // recipient encryption public key (EC)
+	Signature  []byte // EIP-191 signature over the revoke CBOR
 }
 
 // ConsentEvent is a single entry returned by MidTierClient.GetConsentsSince.

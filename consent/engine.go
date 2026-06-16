@@ -2,6 +2,7 @@ package consent
 
 import (
 	"context"
+	"fmt"
 
 	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 )
@@ -52,4 +53,15 @@ func (e *ConsentEngine) HandleXpubRequest(_ context.Context, otherpartyId int) (
 		return XpubResponse{}, err
 	}
 	return XpubResponse{Xpub: xpub, OtherpartyId: otherpartyId}, nil
+}
+
+// HandleXpubRequestByDID resolves or assigns a counterparty slot for the given
+// DID, then returns the local party's xpub at that slot. Used by POST /api/v3/xpub
+// where the caller identifies itself by DID rather than a pre-known integer slot.
+func (e *ConsentEngine) HandleXpubRequestByDID(ctx context.Context, requestorDID string) (XpubResponse, error) {
+	slot, err := e.cpDir.GetOrAssignIndex(requestorDID)
+	if err != nil {
+		return XpubResponse{}, fmt.Errorf("xpub by DID: assign slot for %q: %w", requestorDID, err)
+	}
+	return e.HandleXpubRequest(ctx, slot)
 }

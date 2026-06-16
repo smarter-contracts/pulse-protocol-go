@@ -46,4 +46,8 @@ type FeedPermissionPayload struct {
 	// NotaryKey2 is the 33-byte compressed secp256k1 public key of the Mid-Tier notary,
 	// used as the recipient key when sealing the NotaryBlock.
 	NotaryKey2       []byte   `json:"notaryKey2"       cbor:"nk2"`
+	// GrantorXpub is the grantor's extended public key at m/4410704'/{slot}, included
+	// when the sender wishes the recipient to store it for future per-consent key derivation.
+	// Optional — omitted when empty.
+	GrantorXpub      string   `json:"grantorXpub,omitempty" cbor:"gx,omitempty"`
 }

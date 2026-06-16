@@ -3,11 +3,60 @@ package consent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	bip32 "github.com/jamesradley/go-bip32"
 	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 )
+
+// ── CounterpartyDirectory.NextConsentNo ──────────────────────────────────────
+
+func TestStubCounterpartyDirectory_NextConsentNo_StartsAtZero(t *testing.T) {
+	dir := &stubCounterpartyDirectory{}
+	n, err := dir.NextConsentNo("did:key:zBOB", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("want 0, got %d", n)
+	}
+}
+
+func TestStubCounterpartyDirectory_NextConsentNo_Increments(t *testing.T) {
+	dir := &stubCounterpartyDirectory{}
+	for want := 0; want < 5; want++ {
+		got, err := dir.NextConsentNo("did:key:zBOB", 1)
+		if err != nil {
+			t.Fatalf("call %d: unexpected error: %v", want, err)
+		}
+		if got != want {
+			t.Fatalf("call %d: want %d, got %d", want, want, got)
+		}
+	}
+}
+
+func TestStubCounterpartyDirectory_NextConsentNo_IndependentPerPartyAndChain(t *testing.T) {
+	dir := &stubCounterpartyDirectory{}
+	// Advance alice/chain-1 twice
+	dir.NextConsentNo("did:key:zALICE", 1) //nolint:errcheck
+	dir.NextConsentNo("did:key:zALICE", 1) //nolint:errcheck
+	// bob/chain-1 and alice/chain-2 start fresh
+	bobN, _ := dir.NextConsentNo("did:key:zBOB", 1)
+	aliceChain2N, _ := dir.NextConsentNo("did:key:zALICE", 2)
+	if bobN != 0 {
+		t.Fatalf("bob chain-1: want 0, got %d", bobN)
+	}
+	if aliceChain2N != 0 {
+		t.Fatalf("alice chain-2: want 0, got %d", aliceChain2N)
+	}
+	// alice/chain-1 should be at 2
+	aliceNext, _ := dir.NextConsentNo("did:key:zALICE", 1)
+	if aliceNext != 2 {
+		t.Fatalf("alice chain-1: want 2, got %d", aliceNext)
+	}
+}
 
 // ── NewConsentEngine ──────────────────────────────────────────────────────────
 
@@ -128,6 +177,51 @@ func TestHandleXpubRequest_DifferentIdsDifferentXpubs(t *testing.T) {
 	}
 }
 
+// ── HandleXpubRequestByDID ────────────────────────────────────────────────────
+
+func TestHandleXpubRequestByDID_AssignsSlotAndReturnsXpub(t *testing.T) {
+	wallet := makeTestWallet(t)
+	cpDir := &stubCounterpartyDirectory{}
+	engine := NewConsentEngine(wallet, cpDir, &stubConsentStore{}, &stubMidTierClient{})
+
+	resp, err := engine.HandleXpubRequestByDID(context.Background(), "did:key:zALICE")
+	if err != nil {
+		t.Fatalf("HandleXpubRequestByDID: %v", err)
+	}
+	// stubCounterpartyDirectory.GetOrAssignIndex always returns 1.
+	wantXpub, err := ppcrypto.DeriveOtherPartyXpub(wallet, 1)
+	if err != nil {
+		t.Fatalf("DeriveOtherPartyXpub: %v", err)
+	}
+	if resp.Xpub != wantXpub {
+		t.Errorf("xpub mismatch: got %q want %q", resp.Xpub, wantXpub)
+	}
+	if resp.OtherpartyId != 1 {
+		t.Errorf("OtherpartyId: got %d want 1", resp.OtherpartyId)
+	}
+}
+
+func TestHandleXpubRequestByDID_DifferentDIDsDifferentSlots(t *testing.T) {
+	wallet := makeTestWallet(t)
+	cpDir := &sequentialCounterpartyDirectory{}
+	engine := NewConsentEngine(wallet, cpDir, &stubConsentStore{}, &stubMidTierClient{})
+
+	resp1, err := engine.HandleXpubRequestByDID(context.Background(), "did:key:zALICE")
+	if err != nil {
+		t.Fatalf("alice: %v", err)
+	}
+	resp2, err := engine.HandleXpubRequestByDID(context.Background(), "did:key:zBOB")
+	if err != nil {
+		t.Fatalf("bob: %v", err)
+	}
+	if resp1.Xpub == resp2.Xpub {
+		t.Error("different DIDs must produce different xpubs")
+	}
+	if resp1.OtherpartyId == resp2.OtherpartyId {
+		t.Error("different DIDs must get different slot numbers")
+	}
+}
+
 // ── stub implementations ──────────────────────────────────────────────────────
 
 // stubWalletStore is an in-memory WalletStore for use in consent package tests only.
@@ -163,8 +257,17 @@ func makeTestXpub(t *testing.T, otherPartyId uint32) string {
 	return xpub
 }
 
+type storeXpubCall struct {
+	partyKey string
+	xpub     string
+}
+
 type stubCounterpartyDirectory struct {
-	xpub string // if non-empty, returned by GetXpub (found=true)
+	xpub           string         // if non-empty, returned by GetXpub (found=true)
+	counters       map[string]int // key: "partyKey:chainId", value: next consent number
+	storeXpubCalls []storeXpubCall
+	storeXpubErr   error
+	mu             sync.Mutex
 }
 
 func (s *stubCounterpartyDirectory) GetOrAssignIndex(_ string) (int, error) { return 1, nil }
@@ -174,7 +277,49 @@ func (s *stubCounterpartyDirectory) GetXpub(_ string) (string, bool, error) {
 	}
 	return s.xpub, true, nil
 }
-func (s *stubCounterpartyDirectory) StoreXpub(_, _ string) error { return nil }
+func (s *stubCounterpartyDirectory) StoreXpub(partyKey, xpub string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.storeXpubCalls = append(s.storeXpubCalls, storeXpubCall{partyKey: partyKey, xpub: xpub})
+	return s.storeXpubErr
+}
+func (s *stubCounterpartyDirectory) NextConsentNo(partyKey string, chainId int) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counters == nil {
+		s.counters = make(map[string]int)
+	}
+	key := fmt.Sprintf("%s:%d", partyKey, chainId)
+	n := s.counters[key]
+	s.counters[key] = n + 1
+	return n, nil
+}
+
+// sequentialCounterpartyDirectory assigns incrementing slots per unique DID.
+type sequentialCounterpartyDirectory struct {
+	mu      sync.Mutex
+	slots   map[string]int
+	nextIdx int
+}
+
+func (d *sequentialCounterpartyDirectory) GetOrAssignIndex(did string) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.slots == nil {
+		d.slots = make(map[string]int)
+	}
+	if idx, ok := d.slots[did]; ok {
+		return idx, nil
+	}
+	d.nextIdx++
+	d.slots[did] = d.nextIdx
+	return d.nextIdx, nil
+}
+func (d *sequentialCounterpartyDirectory) GetXpub(_ string) (string, bool, error) { return "", false, nil }
+func (d *sequentialCounterpartyDirectory) StoreXpub(_, _ string) error            { return nil }
+func (d *sequentialCounterpartyDirectory) NextConsentNo(_ string, _ int) (int, error) {
+	return 0, nil
+}
 
 type stubConsentStore struct {
 	records       map[string]*ConsentRecord // pre-seeded records for Get

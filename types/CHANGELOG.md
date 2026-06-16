@@ -5,6 +5,39 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-06-16
+
+### Breaking
+
+- **Module import path** changed to `github.com/smarter-contracts/pulse-protocol-go/types/v2`
+  (required by Go's major-version module convention). Update all import paths accordingly.
+
+- **Removed `ConsentStructure`, `ConsentStructureMulti`, `RevokeStructure`, `RevokeStructureMulti`.**
+  These were thin wrappers / type aliases over the underlying encryption result types.
+  Replace with `PulseECEncryptionResult`, `PulsePQEncryptionResult`, and the new
+  `PulseRevokePayload` (see *Added* below).
+
+- **`ConsentStore` interface** — `StoreRevocation` and `GetRevocation` now use
+  `*PulseRevokePayload` instead of the removed `*RevokeStructure`.
+
+- **`ConsentStoreMulti` interface** — `StoreRevocation` and `GetRevocation` now use
+  `*PulseRevokePayload` instead of the removed `*RevokeStructureMulti`.
+
+### Added
+
+- **`PulseConsentPayload`** — polymorphic consent content type for grant requests.
+  Carries `SealedData`, `Key1`, `Key2` (EC path) or `Keys []PulsePQEncryptionKey` (PQ path).
+  `IsMultiKey()` returns `true` when the PQ path is populated.
+
+- **`PulseRevokePayload`** — polymorphic revoke content type for revocation requests.
+  Carries `SealedData`, `Key1`, `Key2` (EC path) or `Keys` (PQ path), plus `GrantRef` (the
+  CID of the original grant being revoked). `IsMultiKey()` returns `true` for the PQ path.
+
+- **`FeedPermissionPayload.GrantorXpub`** (`cbor:"gx,omitempty"`) — optional BIP-32
+  extended public key of the grantor at `m/4410704'/{slot}`. When present in an inbound
+  consent, the recipient stores it to enable per-consent key derivation without a separate
+  xpub round-trip.
+
 ## [1.2.0] - 2026-05-14
 
 ### Added

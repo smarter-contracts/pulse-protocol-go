@@ -30,7 +30,8 @@ type OtherPartyRegistry interface {
 
 	// NextConsentNumber returns the next consent sequence number for the
 	// (otherPartyNo, chainId) pair and increments the internal counter.
-	// Sequence numbers start at 0 and are non-hardened BIP-32 child indices
+	// Sequence numbers start at 1; 0 is reserved as an "unset" sentinel in
+	// persisted storage. Numbers are non-hardened BIP-32 child indices
 	// (< 0x80000000).
 	NextConsentNumber(otherPartyNo uint32, chainId uint32) (uint32, error)
 }

@@ -24,6 +24,15 @@ type CounterpartyDirectory interface {
 
 	// StoreXpub persists the counterparty's xpub for future use.
 	StoreXpub(partyKey, xpub string) error
+
+	// NextConsentNo atomically returns the next consent sequence number for
+	// partyKey on chainId and increments the stored counter. Used when this
+	// party is acting as grantor — the returned number is embedded in the HD
+	// derivation path and in the consent record's ConsentNo field.
+	//
+	// Sequence numbers start at 1; 0 is reserved as an "unset" sentinel in
+	// persisted storage.
+	NextConsentNo(partyKey string, chainId int) (int, error)
 }
 
 // ConsentStore persists ConsentRecords and the opaque sync cursor.

@@ -233,7 +233,7 @@ func TestSubmitRevoke_SendsCallbackURLHeader(t *testing.T) {
 	defer srv.Close()
 
 	client := midtierclient.New(srv.URL)
-	rec := consent.RevokeRecord{GrantCID: "bafycid001", SealedBytes: []byte("x"), Signature: []byte("s")}
+	rec := consent.RevokeRecord{GrantCID: "bafycid001", SealedData: []byte("x"), Key1: []byte("k1"), Key2: []byte("k2"), Signature: []byte("s")}
 	err := client.SubmitRevoke(context.Background(), rec, "https://pulsepro.example.com/api/v1/callback/tok", nil)
 	if err != nil {
 		t.Fatalf("SubmitRevoke: %v", err)
@@ -257,9 +257,11 @@ func TestSubmitRevoke_CallsDeleteGrant(t *testing.T) {
 
 	client := midtierclient.New(srv.URL)
 	rec := consent.RevokeRecord{
-		GrantCID:    "bafycid001",
-		SealedBytes: []byte("fake-revoke"),
-		Signature:   []byte("fake-sig"),
+		GrantCID:   "bafycid001",
+		SealedData: []byte("fake-revoke"),
+		Key1:       []byte("k1"),
+		Key2:       []byte("k2"),
+		Signature:  []byte("fake-sig"),
 	}
 	err := client.SubmitRevoke(context.Background(), rec, "", nil)
 	if err != nil {
@@ -267,5 +269,40 @@ func TestSubmitRevoke_CallsDeleteGrant(t *testing.T) {
 	}
 	if !called {
 		t.Error("DELETE /api/v3/grant was not called")
+	}
+}
+
+func TestSubmitRevoke_SendsKey1Key2InPayload(t *testing.T) {
+	var captured pptypes.PulseRevokeRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&captured)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"OK"}`))
+	}))
+	defer srv.Close()
+
+	client := midtierclient.New(srv.URL)
+	rec := consent.RevokeRecord{
+		GrantCID:   "bafygrant001",
+		SealedData: []byte("sealed"),
+		Key1:       []byte{0x01, 0x02, 0x03},
+		Key2:       []byte{0x04, 0x05, 0x06},
+		Signature:  []byte("sig"),
+	}
+	err := client.SubmitRevoke(context.Background(), rec, "", nil)
+	if err != nil {
+		t.Fatalf("SubmitRevoke: %v", err)
+	}
+	if string(captured.Revoke.SealedData) != "sealed" {
+		t.Errorf("SealedData mismatch: got %q", captured.Revoke.SealedData)
+	}
+	if captured.Revoke.GrantRef != "bafygrant001" {
+		t.Errorf("GrantRef mismatch: got %q", captured.Revoke.GrantRef)
+	}
+	if string(captured.Revoke.Key1) != string([]byte{0x01, 0x02, 0x03}) {
+		t.Errorf("Key1 mismatch")
+	}
+	if string(captured.Revoke.Key2) != string([]byte{0x04, 0x05, 0x06}) {
+		t.Errorf("Key2 mismatch")
 	}
 }
