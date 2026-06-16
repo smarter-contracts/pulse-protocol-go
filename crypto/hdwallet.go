@@ -26,8 +26,8 @@ import (
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/key_exchange"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/internal/wipe"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
-	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
-	"github.com/smarter-contracts/pulse-protocol-go/types"
+	"github.com/smarter-contracts/pulse-protocol-go/ipfs/v2"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 // ── HD path ─────────────────────────────────────────────────────────────────

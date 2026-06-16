@@ -3,7 +3,7 @@ package consent
 import (
 	"time"
 
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedpermission"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedpermission"
 )
 
 // TransactionStatus represents the status string sent by mid-tier in a callback.

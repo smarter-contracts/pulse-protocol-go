@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 func TestMarshalNotaryBlock_RoundTrip(t *testing.T) {

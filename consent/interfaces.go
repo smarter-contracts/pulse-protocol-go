@@ -3,7 +3,7 @@ package consent
 import (
 	"context"
 
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedpermission"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedpermission"
 )
 
 // CounterpartyDirectory manages the mapping between counterparty identifiers

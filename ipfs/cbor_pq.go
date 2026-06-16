@@ -7,7 +7,7 @@ import (
 	ipld "github.com/ipld/go-ipld-prime"
 	"github.com/ipld/go-ipld-prime/codec/dagcbor"
 	"github.com/ipld/go-ipld-prime/node/basicnode"
-	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 // MarshalConsentPQ encodes a PulsePQEncryptionResult as a DAG-CBOR map:

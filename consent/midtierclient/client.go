@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/smarter-contracts/pulse-protocol-go/consent"
-	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 // Client is an HTTP implementation of consent.MidTierClient.

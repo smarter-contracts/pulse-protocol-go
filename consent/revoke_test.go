@@ -8,7 +8,7 @@ import (
 	bip32 "github.com/jamesradley/go-bip32"
 	ppcrypto "github.com/smarter-contracts/pulse-protocol-go/crypto/v2"
 	"github.com/smarter-contracts/pulse-protocol-go/crypto/v2/purposes"
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedpermission"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedpermission"
 )
 
 // ── RevokeConsent ─────────────────────────────────────────────────────────────

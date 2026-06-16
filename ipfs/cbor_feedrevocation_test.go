@@ -3,7 +3,7 @@ package ipfs
 import (
 	"testing"
 
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedrevocation"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedrevocation"
 )
 
 func TestMarshalUnmarshalFeedRevocation_RoundTrip(t *testing.T) {

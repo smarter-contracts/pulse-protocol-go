@@ -1,4 +1,4 @@
-module github.com/smarter-contracts/pulse-protocol-go/ipfs
+module github.com/smarter-contracts/pulse-protocol-go/ipfs/v2
 
 go 1.25.7
 
@@ -6,7 +6,7 @@ require (
 	github.com/ipfs/go-cid v0.6.1
 	github.com/ipld/go-ipld-prime v0.23.0
 	github.com/multiformats/go-multihash v0.2.3
-	github.com/smarter-contracts/pulse-protocol-go/types v1.2.0
+	github.com/smarter-contracts/pulse-protocol-go/types/v2 v2.0.0
 	github.com/stretchr/testify v1.11.1
 )
 

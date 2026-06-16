@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/smarter-contracts/pulse-protocol-go/ipfs"
-	"github.com/smarter-contracts/pulse-protocol-go/types"
+	"github.com/smarter-contracts/pulse-protocol-go/ipfs/v2"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 // ConsentSigners recovers the Ethereum address for each signature in a

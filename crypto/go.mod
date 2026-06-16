@@ -7,8 +7,8 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
 	github.com/ethereum/go-ethereum v1.17.3
 	github.com/jamesradley/go-bip32 v1.0.1
-	github.com/smarter-contracts/pulse-protocol-go/ipfs v1.1.0
-	github.com/smarter-contracts/pulse-protocol-go/types v1.1.0
+	github.com/smarter-contracts/pulse-protocol-go/ipfs/v2 v2.0.0
+	github.com/smarter-contracts/pulse-protocol-go/types/v2 v2.0.0
 	golang.org/x/crypto v0.51.0
 )
 

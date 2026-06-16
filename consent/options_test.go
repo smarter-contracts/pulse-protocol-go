@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smarter-contracts/pulse-protocol-go/types/payloads/feedpermission"
+	"github.com/smarter-contracts/pulse-protocol-go/types/v2/payloads/feedpermission"
 )
 
 func TestDefaultConfig_ReviewerIsAcceptAll(t *testing.T) {

@@ -15,7 +15,7 @@ package ipfs
 import (
 	"testing"
 
-	pptypes "github.com/smarter-contracts/pulse-protocol-go/types"
+	pptypes "github.com/smarter-contracts/pulse-protocol-go/types/v2"
 )
 
 // ── Canary inputs ─────────────────────────────────────────────────────────────
